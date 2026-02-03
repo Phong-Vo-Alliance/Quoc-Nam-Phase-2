@@ -12,6 +12,7 @@ import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
 import { transformTemplateItems } from "@/utils/checklistTemplateTransform";
 import { useUpdateChecklistTemplate } from "@/hooks/mutations/useTaskMutations";
 import type { CheckListTemplateResponse } from "@/types/tasks_api";
+import { useConversationStore } from "@/stores";
 
 type Props = {
   open: boolean;
@@ -123,11 +124,22 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
           .map((item) => item.label)
           .filter((label) => label.trim() !== "");
 
+        // Transform string[] items to proper checklist item format
+        const transformedItems = itemLabels.map((label, index) => ({
+          content: label,
+          order: index,
+          isRequired: false,
+        }));
+
         await updateTemplateMutation.mutateAsync({
           templateId: selectedApiTemplateId,
-          name: selectedTemplateName,
-          description: selectedTemplateDescription || null,
-          items: itemLabels.length > 0 ? itemLabels : null,
+          payload: {
+            id: selectedApiTemplateId,
+            name: selectedTemplateName,
+            description: selectedTemplateDescription || null,
+            conversationId: conversationId || null,
+            items: transformedItems.length > 0 ? transformedItems.map(item => item.content) : undefined,
+          },
         });
 
         // Notify parent and close
@@ -144,8 +156,12 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
     }
   };
 
-  if (!open) return null;
+  // Get conversation/group name from store (MUST be before early return to follow React hooks rules)
+  const conversationName = useConversationStore((s) => s.getConversationName()) || "Nhóm";
 
+  if (!open) return null;
+  const _apiTemplates = apiTemplates?.filter( api_template => {return checklistVariants?.map( _ => _.id).includes(api_template.id)});
+  
   return (
     <div className="fixed inset-0 z-[999] flex justify-end bg-black/30">
       <div className="w-[400px] max-w-full h-full bg-white shadow-2xl border-l border-emerald-50 animate-slide-left flex flex-col">
@@ -166,7 +182,7 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
               <p className="text-xs text-gray-500 mt-1">
                 Áp dụng cho loại việc:{" "}
                 <span className="font-medium text-gray-700">
-                  {workTypeName}
+                  {conversationName}
                 </span>
               </p>
             </div>
@@ -190,7 +206,7 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
             {/* Select from existing templates */}
             <div>
               <label className="text-[11px] font-medium text-gray-600 uppercase tracking-wide">
-                Chọn Template Để Chỉnh Sửa
+                Chọn checklist Để Chỉnh Sửa
               </label>
               <div className="mt-1">
                 <Select
@@ -203,14 +219,14 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
                       placeholder={
                         templatesLoading
                           ? "Đang tải..."
-                          : "Chọn template để chỉnh sửa..."
+                          : "Chọn Checklist để chỉnh sửa..."
                       }
                     />
                   </SelectTrigger>
 
                   <SelectContent position="popper" className="z-[9999]">
-                    {apiTemplates && apiTemplates.length > 0 ? (
-                      apiTemplates.map((t: CheckListTemplateResponse) => (
+                    {_apiTemplates && _apiTemplates.length > 0 ? (
+                      _apiTemplates.map((t: CheckListTemplateResponse) => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.name || `Template ${t.id.slice(0, 8)}`}
                         </SelectItem>
@@ -225,37 +241,6 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
               </div>
             </div>
           </div>
-
-          {/* Dropdown – Dạng checklist */}
-          {checklistVariants && checklistVariants.length > 0 && (
-            <div className="mt-4">
-              <label className="text-[11px] font-medium text-gray-600 uppercase tracking-wide">
-                Dạng checklist
-              </label>
-
-              <div className="mt-1">
-                <Select
-                  value={selectedVariantId}
-                  onValueChange={(newId) => {
-                    setSelectedVariantId(newId);
-                    onChangeVariant?.(newId);
-                  }}
-                >
-                  <SelectTrigger className="w-full h-8 text-xs rounded-md border border-gray-300 bg-white px-2 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
-                    <SelectValue placeholder="Chọn dạng checklist..." />
-                  </SelectTrigger>
-
-                  <SelectContent position="popper" className="z-[9999]">
-                    {checklistVariants.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Body */}

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { useCreateChecklistTemplate, usePatchChecklistTemplate } from "@/hooks/mutations/useChecklistTemplateMutations";
+import { useCreateChecklistTemplate, usePatchChecklistTemplate } from "@/hooks/mutations/useTaskMutations";
 import type { ChecklistVariant } from "../../types";
 
 interface AddEditVariantDialogProps {
@@ -93,7 +93,6 @@ export const AddEditVariantDialog: React. FC<AddEditVariantDialogProps> = ({
             description: variant.description || null,
             conversationId: conversationId,
           },
-          conversationId: conversationId, // For cache invalidation
         });
       } else {
         // Add new - use POST with empty items array

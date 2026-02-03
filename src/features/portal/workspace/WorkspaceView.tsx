@@ -21,11 +21,16 @@ import type {
   ChecklistTemplateMap,
   TaskLogMessage,
 } from "../types";
+import type { PinnedMessageDto, StarredMessageDto } from "@/types/pinned_and_starred";
 import { MessageSquareIcon, ClipboardListIcon, UserIcon } from "lucide-react";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useAllTasks } from "@/hooks/queries/useTasks";
 import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
+import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW: Fetch categories first before messages
+import { useUpdateTask } from "@/hooks/mutations";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { tasksKeys } from "@/hooks/queries/useTasks";
 import { checklistTemplatesApi } from "@/api/checklist-templates.api";
 import {
   transformMembersToMinimal,
@@ -109,10 +114,11 @@ interface WorkspaceViewProps {
   setWorkspaceMode: (v: "default" | "pinned") => void;
   pinnedMessages?: PinnedMessage[];
   onClosePinned?: () => void;
-  onOpenPinnedMessage?: (pin: PinnedMessage) => void;
+  onOpenPinnedMessage?: (messageDto: StarredMessageDto) => void;
   onUnpinMessage: (id: string) => void;
   onShowPinnedToast: () => void;
-  onTogglePin?: (msg: Message) => void;
+  // [PHASE2-REMOVED] Desktop pin feature removed
+  // onTogglePin?: (msg: Message) => void;
   onToggleStar?: (msg: Message) => void;
 
   viewMode: "lead" | "staff";
@@ -135,7 +141,7 @@ interface WorkspaceViewProps {
   openTransferSheet?: (info: ReceivedInfo) => void;
   onOpenTaskLog?: (taskId: string) => void;
   taskLogs?: Record<string, TaskLogMessage[]>;
-  onOpenSourceMessage?: (messageId: string) => void;
+  onOpenSourceMessage: (messageDto: StarredMessageDto | null) => void;
   onScrollComplete?: () => void;
   scrollToMessageId?: string;
 
@@ -147,7 +153,11 @@ interface WorkspaceViewProps {
 
   checklistVariants?: { id: string; name: string; isDefault?: boolean }[];
   defaultChecklistVariantId?: string;
-  onCreateTaskFromMessage?: (payload: { title: string }) => void;
+  onCreateTaskFromMessage?: (payload: {
+    messageId: string;
+    messageContent: string;
+    conversationId: string;
+  }) => void;
 
   // Task management
   onChangeTaskStatus: (id: string, nextStatus: Task["status"]) => void;
@@ -169,6 +179,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     onSelectGroup,
     contacts,
     onSelectChat,
+
+    leftTab,
+    setLeftTab,
 
     showRight,
     setShowRight,
@@ -205,7 +218,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     onOpenPinnedMessage,
     onUnpinMessage,
     onShowPinnedToast,
-    onTogglePin,
+    // [PHASE2-REMOVED] onTogglePin,
     onToggleStar,
 
     onReceiveInfo,
@@ -217,8 +230,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     onOpenTaskLog,
     taskLogs,
     onOpenSourceMessage,
-    onScrollComplete,
-    scrollToMessageId,
     layoutMode = "desktop",
     onOpenQuickMsg,
     onOpenPinned,
@@ -296,6 +307,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
   // State
   const [rightPanelWidth, setRightPanelWidth] = React.useState<number>(360);
+
+  // 🆕 NEW: Track message to scroll to (from starred/pinned navigation)
+  const [scrollToMessage, setScrollToMessage] = React.useState<
+    PinnedMessageDto | StarredMessageDto | null
+  >(null);
 
   // Drag refs
   const draggingRef = React.useRef(false);
@@ -421,6 +437,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     return "Trò chuyện";
   }, [apiConversationName, selectedConversation, groups, contacts]);
 
+  // 🆕 NEW: Fetch categories FIRST before messages
+  // This ensures categories are available for ChatMainContainer and maintains proper hook order
+  const categoriesQuery = useCategories();
+
   // Fetch conversation members from Chat API
   // This will re-fetch whenever selectedConversation changes (conversation switch)
   const {
@@ -429,7 +449,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     isError: membersError,
   } = useConversationMembers({
     conversationId: selectedConversation?.id || "",
-    enabled: !!selectedConversation?.id, // Only fetch if we have a conversation ID
+    enabled: !!selectedConversation?.id && categoriesQuery.isSuccess, // 🆕 Wait for categories first
   });
 
   // Fetch all tasks for the conversation from Task API
@@ -440,14 +460,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     isError: tasksError,
   } = useAllTasks({
     conversationId: selectedConversation?.id,
-    enabled: !!selectedConversation?.id, // Only fetch if we have a conversation ID
+    enabled: !!selectedConversation?.id && categoriesQuery.isSuccess, // 🆕 Wait for categories first
   });
+
+  // Task update mutation for reassigning tasks
+  const updateTaskMutation = useUpdateTask();
 
   // Fetch messages for the conversation from Chat API
   // This will re-fetch whenever selectedConversation changes (conversation switch)
   const messagesQuery = useMessages({
     conversationId: selectedConversation?.id || "",
-    enabled: !!selectedConversation?.id, // Only fetch if we have a conversation ID
+    enabled: !!selectedConversation?.id && categoriesQuery.isSuccess, // 🆕 Wait for categories firsation ID
   });
 
   // Flatten messages from infinite query pages
@@ -455,11 +478,38 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     return flattenMessages(messagesQuery.data);
   }, [messagesQuery.data]);
 
+  const queryClient = useQueryClient();
+
+  // Track seen message IDs to detect newly added messages only
+  const _seenChatMessageIds = React.useRef<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    if (!chatMessages) return;
+
+    // On initial mount, seed seen IDs without logging
+    if (_seenChatMessageIds.current.size === 0) {
+      chatMessages.forEach((m: any) => {
+        if (m?.id) _seenChatMessageIds.current.add(m.id);
+      });
+      return;
+    }
+
+    // Find messages not seen before
+    const newMsgs = chatMessages.filter(
+      (m: any) => m?.id && !_seenChatMessageIds.current.has(m.id),
+    );
+    if (newMsgs.length === 0) return;
+
+    newMsgs.forEach((m: any) => {
+      _seenChatMessageIds.current.add(m.id);
+    });
+  }, [chatMessages]);
+
   // Fetch checklist templates for the selected conversation
   const { data: checklistTemplatesData } = useQuery({
     queryKey: ["checklist-templates", selectedConversation?.id],
     queryFn: () => checklistTemplatesApi.getTemplates(selectedConversation!.id),
-    enabled: !!selectedConversation?.id,
+    enabled: !!selectedConversation?.id && categoriesQuery.isSuccess, // 🆕 Wait for categories first
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
@@ -512,6 +562,34 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     return transformedTasks;
   }, [tasksFromAPI, tasks, selectedConversation?.id, selectedWorkTypeId]);
 
+  // Handler: Reassign task to a new user
+  const handleReassignTask = React.useCallback(
+    (taskId: string, assignTo: string) => {
+      // Find the task from API data
+      const task = apiTasks.find((t) => t.id === taskId);
+      console.log("Reassigning task:", task);
+      if (!task) {
+        console.error(`Task with id ${taskId} not found`);
+        return;
+      }
+
+      // Update task with new assignee
+      updateTaskMutation.mutate({
+        taskId,
+        data: {
+          title: task.title,
+          description: task.description || null,
+          priority: task.priority,
+          dueDate: task.dueDate || null,
+          conversationId: task.workTypeId || null,
+          messageId: task.messageId || null,
+          assignTo: assignTo,
+        },
+      });
+    },
+    [apiTasks, updateTaskMutation]
+  );
+
   // Handler to update conversation name when selecting from API
   const handleApiSelectChat = React.useCallback(
     (target: ChatTarget, name?: string) => {
@@ -527,22 +605,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   // Handler for when LinearTab changes in ChatMainContainer
   const handleChatChange = React.useCallback(
     (newChatTarget: ChatTarget) => {
-      console.log(
-        "🟣🔵 [WorkspaceView handleChatChange] CALLED with:",
-        newChatTarget,
-      );
-      console.log(
-        "🟣🔵 [WorkspaceView handleChatChange] About to call setSelectedConversation...",
-      );
-
       setSelectedConversation(newChatTarget);
 
-      console.log(
-        "🟣🔵 [WorkspaceView handleChatChange] Called setSelectedConversation, now calling onSelectChat...",
-      );
       onSelectChat(newChatTarget);
-
-      console.log("🟣🔵 [WorkspaceView handleChatChange] DONE");
     },
     [onSelectChat, setSelectedConversation],
   );
@@ -577,15 +642,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             <div className="h-full min-h-0 overflow-hidden flex flex-col">
               {workspaceMode === "pinned" ? (
                 <PinnedMessagesPanel
-                  messages={pinnedMessages ?? []}
                   onClose={
                     onClosePinned || (() => props.setWorkspaceMode("default"))
                   }
-                  onOpenChat={(pin) => {
-                    handleMobileSelectChat({ type: "group", id: pin.chatId });
-                    onOpenSourceMessage?.(pin.id);
+                  onOpenChat={(messageDto) => {
+                    // Navigate to conversation first
+                    handleMobileSelectChat({ type: "group", id: messageDto.message.conversationId });
+                    // Then set StarredMessageDto to scroll to
+                    setScrollToMessage(messageDto);
                   }}
-                  onUnpin={onUnpinMessage}
                   onPreview={(file) => openPreview?.(file as any)}
                 />
               ) : !selectedConversation ? (
@@ -612,6 +677,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                     onOpenPinned={onOpenPinned}
                     onOpenTodoList={onOpenTodoList}
                     useApiData={true}
+                    onTabChange={setLeftTab}
                   />
                 </div>
               ) : (
@@ -644,16 +710,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                       }}
                       showRightPanel={showRight}
                       onToggleRightPanel={() => setShowRight(!showRight)}
-                      onTogglePin={
-                        onTogglePin
-                          ? (messageId: string, isPinned: boolean) => {
-                              onTogglePin({
-                                id: messageId,
-                                isPinned,
-                              } as Message);
-                            }
-                          : undefined
-                      }
+                      scrollToMessageId={scrollToMessage}
+                      onScrollComplete={() => setScrollToMessage(null)}
                       onToggleStar={
                         onToggleStar
                           ? (messageId: string, isStarred: boolean) => {
@@ -691,7 +749,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 tasks={apiTasks}
                 members={apiGroupMembers}
                 onChangeTaskStatus={onChangeTaskStatus}
-                onReassignTask={undefined}
+                onReassignTask={handleReassignTask}
                 onToggleChecklist={onToggleChecklist}
                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                 checklistTemplates={checklistTemplates}
@@ -703,7 +761,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 applyTemplateToTasks={applyTemplateToTasks}
                 taskLogs={taskLogs}
                 onOpenTaskLog={onOpenTaskLog}
-                onOpenSourceMessage={onOpenSourceMessage}
+                onOpenSourceMessage={(messageDto) => {
+                  // Set the message to scroll to (same pattern as PinnedMessagesPanel)
+                  setScrollToMessage(messageDto);
+                }}
                 messages={chatMessages}
                 messagesQuery={messagesQuery}
               />
@@ -776,7 +837,27 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             onOpenChat={(pin) => {
               setShowPinnedMessagesMobile(false);
               handleMobileSelectChat({ type: "group", id: pin.chatId });
-              onOpenSourceMessage?.(pin.id);
+              // Set message to scroll to
+              setScrollToMessage({
+                messageId: pin.id,
+                message: {
+                  id: pin.id,
+                  conversationId: pin.chatId,
+                  content: pin.content,
+                  senderName: pin.sender,
+                  senderFullName: pin.sender,
+                  senderId: "",
+                  sentAt: pin.time,
+                  contentType: pin.type === "image" ? "IMG" : pin.type === "file" ? "FILE" : "TXT",
+                  attachments: pin.fileInfo ? [{
+                    fileId: pin.fileInfo.url,
+                    fileName: pin.fileInfo.name,
+                    fileSize: parseInt(pin.fileInfo.size || "0"),
+                    contentType: pin.fileInfo.type === "image" ? "IMG" : "FILE"
+                  }] : undefined
+                },
+                starredAt: pin.time
+              } as StarredMessageDto);
             }}
             onPreview={(file) => openPreview?.(file as any)}
           />
@@ -802,13 +883,14 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       <div className="h-full min-h-0 rounded-2xl border border-gray-300 overflow-y-auto">
         {workspaceMode === "pinned" ? (
           <PinnedMessagesPanel
-            messages={pinnedMessages ?? []}
             onClose={onClosePinned || (() => props.setWorkspaceMode("default"))}
-            onOpenChat={(pin) => {
-              onSelectChat({ type: "group", id: pin.chatId });
-              onOpenSourceMessage?.(pin.id);
+            onOpenChat={(messageDto) => {
+              // Navigate to conversation
+              console.log("Navigating to pinned message's conversation:", messageDto);
+              onSelectChat({ type: "group", id: messageDto.message.conversationId, categoryId: "" });
+              // Set StarredMessageDto to scroll to
+              setScrollToMessage(messageDto);
             }}
-            onUnpin={onUnpinMessage}
             onPreview={(file) => openPreview?.(file as any)}
           />
         ) : (
@@ -838,12 +920,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
               (selectedConversation as ChatTarget | null)?.categoryId
             }
             useApiData={true}
+            onTabChange={setLeftTab}
           />
         )}
       </div>
 
       {/* Center (Chat Container) — IMPORTANT: allow shrinking by setting min-w-0 */}
-      <div className="h-full min-h-0 min-w-0">
+      <div className="h-full min-h-0 min-w-0 relative">
         {selectedConversation ? (
           // API-based chat using ChatMainContainer (conversation-detail)
           <ChatMainContainer
@@ -868,14 +951,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             onChatChange={handleChatChange}
             showRightPanel={showRight}
             onToggleRightPanel={() => setShowRight(!showRight)}
-            onTogglePin={
-              onTogglePin
-                ? (messageId: string, isPinned: boolean) => {
-                    // Create a minimal Message object for the handler
-                    onTogglePin({ id: messageId, isPinned } as Message);
-                  }
-                : undefined
-            }
+            scrollToMessageId={scrollToMessage}
+            onScrollComplete={() => setScrollToMessage(null)}
             onToggleStar={
               onToggleStar
                 ? (messageId: string, isStarred: boolean) => {
@@ -905,6 +982,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                bg-brand-100 hover:bg-brand-200 active:bg-brand-400"
             onMouseDown={onDividerMouseDown}
             title="Kéo để thay đổi độ rộng panel phải"
+            data-testid="right-panel-resize"
           />
         </div>
       )}
@@ -929,7 +1007,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             tasks={apiTasks}
             members={apiGroupMembers}
             onChangeTaskStatus={onChangeTaskStatus}
-            onReassignTask={undefined}
+            onReassignTask={handleReassignTask}
             onToggleChecklist={onToggleChecklist}
             onUpdateTaskChecklist={onUpdateTaskChecklist}
             checklistTemplates={checklistTemplates}
@@ -941,7 +1019,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             applyTemplateToTasks={applyTemplateToTasks}
             taskLogs={taskLogs}
             onOpenTaskLog={onOpenTaskLog}
-            onOpenSourceMessage={onOpenSourceMessage}
+            onOpenSourceMessage={(messageDto) => {
+              // Set the message to scroll to (same pattern as PinnedMessagesPanel)
+              setScrollToMessage(messageDto);
+            }}
             messages={chatMessages}
             messagesQuery={messagesQuery}
           />

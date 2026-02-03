@@ -1,72 +1,82 @@
 import React, { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { GroupSelector } from "./worktype-manager/GroupSelector";
 import { WorkTypeEditor } from "./worktype-manager/WorkTypeEditor";
-import { useCategories, useCategoryConversations } from "@/hooks/queries/useCategories";
+import {
+  useCategories,
+  useCategoryConversations,
+} from "@/hooks/queries/useCategories";
 import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
 import type { GroupChat, WorkType } from "../types";
-import type { CategoryDto, ConversationDto } from "@/types/categories";
+import type {
+  CategoryDto,
+  ConversationDto,
+  ConversationDto as ConversationType,
+} from "@/types/categories";
 import { cn } from "@/lib/utils";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
  * WorkTypeManagerDialog manages work types across group conversations.
- * 
+ *
  * IMPORTANT: In this system, "group/conversation" and "work type" are closely related:
  * - Each ConversationDto (from API) represents a group that contains work types
  * - Each conversation has: Members, Chats, Tasks, and Checklists
  * - Work types are categories within a conversation
- * 
+ *
  * API References:
  * - Conversations: docs/modules/chat/using_management_api/api_swaggers/Chat_Swagger.json
  * - Tasks/Checklists: docs/modules/chat/using_management_api/api_swaggers/Task swagger.json
  */
 interface WorkTypeManagerDialogProps {
   open: boolean;
-  onOpenChange: (open:  boolean) => void;
-  groups?:  GroupChat[]; // Optional - kept for backward compatibility
+  onOpenChange: (open: boolean) => void;
+  groups?: ConversationDto[]; // Optional - kept for backward compatibility
   onSave: (groupId: string, updatedWorkTypes: WorkType[]) => void;
 }
 
-export const WorkTypeManagerDialog:  React.FC<WorkTypeManagerDialogProps> = ({
+export const WorkTypeManagerDialog: React.FC<WorkTypeManagerDialogProps> = ({
   open,
   onOpenChange,
   groups, // Not used in new implementation
   onSave,
 }) => {
-  const [step, setStep] = useState<'categories' | 'conversations' | 'editor'>('categories');
-  const [selectedCategory, setSelectedCategory] = useState<CategoryDto | null>(null);
-  const [selectedConversation, setSelectedConversation] = useState<ConversationDto | null>(null);
+  const [step, setStep] = useState<"categories" | "conversations" | "editor">(
+    "categories",
+  );
+  const [selectedCategory, setSelectedCategory] = useState<CategoryDto | null>(
+    null,
+  );
+  const [selectedConversation, setSelectedConversation] =
+    useState<ConversationDto | null>(null);
 
-  // Fetch categories from API
-  const { 
-    data: categories, 
-    isLoading: loadingCategories, 
-    error: categoriesError,
-    refetch: refetchCategories 
-  } = useCategories();
+  // Fetch all categories from API (already filtered by user on server-side)
+  const categoriesQuery = useCategories();
+  const categories = categoriesQuery.data || [];
+
+  const loadingCategories = categoriesQuery.isLoading;
+  const categoriesError = categoriesQuery.error;
+  const refetchCategories = categoriesQuery.refetch;
 
   // Fetch conversations for selected category
-  const { 
-    data: conversations, 
-    isLoading: loadingConversations,
-    error: conversationsError,
-    refetch: refetchConversations
-  } = useCategoryConversations(selectedCategory?.id || '');
+  const conversationsQuery = useCategoryConversations(
+    selectedCategory?.id || "",
+  );
+  const conversations = conversationsQuery.data;
+  const loadingConversations = conversationsQuery.isLoading;
+  const conversationsError = conversationsQuery.error;
+  const refetchConversations = conversationsQuery.refetch;
 
   // Helper hook to get template counts for each conversation
   // We'll map over conversations and fetch template counts
   const conversationsWithTemplateCounts = React.useMemo(() => {
     if (!conversations) return [];
-    
-    return conversations.map(conv => ({
+
+    return conversations.map((conv) => ({
       ...conv,
       // Template count will be fetched when needed, defaulting to 0 for now
-      templateCount: 0
+      templateCount: 0,
     }));
   }, [conversations]);
 
@@ -74,7 +84,7 @@ export const WorkTypeManagerDialog:  React.FC<WorkTypeManagerDialogProps> = ({
   React.useEffect(() => {
     if (!open) {
       setTimeout(() => {
-        setStep('categories');
+        setStep("categories");
         setSelectedCategory(null);
         setSelectedConversation(null);
       }, 200); // Wait for close animation
@@ -84,18 +94,18 @@ export const WorkTypeManagerDialog:  React.FC<WorkTypeManagerDialogProps> = ({
   // Handle category selection - show editor with conversations in that category
   const handleSelectCategory = (category: CategoryDto) => {
     setSelectedCategory(category);
-    setStep('editor'); // Go directly to editor instead of conversations step
+    setStep("editor"); // Go directly to editor instead of conversations step
   };
 
   // Handle conversation/group selection - show editor
   const handleSelectConversation = (conversation: ConversationDto) => {
     setSelectedConversation(conversation);
-    setStep('editor');
+    setStep("editor");
   };
 
   // Handle back from editor to categories
   const handleBackToCategories = () => {
-    setStep('categories');
+    setStep("categories");
     setSelectedCategory(null);
     setSelectedConversation(null);
   };
@@ -109,10 +119,10 @@ export const WorkTypeManagerDialog:  React.FC<WorkTypeManagerDialogProps> = ({
 
   /**
    * Convert ConversationDto (from API) to GroupChat (frontend type)
-   * 
+   *
    * ConversationDto contains conversation metadata from Chat API.
    * GroupChat extends this with work types, members, and UI state.
-   * 
+   *
    * Each conversation IS a work type container with:
    * - Members: Fetched separately via GroupUserManagement
    * - Chats: Message history (not loaded here)
@@ -135,11 +145,11 @@ export const WorkTypeManagerDialog:  React.FC<WorkTypeManagerDialogProps> = ({
       <DialogContent
         className={cn(
           "overflow-hidden p-0 transition-all duration-200",
-          step === 'categories' ? "max-w-[500px]" : "max-w-[700px]"
+          step === "categories" ? "max-w-[500px]" : "max-w-[700px]",
         )}
       >
         {/* Step 1: Show Categories */}
-        {step === 'categories' && (
+        {step === "categories" && (
           <>
             {loadingCategories ? (
               <div className="flex flex-col items-center justify-center py-12 px-6">
@@ -149,25 +159,18 @@ export const WorkTypeManagerDialog:  React.FC<WorkTypeManagerDialogProps> = ({
             ) : categoriesError ? (
               <div className="flex flex-col items-center justify-center py-12 px-6">
                 <AlertCircle className="h-8 w-8 text-red-500 mb-3" />
-                <p className="text-sm text-red-600 mb-4">Không thể tải danh mục</p>
+                <p className="text-sm text-red-600 mb-4">
+                  Không thể tải danh mục
+                </p>
                 <Button size="sm" onClick={() => refetchCategories()}>
                   Thử lại
                 </Button>
               </div>
             ) : (
               <GroupSelector
-                groups={categories?.map(cat => ({
-                  id: cat.id,
-                  name: cat.name,
-                  members: [],
-                  workTypes: [],
-                  conversationCount: cat.conversationCount,
-                  departmentIds: [],
-                  createdAt: cat.createdAt || new Date().toISOString(),
-                })) || []}
-                onSelect={(group) => {
-                  const category = categories?.find(c => c.id === group.id);
-                  if (category) handleSelectCategory(category);
+                groups={categories}
+                onSelect={(category) => {
+                  handleSelectCategory(category);
                 }}
                 onClose={() => onOpenChange(false)}
               />
@@ -176,7 +179,7 @@ export const WorkTypeManagerDialog:  React.FC<WorkTypeManagerDialogProps> = ({
         )}
 
         {/* Step 2: Show WorkTypeEditor for Selected Category */}
-        {step === 'editor' && selectedCategory && (
+        {step === "editor" && selectedCategory && (
           <WorkTypeEditor
             categoryId={selectedCategory.id}
             categoryName={selectedCategory.name}

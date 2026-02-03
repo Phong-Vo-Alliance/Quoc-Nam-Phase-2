@@ -1,30 +1,12 @@
 // Conversations API client
-// Handles API calls for Groups and Direct Messages
+// Handles API calls for Direct Messages and conversation management
 
 import { apiClient } from "./client";
 import type {
-  GetGroupsResponse,
   GetConversationsResponse,
   GetConversationMembersResponse,
 } from "@/types/conversations";
-
-/**
- * GET /api/groups
- * Fetch list of group conversations the user is a member of
- */
-export const getGroups = async (
-  cursor?: string,
-): Promise<GetGroupsResponse> => {
-  const params: Record<string, unknown> = {};
-  if (cursor) {
-    params.cursor = cursor;
-  }
-
-  const response = await apiClient.get<GetGroupsResponse>("/api/groups", {
-    params,
-  });
-  return response.data;
-};
+import type { ConversationDto } from "@/types/categories";
 
 /**
  * GET /api/conversations
@@ -87,6 +69,28 @@ export const markConversationAsRead = async (
   const body = messageId ? { messageId } : {};
   await apiClient.post(`/api/conversations/${conversationId}/mark-read`, body);
 };
+/**
+ * POST /api/groups
+ * Create a new group conversation
+ *
+ * @param name - Group name
+ * @param categoryId - Category UUID to add the group to
+ * @param description - Optional group description
+ * @param memberIds - Optional array of member UUIDs to add
+ */
+export const createGroup = async (payload: {
+  name: string;
+  categoryId: string;
+  description?: string | null;
+  memberIds?: string[] | null;
+}): Promise<ConversationDto> => {
+  const response = await apiClient.post<ConversationDto>(
+    "/api/groups",
+    payload,
+  );
+  return response.data;
+};
+
 export const addGroupMember = async (
   groupId: string,
   userId: string,

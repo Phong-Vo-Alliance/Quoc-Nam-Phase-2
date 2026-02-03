@@ -6,6 +6,10 @@
 /**
  * Category data transfer object
  * Represents a conversation category with metadata
+ *
+ * Updated 2026-02-03: Aligned with actual API response
+ * - Added `departmentIds` (returned by API)
+ * - Removed `conversationCount` (not returned by API, can be calculated from conversations.length)
  */
 export interface CategoryDto {
   /** Unique identifier (UUID) */
@@ -18,12 +22,12 @@ export interface CategoryDto {
   order: number;
   /** 🆕 NEW (CBN-002): Nested conversations in this category */
   conversations: ConversationInfoDto[];
-  /** Number of conversations in this category */
-  conversationCount: number;
   /** Creation timestamp (ISO 8601) */
   createdAt: string;
   /** Last update timestamp (ISO 8601) or null */
   updatedAt: string | null;
+  /** Department IDs associated with this category */
+  departmentIds?: string[];
 }
 
 /**

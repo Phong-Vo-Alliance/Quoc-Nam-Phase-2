@@ -10,6 +10,7 @@ import FileIcon from "@/components/files/FileIcon";
 import MessageImage from "@/features/portal/workspace/MessageImage";
 import { MessageStatusIndicator } from "@/components/chat/MessageStatusIndicator";
 import type { ChatMessage, AttachmentDto } from "@/types/messages";
+import { hasLeaderPermissions } from "@/utils/roleUtils";
 
 /**
  * Format file size from bytes to human-readable format
@@ -148,522 +149,534 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           )}
           data-message-id={message.id}
         >
-          {/* Sender name and pin indicator (only for received and first in group) */}
-          {!isOwn && isFirstInGroup && (
-            <div className="flex items-center gap-2 mb-1">
-              <span
-                className="text-xs text-gray-500"
-                data-testid="message-sender"
-              >
-                {message.senderName}
-              </span>
-              <span className="text-xs text-gray-400">•</span>
-              <span className="text-xs text-gray-500">
-                {formatTime(message.sentAt)}
-              </span>
-              {message.isPinned && (
+          <div>
+            {/* Sender name and pin indicator (only for received and first in group) */}
+            {!isOwn && isFirstInGroup && (
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className="text-xs text-gray-500"
+                  data-testid="message-sender"
+                >
+                  {message.senderName}
+                </span>
+                <span className="text-xs text-gray-400">•</span>
+                <span className="text-xs text-gray-500">
+                  {formatTime(message.sentAt)}
+                </span>
+                {message.isPinned && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
+                    <Pin size={10} className="fill-amber-600" />
+                    Đã ghim
+                  </span>
+                )}
+                {message.isStarred && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 font-medium">
+                    <Star size={10} className="fill-blue-600" />
+                    Đã đánh dấu
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Pin indicator for received messages (not first in group) */}
+            {!isOwn && !isFirstInGroup && message.isPinned && (
+              <div className="flex items-center gap-2 mb-1">
                 <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
                   <Pin size={10} className="fill-amber-600" />
                   Đã ghim
                 </span>
-              )}
-              {message.isStarred && (
+              </div>
+            )}
+
+            {/* Timestamp for own messages (only first in group) */}
+            {isOwn && isFirstInGroup && (
+              <div className="flex justify-end mb-1">
+                <span className="text-xs text-gray-500">
+                  {formatTime(message.sentAt)}
+                </span>
+              </div>
+            )}
+
+            {/* Pin indicator for own messages */}
+            {isOwn && message.isPinned && (
+              <div className="flex justify-end mb-1">
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
+                  <Pin size={10} className="fill-amber-600" />
+                  Đã ghim
+                </span>
+              </div>
+            )}
+
+            {/* Star indicator for own messages */}
+            {isOwn && message.isStarred && (
+              <div className="flex justify-end mb-1">
                 <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 font-medium">
                   <Star size={10} className="fill-blue-600" />
                   Đã đánh dấu
                 </span>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+          <div style={{ position: "relative" }}>
+            {/* Hover action buttons */}
+            {
+              <div
+                className={cn(
+                  "hover-action-button absolute flex items-center gap-1 rounded-lg border border-gray-200 bg-white shadow-sm px-2 z-10",
+                  isOwn ? "right-0" : "left-0",
+                )}
+                style={{
+                  top: "-40px",
+                  paddingBottom: "40px",
+                  backgroundColor: "transparent",
+                  border: "none",
+                }}
+                data-testid={`hover-actions-${message.id}`}
+              >
+                <div className="rounded-lg border border-gray-200 shadow-sm px-2 py-1 bg-white hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
+                  {onTogglePin && (
+                    <button
+                      className={cn(
+                        "p-1.5 rounded transition",
+                        message.isPinned
+                          ? "text-amber-600 hover:text-amber-700"
+                          : "text-gray-500 hover:text-amber-600",
+                      )}
+                      onClick={() => onTogglePin(message.id, message.isPinned)}
+                      title={
+                        message.isPinned ? "Bỏ ghim tin nhắn" : "Ghim tin nhắn"
+                      }
+                      data-testid="toggle-pin-button"
+                    >
+                      {message.isPinned ? (
+                        <Pin size={14} className="fill-amber-600" />
+                      ) : (
+                        <Pin size={14} />
+                      )}
+                    </button>
+                  )}
+                  {onToggleStar && (
+                    <button
+                      className={cn(
+                        "p-1.5 rounded transition",
+                        message.isStarred
+                          ? "text-amber-600 hover:text-amber-700"
+                          : "text-gray-500 hover:text-amber-600",
+                      )}
+                      onClick={() =>
+                        onToggleStar(message.id, message.isStarred)
+                      }
+                      title={message.isStarred ? "Bỏ đánh dấu" : "Đánh dấu"}
+                      data-testid="toggle-star-button"
+                    >
+                      {message.isStarred ? (
+                        <StarOff size={14} />
+                      ) : (
+                        <Star size={14} />
+                      )}
+                    </button>
+                  )}
+                  {hasLeaderPermissions() &&
+                    onCreateTask &&
+                    !message.linkedTaskId && (
+                      <button
+                        className="p-1.5 rounded transition text-gray-500 hover:text-emerald-600"
+                        onClick={() => onCreateTask(message.id)}
+                        title="Giao việc"
+                        data-testid="create-task-button"
+                      >
+                        <ClipboardPlus size={14} />
+                      </button>
+                    )}
+                </div>
+              </div>
+            }
 
-          {/* Pin indicator for received messages (not first in group) */}
-          {!isOwn && !isFirstInGroup && message.isPinned && (
-            <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
-                <Pin size={10} className="fill-amber-600" />
-                Đã ghim
-              </span>
-            </div>
-          )}
-
-          {/* Timestamp for own messages (only first in group) */}
-          {isOwn && isFirstInGroup && (
-            <div className="flex justify-end mb-1">
-              <span className="text-xs text-gray-500">
-                {formatTime(message.sentAt)}
-              </span>
-            </div>
-          )}
-
-          {/* Pin indicator for own messages */}
-          {isOwn && message.isPinned && (
-            <div className="flex justify-end mb-1">
-              <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
-                <Pin size={10} className="fill-amber-600" />
-                Đã ghim
-              </span>
-            </div>
-          )}
-
-          {/* Star indicator for own messages */}
-          {isOwn && message.isStarred && (
-            <div className="flex justify-end mb-1">
-              <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 font-medium">
-                <Star size={10} className="fill-blue-600" />
-                Đã đánh dấu
-              </span>
-            </div>
-          )}
-
-          {/* Hover action buttons */}
-          {(onTogglePin || onToggleStar) && (
+            {/* Message bubble */}
             <div
               className={cn(
-                "hover-action-button absolute -top-8 flex items-center gap-1 rounded-lg border border-gray-200 bg-white shadow-sm px-2 z-10",
-                isOwn ? "right-0" : "left-0",
+                "message-bubble overflow-hidden w-fit max-w-full",
+                radiusBySide,
+                // Failed state styling
+                message.sendStatus === "failed"
+                  ? "bg-red-50/50 border-2 border-red-400"
+                  : isOwn
+                    ? "bg-brand-600 text-white"
+                    : "bg-white text-gray-900 shadow-sm",
+                // Pin/Star borders (override failed state)
+                message.isPinned && message.sendStatus !== "failed"
+                  ? "border-2 border-amber-400"
+                  : message.isStarred && message.sendStatus !== "failed"
+                    ? "border-2 border-blue-400"
+                    : message.sendStatus !== "failed" && "border",
+                // Opacity for sending/retrying
+                (message.sendStatus === "sending" ||
+                  message.sendStatus === "retrying") &&
+                  "opacity-90",
+                // Override text color when highlighted (for own messages)
+                "[&.message-highlighted]:!text-gray-900",
               )}
-              style={{
-                paddingBottom: "40px",
-                backgroundColor: "transparent",
-                border: "none",
-              }}
-              data-testid={`hover-actions-${message.id}`}
+              data-testid={`message-bubble-${message.id}`}
             >
-              <div className="rounded-lg border border-gray-200 shadow-sm px-2 py-1 bg-white hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
-                {onTogglePin && (
-                  <button
-                    className={cn(
-                      "p-1.5 rounded transition",
-                      message.isPinned
-                        ? "text-amber-600 hover:text-amber-700"
-                        : "text-gray-500 hover:text-amber-600",
-                    )}
-                    onClick={() => onTogglePin(message.id, message.isPinned)}
-                    title={
-                      message.isPinned ? "Bỏ ghim tin nhắn" : "Ghim tin nhắn"
-                    }
-                    data-testid="toggle-pin-button"
-                  >
-                    {message.isPinned ? (
-                      <Pin size={14} className="fill-amber-600" />
-                    ) : (
-                      <Pin size={14} />
-                    )}
-                  </button>
-                )}
-                {onToggleStar && (
-                  <button
-                    className={cn(
-                      "p-1.5 rounded transition",
-                      message.isStarred
-                        ? "text-amber-600 hover:text-amber-700"
-                        : "text-gray-500 hover:text-amber-600",
-                    )}
-                    onClick={() => onToggleStar(message.id, message.isStarred)}
-                    title={message.isStarred ? "Bỏ đánh dấu" : "Đánh dấu"}
-                    data-testid="toggle-star-button"
-                  >
-                    {message.isStarred ? (
-                      <StarOff size={14} />
-                    ) : (
-                      <Star size={14} />
-                    )}
-                  </button>
-                )}
-                {onCreateTask && !message.linkedTaskId && (
-                  <button
-                    className="p-1.5 rounded transition text-gray-500 hover:text-emerald-600"
-                    onClick={() => onCreateTask(message.id)}
-                    title="Giao việc"
-                    data-testid="create-task-button"
-                  >
-                    <ClipboardPlus size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+              {/* Helper: Check if message has text, image, or file */}
+              {(() => {
+                const hasText =
+                  message.content && message.content.trim().length > 0;
 
-          {/* Message bubble */}
-          <div
-            className={cn(
-              "message-bubble overflow-hidden w-fit max-w-full",
-              radiusBySide,
-              // Failed state styling
-              message.sendStatus === "failed"
-                ? "bg-red-50/50 border-2 border-red-400"
-                : isOwn
-                  ? "bg-brand-600 text-white"
-                  : "bg-white text-gray-900 shadow-sm",
-              // Pin/Star borders (override failed state)
-              message.isPinned && message.sendStatus !== "failed"
-                ? "border-2 border-amber-400"
-                : message.isStarred && message.sendStatus !== "failed"
-                  ? "border-2 border-blue-400"
-                  : message.sendStatus !== "failed" && "border",
-              // Opacity for sending/retrying
-              (message.sendStatus === "sending" ||
-                message.sendStatus === "retrying") &&
-                "opacity-90",
-              // Override text color when highlighted (for own messages)
-              "[&.message-highlighted]:!text-gray-900",
-            )}
-            data-testid={`message-bubble-${message.id}`}
-          >
-            {/* Helper: Check if message has text, image, or file */}
-            {(() => {
-              const hasText =
-                message.content && message.content.trim().length > 0;
+                // Phase 2: Separate images from files
+                const images: AttachmentDto[] = [];
+                const files: AttachmentDto[] = [];
 
-              // Phase 2: Separate images from files
-              const images: AttachmentDto[] = [];
-              const files: AttachmentDto[] = [];
+                message.attachments?.forEach((attachment) => {
+                  if (attachment.contentType?.startsWith("image/")) {
+                    images.push(attachment);
+                  } else {
+                    files.push(attachment);
+                  }
+                });
 
-              message.attachments?.forEach((attachment) => {
-                if (attachment.contentType?.startsWith("image/")) {
-                  images.push(attachment);
-                } else {
-                  files.push(attachment);
-                }
-              });
+                const hasImages = images.length > 0;
+                const hasFiles = files.length > 0;
 
-              const hasImages = images.length > 0;
-              const hasFiles = files.length > 0;
-
-              return (
-                <>
-                  {/* Text content */}
-                  {hasText && (
-                    <div
-                      className={
-                        hasImages || hasFiles ? "px-4 pt-2 pb-2" : "px-4 py-2"
-                      }
-                    >
-                      <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                        {message.content}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Gap between text and attachments */}
-                  {hasText && (hasImages || hasFiles) && (
-                    <div className="h-3" />
-                  )}
-
-                  {/* Phase 2.1: Dynamic Image Grid based on count */}
-                  {hasImages && (
-                    <div
-                      className={cn("px-4", hasText ? "pb-4" : "py-4")}
-                      data-testid="message-attachments-container"
-                    >
-                      {/* Decision 1A: Dynamic grid layout */}
-                      {/* Special case: If has both images and files, use compact 3-col grid */}
-                      {hasFiles ? (
-                        // Mixed attachments: Always use 3-col square grid for compact display (smaller size)
-                        <div
-                          className="grid grid-cols-3 gap-2 max-w-[200px]"
-                          data-testid="image-grid-mixed-3cols"
-                        >
-                          {images.slice(0, 6).map((image, index) => {
-                            const isLast = index === 5;
-                            const remainingCount = images.length - 6;
-
-                            return (
-                              <div
-                                key={image.fileId}
-                                className="relative aspect-square overflow-hidden rounded"
-                              >
-                                <MessageImage
-                                  fileId={image.fileId}
-                                  fileName={image.fileName || "Image"}
-                                  isInGrid={true}
-                                  forceLoad={forceImageLoad}
-                                  onPreviewClick={(fileId) => {
-                                    if (onImageClick) {
-                                      onImageClick(
-                                        images.map((img) => ({
-                                          fileId: img.fileId,
-                                          fileName: img.fileName || "Image",
-                                        })),
-                                        index,
-                                      );
-                                    } else {
-                                      onFilePreviewClick?.(
-                                        fileId,
-                                        image.fileName || "Image",
-                                      );
-                                    }
-                                  }}
-                                />
-                                {isLast && remainingCount > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // Open preview at first hidden image (index 6)
-                                      if (onImageClick) {
-                                        onImageClick(
-                                          images.map((img) => ({
-                                            fileId: img.fileId,
-                                            fileName: img.fileName || "Image",
-                                          })),
-                                          6,
-                                        );
-                                      } else {
-                                        onFilePreviewClick?.(
-                                          images[6].fileId,
-                                          images[6].fileName || "Image",
-                                        );
-                                      }
-                                    }}
-                                    className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
-                                    data-testid="show-more-overlay"
-                                  >
-                                    <span className="text-white text-lg font-semibold">
-                                      +{remainingCount} more
-                                    </span>
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : images.length === 1 ? (
-                        // Single image: Full width max 320px
-                        <div className="max-w-[320px]">
-                          <MessageImage
-                            fileId={images[0].fileId}
-                            fileName={images[0].fileName || "Image"}
-                            isInGrid={false}
-                            forceLoad={forceImageLoad}
-                            onPreviewClick={(fileId) => {
-                              // Use new gallery mode if available, fallback to old callback
-                              if (onImageClick) {
-                                onImageClick(
-                                  images.map((img) => ({
-                                    fileId: img.fileId,
-                                    fileName: img.fileName || "Image",
-                                  })),
-                                  0,
-                                );
-                              } else {
-                                onFilePreviewClick?.(
-                                  fileId,
-                                  images[0].fileName || "Image",
-                                );
-                              }
-                            }}
-                          />
-                        </div>
-                      ) : images.length === 2 ? (
-                        // 2 images: 2 columns grid (preserve aspect ratio)
-                        <div
-                          className="grid grid-cols-2 gap-2 max-w-[320px]"
-                          data-testid="image-grid-2cols"
-                        >
-                          {images.map((image, index) => (
-                            <div
-                              key={image.fileId}
-                              className="overflow-hidden rounded"
-                            >
-                              <MessageImage
-                                fileId={image.fileId}
-                                fileName={image.fileName || "Image"}
-                                isInGrid={true}
-                                forceLoad={forceImageLoad}
-                                onPreviewClick={(fileId) => {
-                                  if (onImageClick) {
-                                    onImageClick(
-                                      images.map((img) => ({
-                                        fileId: img.fileId,
-                                        fileName: img.fileName || "Image",
-                                      })),
-                                      index,
-                                    );
-                                  } else {
-                                    onFilePreviewClick?.(
-                                      fileId,
-                                      image.fileName || "Image",
-                                    );
-                                  }
-                                }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      ) : images.length >= 3 && images.length <= 6 ? (
-                        // 3-6 images: 3 columns grid
-                        <div
-                          className="grid grid-cols-3 gap-2 max-w-[320px]"
-                          data-testid="image-grid-3cols"
-                        >
-                          {images.map((image, index) => (
-                            <div
-                              key={image.fileId}
-                              className="aspect-square overflow-hidden rounded"
-                            >
-                              <MessageImage
-                                fileId={image.fileId}
-                                fileName={image.fileName || "Image"}
-                                isInGrid={true}
-                                forceLoad={forceImageLoad}
-                                onPreviewClick={(fileId) => {
-                                  if (onImageClick) {
-                                    onImageClick(
-                                      images.map((img) => ({
-                                        fileId: img.fileId,
-                                        fileName: img.fileName || "Image",
-                                      })),
-                                      index,
-                                    );
-                                  } else {
-                                    onFilePreviewClick?.(
-                                      fileId,
-                                      image.fileName || "Image",
-                                    );
-                                  }
-                                }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        // 7+ images: 3 cols with first 6 + "+N more" overlay
-                        <div
-                          className="grid grid-cols-3 gap-2 max-w-[320px]"
-                          data-testid="image-grid-with-overlay"
-                        >
-                          {images.slice(0, 6).map((image, index) => {
-                            const isLast = index === 5;
-                            const remainingCount = images.length - 6;
-
-                            return (
-                              <div
-                                key={image.fileId}
-                                className="relative aspect-square overflow-hidden rounded"
-                              >
-                                <MessageImage
-                                  fileId={image.fileId}
-                                  fileName={image.fileName || "Image"}
-                                  isInGrid={true}
-                                  forceLoad={forceImageLoad}
-                                  onPreviewClick={(fileId) => {
-                                    if (onImageClick) {
-                                      onImageClick(
-                                        images.map((img) => ({
-                                          fileId: img.fileId,
-                                          fileName: img.fileName || "Image",
-                                        })),
-                                        index,
-                                      );
-                                    } else {
-                                      onFilePreviewClick?.(
-                                        fileId,
-                                        image.fileName || "Image",
-                                      );
-                                    }
-                                  }}
-                                />
-                                {isLast && remainingCount > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // Open preview at first hidden image (index 6)
-                                      if (onImageClick) {
-                                        onImageClick(
-                                          images.map((img) => ({
-                                            fileId: img.fileId,
-                                            fileName: img.fileName || "Image",
-                                          })),
-                                          6,
-                                        );
-                                      } else {
-                                        onFilePreviewClick?.(
-                                          images[6].fileId,
-                                          images[6].fileName || "Image",
-                                        );
-                                      }
-                                    }}
-                                    className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
-                                    data-testid="show-more-overlay"
-                                  >
-                                    <span className="text-white text-lg font-semibold">
-                                      +{remainingCount} more
-                                    </span>
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* File attachments - Keep original logic */}
-                  {hasFiles &&
-                    files.map((file) => (
+                return (
+                  <>
+                    {/* Text content */}
+                    {hasText && (
                       <div
-                        key={file.fileId}
-                        className={cn(
-                          "flex items-center gap-3 cursor-pointer hover:bg-black/5 transition-colors min-w-0 max-w-full",
-                          hasText || hasImages ? "px-4 pb-4" : "px-4 py-4",
-                        )}
-                        data-testid={`message-file-attachment-${file.fileId}`}
-                        onClick={() => {
-                          onFilePreviewClick?.(
-                            file.fileId,
-                            file.fileName || "document",
-                          );
-                        }}
+                        className={
+                          hasImages || hasFiles ? "px-4 pt-2 pb-2" : "px-4 py-2"
+                        }
                       >
-                        {/* Icon container with white background for visibility */}
-                        <div className="bg-white rounded-lg p-2 shadow-sm flex-shrink-0">
-                          <FileIcon
-                            contentType={
-                              file.contentType || "application/octet-stream"
-                            }
-                            size="md"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <p className="text-sm font-medium truncate">
-                            {file.fileName || "File"}
-                          </p>
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                          {message.content}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Gap between text and attachments */}
+                    {hasText && (hasImages || hasFiles) && (
+                      <div className="h-3" />
+                    )}
+
+                    {/* Phase 2.1: Dynamic Image Grid based on count */}
+                    {hasImages && (
+                      <div
+                        className={cn("px-4", hasText ? "pb-4" : "py-4")}
+                        data-testid="message-attachments-container"
+                      >
+                        {/* Decision 1A: Dynamic grid layout */}
+                        {/* Special case: If has both images and files, use compact 3-col grid */}
+                        {hasFiles ? (
+                          // Mixed attachments: Always use 3-col square grid for compact display (smaller size)
                           <div
-                            className={cn(
-                              "flex items-center gap-2 text-xs flex-wrap",
-                              isOwn ? "text-white/80" : "text-gray-600",
-                            )}
+                            className="grid grid-cols-3 gap-2 max-w-[200px]"
+                            data-testid="image-grid-mixed-3cols"
                           >
-                            {file.fileSize && (
-                              <span>{formatFileSize(file.fileSize)}</span>
-                            )}
-                            {getFileExtension(
-                              file.fileName ?? undefined,
-                              file.contentType ?? undefined,
-                            ) && (
-                              <>
-                                {file.fileSize && <span>•</span>}
-                                <span className="font-medium uppercase">
-                                  {getFileExtension(
-                                    file.fileName ?? undefined,
-                                    file.contentType ?? undefined,
+                            {images.slice(0, 6).map((image, index) => {
+                              const isLast = index === 5;
+                              const remainingCount = images.length - 6;
+
+                              return (
+                                <div
+                                  key={image.fileId}
+                                  className="relative aspect-square overflow-hidden rounded"
+                                >
+                                  <MessageImage
+                                    key={image.fileId}
+                                    fileId={image.fileId}
+                                    fileName={image.fileName || "Image"}
+                                    isInGrid={true}
+                                    forceLoad={forceImageLoad}
+                                    onPreviewClick={(fileId) => {
+                                      if (onImageClick) {
+                                        onImageClick(
+                                          images.map((img) => ({
+                                            fileId: img.fileId,
+                                            fileName: img.fileName || "Image",
+                                          })),
+                                          index,
+                                        );
+                                      } else {
+                                        onFilePreviewClick?.(
+                                          fileId,
+                                          image.fileName || "Image",
+                                        );
+                                      }
+                                    }}
+                                  />
+                                  {isLast && remainingCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        // Open preview at first hidden image (index 6)
+                                        if (onImageClick) {
+                                          onImageClick(
+                                            images.map((img) => ({
+                                              fileId: img.fileId,
+                                              fileName: img.fileName || "Image",
+                                            })),
+                                            6,
+                                          );
+                                        } else {
+                                          onFilePreviewClick?.(
+                                            images[6].fileId,
+                                            images[6].fileName || "Image",
+                                          );
+                                        }
+                                      }}
+                                      className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
+                                      data-testid="show-more-overlay"
+                                    >
+                                      <span className="text-white text-lg font-semibold">
+                                        +{remainingCount} more
+                                      </span>
+                                    </button>
                                   )}
-                                </span>
-                              </>
-                            )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : images.length === 1 ? (
+                          // Single image: Full width max 320px
+                          <div className="max-w-[320px]">
+                            <MessageImage
+                              key={images[0].fileId}
+                              fileId={images[0].fileId}
+                              fileName={images[0].fileName || "Image"}
+                              isInGrid={false}
+                              forceLoad={forceImageLoad}
+                              onPreviewClick={(fileId) => {
+                                // Use new gallery mode if available, fallback to old callback
+                                if (onImageClick) {
+                                  onImageClick(
+                                    images.map((img) => ({
+                                      fileId: img.fileId,
+                                      fileName: img.fileName || "Image",
+                                    })),
+                                    0,
+                                  );
+                                } else {
+                                  onFilePreviewClick?.(
+                                    fileId,
+                                    images[0].fileName || "Image",
+                                  );
+                                }
+                              }}
+                            />
+                          </div>
+                        ) : images.length === 2 ? (
+                          // 2 images: 2 columns grid (preserve aspect ratio)
+                          <div
+                            className="grid grid-cols-2 gap-2 max-w-[320px]"
+                            data-testid="image-grid-2cols"
+                          >
+                            {images.map((image, index) => (
+                              <div
+                                key={image.fileId}
+                                className="overflow-hidden rounded"
+                              >
+                                <MessageImage
+                                  key={image.fileId}
+                                  fileId={image.fileId}
+                                  fileName={image.fileName || "Image"}
+                                  isInGrid={true}
+                                  forceLoad={forceImageLoad}
+                                  onPreviewClick={(fileId) => {
+                                    if (onImageClick) {
+                                      onImageClick(
+                                        images.map((img) => ({
+                                          fileId: img.fileId,
+                                          fileName: img.fileName || "Image",
+                                        })),
+                                        index,
+                                      );
+                                    } else {
+                                      onFilePreviewClick?.(
+                                        fileId,
+                                        image.fileName || "Image",
+                                      );
+                                    }
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : images.length >= 3 && images.length <= 6 ? (
+                          // 3-6 images: 3 columns grid
+                          <div
+                            className="grid grid-cols-3 gap-2 max-w-[320px]"
+                            data-testid="image-grid-3cols"
+                          >
+                            {images.map((image, index) => (
+                              <div
+                                key={image.fileId}
+                                className="aspect-square overflow-hidden rounded"
+                              >
+                                <MessageImage
+                                  key={image.fileId}
+                                  fileId={image.fileId}
+                                  fileName={image.fileName || "Image"}
+                                  isInGrid={true}
+                                  forceLoad={forceImageLoad}
+                                  onPreviewClick={(fileId) => {
+                                    if (onImageClick) {
+                                      onImageClick(
+                                        images.map((img) => ({
+                                          fileId: img.fileId,
+                                          fileName: img.fileName || "Image",
+                                        })),
+                                        index,
+                                      );
+                                    } else {
+                                      onFilePreviewClick?.(
+                                        fileId,
+                                        image.fileName || "Image",
+                                      );
+                                    }
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          // 7+ images: 3 cols with first 6 + "+N more" overlay
+                          <div
+                            className="grid grid-cols-3 gap-2 max-w-[320px]"
+                            data-testid="image-grid-with-overlay"
+                          >
+                            {images.slice(0, 6).map((image, index) => {
+                              const isLast = index === 5;
+                              const remainingCount = images.length - 6;
+
+                              return (
+                                <div
+                                  key={image.fileId}
+                                  className="relative aspect-square overflow-hidden rounded"
+                                >
+                                  <MessageImage
+                                    key={image.fileId}
+                                    fileId={image.fileId}
+                                    fileName={image.fileName || "Image"}
+                                    isInGrid={true}
+                                    forceLoad={forceImageLoad}
+                                    onPreviewClick={(fileId) => {
+                                      if (onImageClick) {
+                                        onImageClick(
+                                          images.map((img) => ({
+                                            fileId: img.fileId,
+                                            fileName: img.fileName || "Image",
+                                          })),
+                                          index,
+                                        );
+                                      } else {
+                                        onFilePreviewClick?.(
+                                          fileId,
+                                          image.fileName || "Image",
+                                        );
+                                      }
+                                    }}
+                                  />
+                                  {isLast && remainingCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        // Open preview at first hidden image (index 6)
+                                        if (onImageClick) {
+                                          onImageClick(
+                                            images.map((img) => ({
+                                              fileId: img.fileId,
+                                              fileName: img.fileName || "Image",
+                                            })),
+                                            6,
+                                          );
+                                        } else {
+                                          onFilePreviewClick?.(
+                                            images[6].fileId,
+                                            images[6].fileName || "Image",
+                                          );
+                                        }
+                                      }}
+                                      className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
+                                      data-testid="show-more-overlay"
+                                    >
+                                      <span className="text-white text-lg font-semibold">
+                                        +{remainingCount} more
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* File attachments - Keep original logic */}
+                    {hasFiles &&
+                      files.map((file) => (
+                        <div
+                          key={file.fileId}
+                          className={cn(
+                            "flex items-center gap-3 cursor-pointer hover:bg-black/5 transition-colors min-w-0 max-w-full",
+                            hasText || hasImages ? "px-4 pb-4" : "px-4 py-4",
+                          )}
+                          data-testid={`message-file-attachment-${file.fileId}`}
+                          onClick={() => {
+                            onFilePreviewClick?.(
+                              file.fileId,
+                              file.fileName || "document",
+                            );
+                          }}
+                        >
+                          {/* Icon container with white background for visibility */}
+                          <div className="bg-white rounded-lg p-2 shadow-sm flex-shrink-0">
+                            <FileIcon
+                              contentType={
+                                file.contentType || "application/octet-stream"
+                              }
+                              size="md"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <p className="text-sm font-medium truncate">
+                              {file.fileName || "File"}
+                            </p>
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 text-xs flex-wrap",
+                                isOwn ? "text-white/80" : "text-gray-600",
+                              )}
+                            >
+                              {file.fileSize && (
+                                <span>{formatFileSize(file.fileSize)}</span>
+                              )}
+                              {getFileExtension(
+                                file.fileName ?? undefined,
+                                file.contentType ?? undefined,
+                              ) && (
+                                <>
+                                  {file.fileSize && <span>•</span>}
+                                  <span className="font-medium uppercase">
+                                    {getFileExtension(
+                                      file.fileName ?? undefined,
+                                      file.contentType ?? undefined,
+                                    )}
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                </>
-              );
-            })()}
+                      ))}
+                  </>
+                );
+              })()}
+            </div>
           </div>
-
-          {/* Time or Status Indicator (only for last message in group and own messages) */}
+          {/* Time or Status Indicator (only for last message in group and own messages)
           {isLastInGroup && isOwn && (
             <div className={cn("mt-1.5 mb-1", "flex justify-end")}>
               <MessageStatusIndicator
@@ -673,7 +686,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                 timestamp={formatTime(message.sentAt)}
               />
             </div>
-          )}
+          )} */}
 
           {/* Retry button (below bubble, only for failed messages) */}
           {message.sendStatus === "failed" && onRetry && (

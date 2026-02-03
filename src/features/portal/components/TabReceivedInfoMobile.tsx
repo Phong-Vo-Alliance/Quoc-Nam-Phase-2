@@ -21,7 +21,7 @@ interface TabReceivedInfoMobileProps {
   // For assign task
   onCreateTaskFromMessage?: (payload: {
     title: string;
-    sourceMessageId: string;
+    messageId: string;
     assignTo: string;
     checklistVariantId?: string;
     checklistVariantName?: string;

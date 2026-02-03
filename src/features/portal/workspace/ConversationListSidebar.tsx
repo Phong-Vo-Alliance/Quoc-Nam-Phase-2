@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/popover";
 import { Zap, Star, ListTodo, RefreshCw } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { useGroups, flattenGroups } from "@/hooks/queries/useGroups";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime";
 import {
@@ -32,6 +31,8 @@ import {
   saveSelectedCategory,
   getSelectedCategory,
 } from "@/utils/storage"; // Phase 6: Conversation persistence
+import { useConversationStore } from "@/stores/conversationStore"; // 🆕 Import store
+import { group } from "console";
 
 /* ===================== Types (props mới) ===================== */
 type ChatTarget = {
@@ -76,6 +77,9 @@ export interface LeftSidebarProps {
 
   // Use API data instead of props
   useApiData?: boolean;
+
+  // Tab change callback (for syncing parent tab state)
+  onTabChange?: (tab: "contacts" | "messages") => void;
 
   isMobile?: boolean;
   onOpenQuickMsg?: () => void;
@@ -122,6 +126,24 @@ const initials = (name: string) =>
     .toUpperCase();
 
 /* ===================== Component ===================== */
+
+// 🔧 Helper: Get initial tab based on persisted conversation type
+const getInitialTab = (): "categories" | "contacts" => {
+  try {
+    const stored = localStorage.getItem("conversation-storage");
+    if (stored) {
+      const data = JSON.parse(stored);
+      const conversationType = data?.state?.selectedConversation?.type;
+      if (conversationType === "dm") {
+        return "contacts";
+      }
+    }
+  } catch (error) {
+    // Ignore parse errors, fallback to default
+  }
+  return "categories";
+};
+
 export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   currentUserId,
   groups: propGroups,
@@ -133,88 +155,83 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   selectedConversationId,
   selectedCategoryId,
   useApiData = true,
+  onTabChange,
   isMobile = false,
   onOpenQuickMsg,
   onOpenPinned,
   onOpenTodoList,
 }) => {
-  const [tab, setTab] = React.useState<"categories" | "contacts">("categories"); // mặc định: nhóm
+  const [tab, setTab] = React.useState<"categories" | "contacts">(
+    getInitialTab(),
+  ); // 🔧 Initialize based on persisted conversation
   const [q, setQ] = React.useState("");
   const [openTools, setOpenTools] = React.useState(false);
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
-  const prevTabRef = React.useRef<"categories" | "contacts">("categories");
+  const [internalSelectedCategoryId, setInternalSelectedCategoryId] =
+    React.useState<string | null>(null); // 🔧 Track selected category internally
+  const prevTabRef = React.useRef<"categories" | "contacts">(getInitialTab()); // 🐛 FIX: Initialize with same value as tab state
   const isAutoSwitchingTabRef = React.useRef(false); // Flag to prevent clearing selection during auto-switch
   const prevSelectedConversationIdRef = React.useRef<string | undefined>(
     undefined,
   ); // Track previous conversation
 
-  // API queries
-  // NOTE: No longer using useGroups - conversations are fetched from categories API
-  // const groupsQuery = useGroups({ enabled: useApiData });
+  // 🆕 Get setActiveTabType from store
+  const setActiveTabType = useConversationStore((s) => s.setActiveTabType);
+
   const categoriesQuery = useCategories();
   const directsQuery = useDirectMessages({ enabled: useApiData });
 
   // ✅ Real-time updates for categories
-  useCategoriesRealtime(categoriesQuery.data);
+  // useCategoriesRealtime(categoriesQuery.data);
 
-  // ❌ REMOVED: Duplicate hook - ChatMainContainer already handles this
-  // useConversationRealtime({ activeConversationId: selectedConversationId });
-
-  // Get data from API or props - MEMOIZED to prevent unnecessary re-computation
-  // Build apiGroups from categories.conversations instead of separate API
-  const apiCategories = React.useMemo(() => {
-    return categoriesQuery.data || [];
-  }, [categoriesQuery.data]);
-
+  // 🆕 SIMPLIFIED (2026-02-03): Single useMemo to flatten conversations from categories
+  // Replaces complex logic with useGroups + merge + filter
   const apiGroups = React.useMemo(() => {
     if (!categoriesQuery.data) return [];
 
-    // Flatten all conversations from all categories
-    const allConversations: GroupConversation[] = [];
-
-    categoriesQuery.data.forEach((category) => {
-      if (category.conversations) {
-        category.conversations.forEach((conv) => {
-          // Map ConversationInfoDto to GroupConversation
-          allConversations.push({
-            id: conv.conversationId,
-            name: conv.conversationName,
-            type: "GRP",
-            description: "",
-            avatarFileId: null,
-            createdBy: "",
-            createdByName: "",
-            memberCount: conv.memberCount,
-            unreadCount: conv.unreadCount || 0,
-            lastMessage: conv.lastMessage
-              ? {
-                  id: conv.lastMessage.messageId,
-                  conversationId: conv.conversationId,
-                  senderId: conv.lastMessage.senderId,
-                  senderName: conv.lastMessage.senderName,
-                  parentMessageId: null,
-                  content: conv.lastMessage.content,
-                  type: "TXT",
-                  timestamp: conv.lastMessage.sentAt,
-                  isEdited: false,
-                  isPinned: false,
-                  isStarred: false,
-                  attachments: [],
-                  reactions: [],
-                  threadCount: 0,
-                  threadPreview: null,
-                  mentions: [],
-                }
-              : null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          } as GroupConversation);
-        });
-      }
-    });
-
-    return allConversations;
+    // Flatten all conversations from all categories into GroupConversation format
+    return categoriesQuery.data.flatMap((category) =>
+      category.conversations.map(
+        (conv): GroupConversation => ({
+          id: conv.conversationId,
+          name: conv.conversationName,
+          type: "GRP",
+          description: "",
+          avatarFileId: null,
+          createdBy: "",
+          createdByName: "",
+          memberCount: conv.memberCount,
+          unreadCount: conv.unreadCount || 0,
+          lastMessage: conv.lastMessage
+            ? {
+                id: conv.lastMessage.messageId,
+                conversationId: conv.conversationId,
+                senderId: conv.lastMessage.senderId,
+                senderName: conv.lastMessage.senderName,
+                parentMessageId: null,
+                content: conv.lastMessage.content,
+                contentType: "TXT",
+                sentAt: conv.lastMessage.sentAt,
+                editedAt: null,
+                linkedTaskId: null,
+                isStarred: false,
+                isPinned: false,
+                attachments: [],
+                reactions: [],
+                replyCount: 0,
+                threadPreview: null,
+                mentions: [],
+              }
+            : null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
+    );
   }, [categoriesQuery.data]);
+
+  // 🆕 SIMPLIFIED: Categories are directly from API (already filtered by server)
+  const apiCategories = categoriesQuery.data ?? [];
 
   const apiDirects = React.useMemo(() => {
     return flattenDirectMessages(directsQuery.data);
@@ -241,9 +258,26 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     }
   };
 
-  // filter chung theo search
-  const match = (text?: string) =>
-    (text || "").toLowerCase().includes(q.trim().toLowerCase());
+  // filter chung theo search — robust to objects/nulls
+  const match = (text?: unknown) => {
+    const qLower = q.trim().toLowerCase();
+    // empty query matches everything (keep existing behavior)
+    if (!qLower) return true;
+
+    let val = "";
+    if (text == null) {
+      val = "";
+    } else if (typeof text === "string") {
+      val = text;
+    } else if (typeof text === "object" && "content" in (text as any)) {
+      const c = (text as any).content;
+      val = typeof c === "string" ? c : String(c ?? "");
+    } else {
+      val = String(text as any);
+    }
+
+    return val.toLowerCase().includes(qLower);
+  };
 
   // Filter & Sort groups (API or props) - Memoized để re-render khi data thay đổi
   const filteredApiGroups = React.useMemo(() => {
@@ -251,8 +285,6 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       apiGroups.filter((g) => match(g.name) || match(g.lastMessage?.content)),
     );
   }, [apiGroups, q]); // Re-compute khi apiGroups hoặc search query thay đổi
-
-  // Filter categories by search query and sort by latest message
   const filteredApiCategories = React.useMemo(() => {
     return apiCategories
       .filter((cat) => match(cat.name))
@@ -330,6 +362,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       saveSelectedConversation(conversationId);
       if (categoryId) {
         saveSelectedCategory(categoryId);
+        setInternalSelectedCategoryId(categoryId); // 🔧 Track internally
       }
     },
     [onSelectGroup, onSelectChat],
@@ -337,12 +370,29 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
   // Helper: handle DM selection
   const handleDirectSelect = (dm: DirectConversation) => {
+    console.log("[DirectSelect] Selecting DM:", {
+      id: dm.id,
+      name: dm.name,
+      type: dm.type,
+    });
+
     onSelectChat({ type: "dm", id: dm.id, name: dm.name });
+
     // Phase 6: Save selected conversation to localStorage
     saveSelectedConversation(dm.id);
+    console.log("[DirectSelect] Saved to localStorage:", dm.id);
+
     // Clear category since DMs don't have categories
     saveSelectedCategory("");
   };
+
+  // 🔧 Sync parent tab on mount based on initial tab
+  React.useEffect(() => {
+    // Map internal tab to parent tab type
+    const parentTab = tab === "categories" ? "messages" : "contacts";
+    onTabChange?.(parentTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   // Phase 6: Restore selected conversation from localStorage on mount
   React.useEffect(() => {
@@ -365,6 +415,10 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         const savedGroup = apiGroups.find((g) => g.id === savedConversationId);
 
         if (savedGroup) {
+          console.log(
+            "[ConversationRestore] Restoring GROUP:",
+            savedGroup.name,
+          );
           // 🐛 FIX: Prioritize savedCategoryId from localStorage
           // Verify conversation belongs to saved category
           let category = savedCategoryId
@@ -403,6 +457,8 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         );
 
         if (savedDirect) {
+          setTab("contacts");
+          onTabChange?.("contacts");
           handleDirectSelect(savedDirect);
           setHasAutoSelected(true);
           return;
@@ -410,7 +466,8 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       }
 
       // If no saved conversation or saved conversation deleted, auto-select first group
-      if (apiGroups.length > 0 && !selectedConversationId) {
+      // 🐛 FIX: Also check hasAutoSelected to prevent race condition when restoring DM
+      if (apiGroups.length > 0 && !selectedConversationId && !hasAutoSelected) {
         const firstGroup = apiGroups[0];
         const category = apiCategories.find((cat) =>
           cat.conversations?.some((c) => c.conversationId === firstGroup.id),
@@ -476,6 +533,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   React.useEffect(() => {
     // Only clear if tab actually changed (not on initial mount or re-render)
     if (prevTabRef.current !== tab) {
+      // 🆕 Update active tab type in store FIRST
+      setActiveTabType(tab === "categories" ? "group" : "dm");
+
       // Don't clear if this is an auto-switch triggered by conversation selection
       if (isAutoSwitchingTabRef.current) {
         isAutoSwitchingTabRef.current = false; // Reset flag
@@ -483,10 +543,17 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         return;
       }
 
+      // 🔧 Clear localStorage when manually switching tabs
+      saveSelectedConversation("");
+      saveSelectedCategory("");
+
+      // 🔧 Clear internal category selection state
+      setInternalSelectedCategoryId(null);
+
       onClearSelectedChat?.();
       prevTabRef.current = tab;
     }
-  }, [tab, onClearSelectedChat]);
+  }, [tab, onClearSelectedChat, setActiveTabType]);
 
   return (
     <aside
@@ -691,7 +758,8 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                     <li key={category.id}>
                       <button
                         className={`w-full ${rowCls} text-left ${
-                          selectedCategoryId === category.id
+                          (internalSelectedCategoryId || selectedCategoryId) ===
+                          category.id
                             ? "bg-brand-50 ring-1 ring-brand-100"
                             : ""
                         }`}

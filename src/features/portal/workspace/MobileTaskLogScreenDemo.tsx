@@ -13,7 +13,7 @@ const mockTask: Task = {
   groupId: "grp_vh_kho",
   workTypeId: "wt_nhan_hang",
   workTypeName: "Nhận hàng",
-  sourceMessageId: "msg_123",
+  messageId: "msg_123",
   title: "Kiểm tra biên bản nhận hàng đợt 2",
   assignTo: "u_thu_an",
   assignFrom: CURRENT_USER_ID,
@@ -117,7 +117,6 @@ export const MobileTaskLogScreenDemo: React.FC = () => {
         currentUserId="u_diem_chi"
         members={mockMembers}
         onSend={(payload) => {
-          console.log("Send message:", payload);
           // In a real app, this would add the message to the task log
         }}
       />

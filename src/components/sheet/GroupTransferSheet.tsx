@@ -1,16 +1,28 @@
 import React from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import type { ReceivedInfo, GroupChat } from "../../features/portal/types";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import type { ReceivedInfo, GroupChat } from "@/features/portal/types";
 
 interface Props {
   open: boolean;
   info?: ReceivedInfo;
 
-  groups: GroupChat[];             // tất cả nhóm
-  currentUserId: string;           // default assignee
+  groups: GroupChat[]; // tất cả nhóm
+  currentUserId: string; // default assignee
   currentUserName: string;
   members: Array<{ id: string; name: string }>;
 
@@ -52,14 +64,14 @@ export function GroupTransferSheet({
   const handleSubmit = () => {
     if (!info || !selectedGroupId || !selectedWorkTypeId || !assignee) return;
 
-    const wt = group?.workTypes?.find(w => w.id === selectedWorkTypeId);
+    const wt = group?.workTypes?.find((w) => w.id === selectedWorkTypeId);
 
     onConfirm({
       infoId: info.id,
       toGroupId: selectedGroupId,
       workTypeId: selectedWorkTypeId,
       assignTo: assignee,
-      toGroupName : group?.name || "",
+      toGroupName: group?.name || "",
       toWorkTypeName: wt?.name || "",
     });
     onClose();
@@ -73,7 +85,6 @@ export function GroupTransferSheet({
         </SheetHeader>
 
         <div className="mt-4 space-y-4">
-
           {/* Chọn nhóm */}
           <div>
             <Label>Nhóm đích</Label>
@@ -95,7 +106,10 @@ export function GroupTransferSheet({
           {group && (
             <div>
               <Label>Loại việc</Label>
-              <Select value={selectedWorkTypeId} onValueChange={setSelectedWorkTypeId}>
+              <Select
+                value={selectedWorkTypeId}
+                onValueChange={setSelectedWorkTypeId}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Chọn loại việc..." />
                 </SelectTrigger>
@@ -118,7 +132,9 @@ export function GroupTransferSheet({
                 <SelectValue placeholder="Chọn nhân viên..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={currentUserId}>{currentUserName} (Bạn)</SelectItem>
+                <SelectItem value={currentUserId}>
+                  {currentUserName} (Bạn)
+                </SelectItem>
 
                 {/* Load các member khác, trừ currentUserId */}
                 {members
@@ -131,11 +147,12 @@ export function GroupTransferSheet({
               </SelectContent>
             </Select>
           </div>
-
         </div>
 
         <SheetFooter className="mt-6">
-          <Button variant="outline" onClick={onClose}>Huỷ</Button>
+          <Button variant="outline" onClick={onClose}>
+            Huỷ
+          </Button>
           <Button onClick={handleSubmit}>Xác nhận</Button>
         </SheetFooter>
       </SheetContent>

@@ -157,6 +157,26 @@ export const toggleCheckItem = async (
 };
 
 /**
+ * PATCH /api/tasks/{id}/check-items/{itemId}
+ * Update a checklist item's content
+ * 
+ * @param taskId - The task ID
+ * @param itemId - The checklist item ID
+ * @param content - New content for the checklist item
+ * @returns void (204 No Content)
+ */
+export const updateCheckItem = async (
+  taskId: string,
+  itemId: string,
+  content: string
+): Promise<void> => {
+  await taskApiClient.patch(
+    `/api/tasks/${taskId}/check-items/${itemId}`,
+    { content }
+  );
+};
+
+/**
  * PATCH /api/tasks/{id}/status
  * Update task status
  * 
@@ -174,23 +194,104 @@ export const updateTaskStatus = async (
 };
 
 /**
- * PATCH /api/checklist-templates/{id}
- * Update a checklist template
+ * POST /api/checklist-templates
+ * Create a new checklist template
+ * 
+ * @param data - Template creation data
+ * @returns Created template details
+ */
+export const createChecklistTemplate = async (
+  data: {
+    name: string;
+    description?: string | null;
+    conversationId: string;
+    items: Array<{ content: string; order: number; isRequired: boolean }>;
+  }
+): Promise<any> => {
+  const response = await taskApiClient.post('/api/checklist-templates', data);
+  return response.data;
+};
+
+/**
+ * PUT /api/checklist-templates/{id}
+ * Update a checklist template (full update)
  * 
  * @param templateId - The template ID
- * @param data - Template update data
- * @param data.name - Template name
- * @param data.description - Optional description
- * @param data.items - Array of checklist item strings
- * @returns void (204 No Content)
+ * @param data - Complete template update data
+ * @returns Updated template
  */
 export const updateChecklistTemplate = async (
   templateId: string,
   data: {
+    id: string;
     name: string;
     description?: string | null;
-    items?: string[] | null;
+    conversationId?: string;
+    items?: Array<string>;
+  }
+): Promise<any> => {
+  const response = await taskApiClient.patch(
+    `/api/checklist-templates/${templateId}`,
+    data
+  );
+  return response.data;
+};
+
+/**
+ * PATCH /api/checklist-templates/{id}
+ * Partially update a checklist template
+ * 
+ * @param templateId - The template ID
+ * @param data - Partial template update data (name, description, conversationId only)
+ * @returns Updated template
+ */
+export const patchChecklistTemplate = async (
+  templateId: string,
+  data: {
+    name?: string;
+    description?: string | null;
+    conversationId?: string;
+  }
+): Promise<any> => {
+  const response = await taskApiClient.patch(
+    `/api/checklist-templates/${templateId}`,
+    data
+  );
+  return response.data;
+};
+
+/**
+ * DELETE /api/checklist-templates/{id}
+ * Delete a checklist template
+ * 
+ * @param templateId - The template ID
+ * @returns void (204 No Content)
+ */
+export const deleteChecklistTemplate = async (
+  templateId: string
+): Promise<void> => {
+  await taskApiClient.delete(`/api/checklist-templates/${templateId}`);
+};
+
+/**
+ * PATCH /api/tasks/{id}
+ * Update task details
+ * 
+ * @param taskId - The task ID
+ * @param data - Task update data (title, description, priority, dueDate, conversationId, messageId, assignTo)
+ * @returns void (204 No Content)
+ */
+export const updateTask = async (
+  taskId: string,
+  data: {
+    title: string;
+    description?: string | null;
+    priority: string;
+    dueDate?: string | null;
+    conversationId?: string | null;
+    messageId?: string | null;
+    assignTo?: string;
   }
 ): Promise<void> => {
-  await taskApiClient.patch(`/api/checklist-templates/${templateId}`, data);
+  await taskApiClient.patch(`/api/tasks/${taskId}`, data);
 };

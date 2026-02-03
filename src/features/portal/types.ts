@@ -49,6 +49,15 @@ export interface ChecklistItem {
   doneById?: ID;
 }
 
+// CheckItemDto from API
+export interface CheckItemDto {
+  id: string;
+  content: string | null;
+  order: number;
+  isCompleted: boolean;
+  completedAt: string | null;
+}
+
 export interface ChecklistTemplate {
   id: ID;
   name: string;
@@ -80,35 +89,58 @@ export interface TaskPermissions {
 
 export interface Task {
   id: ID;
-  groupId: ID;
-  workTypeId: ID;
+  
+  // Conversation and work type (legacy groupId kept for backward compatibility)
+  groupId?: ID;           // DEPRECATED: use conversationId instead
+  conversationId?: ID;     // From API: conversationId
+  workTypeId?: ID;
   workTypeName?: string;
-  checklistVariantId?: string;
-  checklistVariantName?: string;
+  
+  // Checklist template reference (API uses checklistTemplateId)
+  checklistTemplateId?: string | null;  // From API
   progressText?: string;
 
-  sourceMessageId: ID;       // message gốc dùng để tạo task
+  messageId?: ID | null;   // message gốc dùng để tạo task (nullable in API)
   title: string;
-  description?: string;
+  description?: string | null;
 
   assignTo: ID;              // người được giao (staff)
   assignFrom: ID;            // leader giao
   status: TaskStatusObject;  // Status is an object from API, not a simple string
 
   priority?: TaskPriorityDto;
-  dueAt?: ISODate;
+  dueDate?: ISODate | null;  // API uses dueDate, not dueAt
+  dueAt?: ISODate;           // DEPRECATED: kept for backward compatibility
 
-  // pending: staff muốn để sau 2-3 ngày
+  // pending: staff muốn để sau 2-3 ngày (not in API)
   isPending?: boolean;
   pendingUntil?: ISODate;
 
-  checklist?: ChecklistItem[];   // copy từ template, cho phép check
-  history?: TaskEvent[];         // log thay đổi
+  // Checklist items (API response)
+  checkItems?: CheckItemDto[] | null;  // From API: checkItems
+  
+  // Legacy checklist format (kept for backward compatibility)
+  checklist?: ChecklistItem[];   // DEPRECATED: convert from checkItems
+  
+  // Completion percentage from API
+  completionPercentage?: number;
+  
+  // Attachments from API
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    contentType: string;
+    uploadedAt: string;
+  }> | null;
+  
+  history?: TaskEvent[];         // log thay đổi (not in API directly)
 
   permissions?: TaskPermissions; // permissions từ API
 
   createdAt: ISODate;
-  updatedAt: ISODate;
+  updatedAt?: ISODate | null;
 }
 
 export interface LeadThread {
@@ -128,6 +160,7 @@ export interface FileAttachment {
   url: string;
   type: AttachmentType;
   size?: string;
+  id:string;
 }
 
 /* ---------------- Message Types ---------------- */
@@ -307,8 +340,10 @@ export interface GroupChat {
 export interface PinnedMessage {
   id: string;                     // id của pinned entry
   chatId: string;                 // group id nơi message xuất hiện
-  groupName: string;              // tên nhóm chat
-  workTypeName?: string;          // tên loại việc (nếu có)
+  groupName: string;              // tên nhóm chat (category name)
+  groupId?: string;               // category id
+  workTypeName?: string;          // tên loại việc (conversation/worktype name)
+  workTypeId?: string;            // conversation/worktype id
 
   sender: string;                 // tên người gửi
   type: "text" | "image" | "file";
@@ -373,3 +408,58 @@ export type ChecklistTemplateMap = Record<
     ChecklistTemplateItem[]
   >
 >;
+
+// ===== Helper functions for Task backward compatibility =====
+
+/**
+ * Convert CheckItemDto from API to legacy ChecklistItem format
+ */
+export function convertCheckItemToLegacy(item: CheckItemDto): ChecklistItem {
+  return {
+    id: item.id,
+    label: item.content || "",
+    done: item.isCompleted,
+    doneAt: item.completedAt || undefined,
+  };
+}
+
+/**
+ * Convert legacy ChecklistItem to API CheckItemDto format
+ */
+export function convertLegacyToCheckItem(item: ChecklistItem): CheckItemDto {
+  return {
+    id: item.id,
+    content: item.label,
+    order: 0, // Order will be set by API
+    isCompleted: item.done,
+    completedAt: item.doneAt || null,
+  };
+}
+
+/**
+ * Normalize Task from API response to include legacy fields
+ * This ensures backward compatibility with existing UI code
+ */
+export function normalizeTaskFromAPI(task: Task): Task {
+  return {
+    ...task,
+    // Ensure conversationId is set (API uses conversationId)
+    conversationId: task.conversationId || task.groupId,
+    groupId: task.conversationId || task.groupId, // Backward compatibility
+    
+    // Convert checkItems to legacy checklist format
+    checklist: task.checkItems?.map(convertCheckItemToLegacy) || task.checklist || [],
+    
+    // Calculate progressText from checkItems if not present
+    progressText: task.progressText || (task.checkItems && task.checkItems.length > 0
+      ? `${task.checkItems.filter(i => i.isCompleted).length}/${task.checkItems.length} mục`
+      : "Không có checklist"),
+    
+    // Support both dueDate (API) and dueAt (legacy)
+    dueDate: task.dueDate || task.dueAt || null,
+    dueAt: task.dueDate || task.dueAt,
+    
+    // Ensure messageId is handled properly (API allows null)
+    messageId: task.messageId || undefined,
+  };
+}

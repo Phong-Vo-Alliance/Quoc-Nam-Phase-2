@@ -36,7 +36,7 @@ export default function FilePreviewModal({
 }: FilePreviewModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-
+console.log(fileName);
   // Phase 5: Check if this is Word/Excel file
   const extension = getFileExtension(fileName);
   const isWordFile = extension === "docx";

@@ -1,7 +1,7 @@
 // ConversationListContainer - Container that fetches and displays conversations
 
 import React from "react";
-import { useGroups, flattenGroups } from "@/hooks/queries/useGroups";
+import { useCategories } from "@/hooks/queries/useCategories";
 import {
   useDirectMessages,
   flattenDirectMessages,
@@ -14,6 +14,7 @@ import type {
   Conversation,
 } from "@/types/conversations";
 import { RefreshCw } from "lucide-react";
+import type { ConversationInfoDto } from "@/types/categories";
 
 interface ConversationListContainerProps {
   type: "groups" | "directs";
@@ -22,6 +23,47 @@ interface ConversationListContainerProps {
   searchQuery?: string;
   activeConversationId?: string; // 🆕 For realtime unread count
 }
+
+/**
+ * Helper: Transform ConversationInfoDto to GroupConversation
+ */
+const transformToGroupConversation = (
+  conv: ConversationInfoDto,
+): GroupConversation => ({
+  id: conv.conversationId,
+  type: "GRP",
+  name: conv.conversationName,
+  description: "", // Not available in ConversationInfoDto
+  avatarFileId: null,
+  createdBy: "",
+  createdByName: "",
+  createdAt: "",
+  updatedAt: null,
+  memberCount: conv.memberCount,
+  unreadCount: 0, // ConversationInfoDto doesn't have unreadCount, set to 0
+  lastMessage: conv.lastMessage
+    ? {
+        id: conv.lastMessage.messageId,
+        conversationId: conv.conversationId,
+        senderId: conv.lastMessage.senderId,
+        senderName: conv.lastMessage.senderName,
+        parentMessageId: null,
+        content: conv.lastMessage.content,
+        contentType: "TXT" as const,
+        sentAt: conv.lastMessage.sentAt,
+        editedAt: null,
+        linkedTaskId: null,
+        reactions: [],
+        attachments: [],
+        replyCount: 0,
+        isStarred: false,
+        isPinned: false,
+        threadPreview: null,
+        mentions: [],
+      }
+    : null,
+  categories: null,
+});
 
 /**
  * Container component that:
@@ -36,15 +78,24 @@ export const ConversationListContainer: React.FC<
   ConversationListContainerProps
 > = ({ type, onSelect, selectedId, searchQuery, activeConversationId }) => {
   // Fetch data based on type
-  const groupsQuery = useGroups({ enabled: type === "groups" });
+  const categoriesQuery = useCategories();
   const directsQuery = useDirectMessages({ enabled: type === "directs" });
 
   // Use appropriate query based on type
-  const query = type === "groups" ? groupsQuery : directsQuery;
-  const conversations =
-    type === "groups"
-      ? flattenGroups(groupsQuery.data)
-      : flattenDirectMessages(directsQuery.data);
+  const query = type === "groups" ? categoriesQuery : directsQuery;
+
+  // Flatten conversations from categories
+  const conversations = React.useMemo(() => {
+    if (type === "groups") {
+      return (
+        categoriesQuery.data?.flatMap((cat) =>
+          cat.conversations.map((conv) => transformToGroupConversation(conv)),
+        ) ?? []
+      );
+    } else {
+      return flattenDirectMessages(directsQuery.data);
+    }
+  }, [type, categoriesQuery.data, directsQuery.data]);
 
   // ❌ REMOVED: Moved to ChatMainContainer to avoid duplicate event listeners
   // useConversationRealtime({ activeConversationId });
@@ -114,18 +165,6 @@ export const ConversationListContainer: React.FC<
           onClick={() => onSelect(conv)}
         />
       ))}
-
-      {/* Load more button */}
-      {query.hasNextPage && (
-        <button
-          onClick={() => query.fetchNextPage()}
-          disabled={query.isFetchingNextPage}
-          className="w-full py-3 text-sm text-brand-600 hover:bg-brand-50"
-          data-testid="load-more-button"
-        >
-          {query.isFetchingNextPage ? "Đang tải..." : "Tải thêm"}
-        </button>
-      )}
     </div>
   );
 };

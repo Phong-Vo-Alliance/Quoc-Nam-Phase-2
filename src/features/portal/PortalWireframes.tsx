@@ -5,7 +5,8 @@ import { useAuthStore } from "@/stores/authStore";
 import { useCreateTaskStore } from "@/stores/createTaskStore";
 import { hasLeaderPermissions, getViewModeFromRoles } from "@/utils/roleUtils";
 import { getCurrentUserIdSync } from "@/utils/getCurrentUser";
-import { ToastContainer, CloseNoteModal, FilePreviewModal } from "./components";
+import { ToastContainer, CloseNoteModal } from "./components";
+import FilePreviewModal from "../../components/FilePreviewModal";
 import type {
   LeadThread,
   Task,
@@ -21,11 +22,11 @@ import type {
   ChecklistItem,
   TaskLogMessage,
 } from "./types";
+import type { StarredMessageDto } from "@/types/pinned_and_starred";
 import { WorkspaceView } from "./workspace/WorkspaceView";
 import { TeamMonitorView } from "./lead/TeamMonitorView";
 import { MainSidebar } from "./components/MainSidebar";
 import { ViewModeSwitcher } from "@/features/portal/components/ViewModeSwitcher";
-
 import { DepartmentTransferSheet } from "@/components/sheet/DepartmentTransferSheet";
 import { AssignTaskSheet } from "@/components/sheet/AssignTaskSheet";
 import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
@@ -40,17 +41,19 @@ import {
   useStarMessage,
   useUnstarMessage,
 } from "@/hooks/mutations/useStarMessage";
-import { useGroups, flattenGroups } from "@/hooks/queries/useGroups";
+// TODO: Migrate wireframe to use categories API instead of mock data
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { WorkTypeManagerDialog } from "./components/WorkTypeManagerDialog";
+import { useConversationStore } from "@/stores/conversationStore";
+
+// ⚠️ TODO (2026-02-03): This file is a wireframe/demo page
+// Should migrate to use useCategories instead of useGroups, or deprecate if not needed
 
 type PortalMode = "desktop" | "mobile";
 
 interface PortalWireframesProps {
   portalMode?: PortalMode;
 }
-
-
 
 export default function PortalWireframes({
   portalMode = "desktop",
@@ -69,9 +72,9 @@ export default function PortalWireframes({
         // Invalidate any query keys that might contain conversation data
         const queryKey = query.queryKey;
         return (
-          queryKey.includes('conversation') ||
-          queryKey.includes('tasks') ||
-          queryKey.includes('messages')
+          queryKey.includes("conversation") ||
+          queryKey.includes("tasks") ||
+          queryKey.includes("messages")
         );
       },
     });
@@ -128,24 +131,36 @@ export default function PortalWireframes({
   // const mockGroups = [mockGroup_VH_Kho, mockGroup_VH_TaiXe];
 
   // const [selectedGroup, setSelectedGroup] = React.useState(mockGroup_VH_Kho);
+  // TODO: Migrate wireframe to use categories API
   // Groups will be loaded from API using useGroups
-  const { data: groupsData, isLoading: isGroupsLoading } = useGroups();
+  // const { data: groupsData, isLoading: isGroupsLoading } = useGroups();
 
-  const groupsMerged: GroupChat[] = React.useMemo(() => {
-    return flattenGroups(groupsData) as unknown as GroupChat[];
-  }, [groupsData]);
+  // const groupsMerged: GroupChat[] = React.useMemo(() => {
+  //   return flattenGroups(groupsData) as unknown as GroupChat[];
+  // }, [groupsData]);
 
   const [selectedGroup, setSelectedGroup] = React.useState<
     GroupChat | undefined
   >(undefined);
 
   // Keep a local groups state that updates when API data changes
-  const [groups, setGroups] = React.useState<GroupChat[]>(groupsMerged);
-  React.useEffect(() => setGroups(groupsMerged), [groupsMerged]);
-  const [selectedWorkTypeId, setSelectedWorkTypeId] =
-    React.useState<string>("wt_default");
+  const [groups, setGroups] = React.useState<GroupChat[]>([]);
+  // React.useEffect(() => setGroups(groupsMerged), [groupsMerged]);
+
+  // When useApiChat=true, selectedChat is set by ConversationListSidebar when API data loads
+  // Initialize to null so that ConversationListSidebar can auto-select the first API group
+  const [selectedChat, setSelectedChat] = React.useState<{
+    type: "group" | "dm";
+    id: string;
+  } | null>(null);
+
+  // Get current conversation ID for API queries
+  const currentConversationId =
+    selectedChat?.type === "group" ? selectedChat.id : undefined;
 
   // Danh sách "dạng checklist" (sub work type) của work type được chọn
+  // Use first workType from selected group as default
+  const selectedWorkTypeId = selectedGroup?.workTypes?.[0]?.id;
   const checklistVariants =
     selectedGroup?.workTypes?.find((w) => w.id === selectedWorkTypeId)
       ?.checklistVariants ?? [];
@@ -201,14 +216,16 @@ export default function PortalWireframes({
 
   // ---------- mock data & wiring ----------
 
-  // When useApiChat=true, selectedChat is set by ConversationListSidebar when API data loads
-  // Initialize to null so that ConversationListSidebar can auto-select the first API group
-  const [selectedChat, setSelectedChat] = React.useState<{
-    type: "group" | "dm";
-    id: string;
-  } | null>(null);
-  // console.log(selectedChat);
-  const onClearSelectedChat = () => setSelectedChat(null);
+  // Get clear function from conversation store
+  const clearSelectedConversation = useConversationStore(
+    (state) => state.clearSelectedConversation,
+  );
+
+  // Clear both local state and store when switching tabs
+  const onClearSelectedChat = () => {
+    setSelectedChat(null);
+    clearSelectedConversation();
+  };
   const nowIso = () => new Date().toISOString();
 
   // Checklist Template theo WorkType + Variant
@@ -273,10 +290,6 @@ export default function PortalWireframes({
     setTimeout(() => setShowPinnedToast(false), 2000);
   };
 
-  // Get current conversation ID for pinned messages query
-  const currentConversationId =
-    selectedChat?.type === "group" ? selectedChat.id : undefined;
-
   // Fetch pinned messages from API
   const { data: pinnedMessagesData } = usePinnedMessages({
     conversationId: currentConversationId || "",
@@ -284,7 +297,7 @@ export default function PortalWireframes({
   });
 
   // Transform API data to legacy PinnedMessage format for UI compatibility
-  const pinnedMessages: PinnedMessage[] = React.useMemo(() => {
+  const pinnedMessages = React.useMemo(() => {
     if (!pinnedMessagesData || !selectedGroup) return [];
 
     return pinnedMessagesData.map((pinned) => ({
@@ -357,9 +370,8 @@ export default function PortalWireframes({
   });
 
   // Xử lý mở tin nhắn đã ghim
-  const [scrollToMessageId, setScrollToMessageId] = React.useState<
-    string | undefined
-  >(undefined);
+  const [scrollToMessage, setScrollToMessage] =
+    React.useState<StarredMessageDto | null>(null);
 
   const handleUnpinMessage = (id: string) => {
     unpinMessageMutation.mutate({ messageId: id });
@@ -398,31 +410,29 @@ export default function PortalWireframes({
     }
   };
 
-  const handleOpenPinnedMessage = (pin: PinnedMessage) => {
-    // 1) mở đúng hội thoại (group/private) theo chatId
-    setSelectedChat({ type: "group", id: pin.chatId }); // nếu có chat cá nhân thì phân nhánh ở đây
+  const handleOpenPinnedMessage = (messageDto: StarredMessageDto) => {
+    // 1) mở đúng hội thoại (group/private) theo conversationId
+    setSelectedChat({ type: "group", id: messageDto.message.conversationId });
 
     // 2) đóng panel pin
     setWorkspaceMode("default");
 
-    // 3) xác định messageId để ChatMain cuộn tới
-    // tuỳ cấu trúc replyTo của bạn; dùng fallback an toàn:
-    const targetId = pin.id;
-    //   (pin.replyTo as any)?.id ||
-    //   (pin.replyTo as any)?.messageId ||
-    //   undefined;
-    if (targetId) setScrollToMessageId(targetId);
+    // 3) set StarredMessageDto để ChatMain cuộn tới
+    setScrollToMessage(messageDto);
   };
 
   // Dùng chung cho các nơi muốn "xem tin nhắn gốc"
   // (pinned message, xem từ tab Thông tin, v.v.)
-  const handleOpenSourceMessage = React.useCallback((messageId: string) => {
-    setScrollToMessageId(messageId);
-  }, []);
+  const handleOpenSourceMessage = React.useCallback(
+    (messageDto: StarredMessageDto | null) => {
+      setScrollToMessage(messageDto);
+    },
+    [],
+  );
 
   // Callback to reset scroll state (called from ChatMain after scroll completes)
   const handleScrollComplete = React.useCallback(() => {
-    setScrollToMessageId(undefined);
+    setScrollToMessage(null);
   }, []);
 
   // Khi scrollToMessageId thay đổi -> cuộn tới tin nhắn tương ứng
@@ -521,7 +531,7 @@ export default function PortalWireframes({
     id,
     groupId: "grp-vanhanh-kho",
     workTypeId: "wt_nhan_hang",
-    sourceMessageId: id,
+    messageId: id,
     title,
     description: "",
     assignTo: newOwner || currentUser,
@@ -782,9 +792,6 @@ export default function PortalWireframes({
     if (!g) return;
     setSelectedGroup(g);
     setSelectedChat({ type: "group", id: g.id });
-    setSelectedWorkTypeId(
-      g.defaultWorkTypeId ?? g.workTypes?.[0]?.id ?? selectedWorkTypeId,
-    );
   };
 
   // Subscribe to auth changes and update viewMode based on roles
@@ -965,21 +972,19 @@ export default function PortalWireframes({
 
   const handleCreateTask = ({
     title,
-    sourceMessageId,
+    messageId,
     assignTo,
     checklistVariantId,
     checklistVariantName,
   }: {
     title: string;
-    sourceMessageId?: string;
+    messageId?: string;
     assignTo?: string;
     checklistVariantId?: string;
     checklistVariantName?: string;
   }): void => {
     // Xác định WorkType & variant (ưu tiên variant được chọn từ AssignTaskSheet)
-    const wt = selectedGroup?.workTypes?.find(
-      (w) => w.id === selectedWorkTypeId,
-    );
+    const wt = selectedGroup?.workTypes?.[0];
 
     let variantId = checklistVariantId;
     let variantName = checklistVariantName;
@@ -994,8 +999,8 @@ export default function PortalWireframes({
     }
 
     const tplItems =
-      variantId && checklistTemplates[selectedWorkTypeId]?.[variantId]
-        ? checklistTemplates[selectedWorkTypeId][variantId]
+      variantId && wt && checklistTemplates[wt.id]?.[variantId]
+        ? checklistTemplates[wt.id][variantId]
         : [];
 
     const newTask: Task = {
@@ -1003,13 +1008,13 @@ export default function PortalWireframes({
       title,
       description: title,
       groupId: selectedGroup?.id ?? "",
-      sourceMessageId: sourceMessageId ?? "",
+      messageId: messageId ?? "",
       assignTo: currentUserId, // Assign to current user
       assignFrom: currentUser,
-      workTypeId: selectedWorkTypeId,
+      workTypeId: wt?.id ?? "",
       workTypeName: wt?.name,
-      checklistVariantId: variantId,
-      checklistVariantName: variantName,
+      // checklistVariantId: variantId, // TODO: Add to Task type if needed
+      // checklistVariantName: variantName,
       status: {
         id: "1",
         code: "todo",
@@ -1036,10 +1041,10 @@ export default function PortalWireframes({
     }));
 
     // Liên kết task mới với message gốc (nếu có)
-    if (sourceMessageId) {
+    if (messageId) {
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === sourceMessageId ? { ...m, taskId: newTask.id } : m,
+          m.id === messageId ? { ...m, taskId: newTask.id } : m,
         ),
       );
     }
@@ -1083,22 +1088,6 @@ export default function PortalWireframes({
         ...selectedGroup,
         workTypes: updatedWorkTypes,
       });
-
-      // If current workType no longer exists, switch to first available or default
-      const currentWorkTypeStillExists = updatedWorkTypes.some(
-        (wt) => wt.id === selectedWorkTypeId,
-      );
-
-      if (!currentWorkTypeStillExists) {
-        const newDefaultId =
-          updatedWorkTypes.find(
-            (wt) => wt.id === selectedGroup.defaultWorkTypeId,
-          )?.id ?? updatedWorkTypes[0]?.id;
-
-        if (newDefaultId) {
-          setSelectedWorkTypeId(newDefaultId);
-        }
-      }
     }
 
     pushToast("Đã cập nhật loại việc.", "success");
@@ -1230,9 +1219,9 @@ export default function PortalWireframes({
   );
 
   const activeTaskLogSourceMessage = React.useMemo(() => {
-    if (!activeTaskLogTask?.sourceMessageId) return undefined;
-    return messages.find((m) => m.id === activeTaskLogTask.sourceMessageId);
-  }, [messages, activeTaskLogTask?.sourceMessageId]);
+    if (!activeTaskLogTask?.messageId) return undefined;
+    return messages.find((m) => m.id === activeTaskLogTask.messageId);
+  }, [messages, activeTaskLogTask?.messageId]);
 
   const activeTaskLogMessages: TaskLogMessage[] =
     taskLogSheet.taskId && taskLogs[taskLogSheet.taskId]
@@ -1304,7 +1293,7 @@ export default function PortalWireframes({
         {view === "workspace" ? (
           <WorkspaceView
             layoutMode={portalMode === "mobile" ? "mobile" : "desktop"}
-            groups={groupsMerged}
+            groups={groups}
             messages={messages}
             setMessages={setMessages}
             onSelectGroup={handleSelectGroup}
@@ -1338,19 +1327,19 @@ export default function PortalWireframes({
             workspaceMode={workspaceMode}
             setWorkspaceMode={setWorkspaceMode}
             viewMode={viewMode}
-            pinnedMessages={pinnedMessages}
+            pinnedMessages={pinnedMessages as any}
             onClosePinned={() => setWorkspaceMode("default")}
             onUnpinMessage={handleUnpinMessage}
             onOpenPinnedMessage={handleOpenPinnedMessage}
             onShowPinnedToast={onShowPinnedToast}
-            onTogglePin={handleTogglePin}
+            // onTogglePin={handleTogglePin} // TODO: Add to WorkspaceViewProps if needed
             onToggleStar={handleToggleStar}
             workTypes={(selectedGroup?.workTypes ?? []).map((w) => ({
               id: w.id,
               name: w.name,
             }))}
-            selectedWorkTypeId={selectedWorkTypeId}
-            onChangeWorkType={setSelectedWorkTypeId}
+            selectedWorkTypeId={currentConversationId!}
+            onChangeWorkType={() => {}} // No-op: workType selection handled by conversation selection
             currentUserId={currentUserId}
             currentUserName={currentUser}
             // Tasks & callbacks để RightPanel dùng thật
@@ -1374,7 +1363,7 @@ export default function PortalWireframes({
             taskLogs={taskLogs}
             onOpenSourceMessage={handleOpenSourceMessage}
             onScrollComplete={handleScrollComplete}
-            scrollToMessageId={scrollToMessageId}
+            scrollToMessageId={scrollToMessage?.messageId}
             onOpenQuickMsg={() => {
               // Mobile: tạm hiển thị toast, có thể thay bằng mở QuickMessageManager khi bạn muốn mount ở mobile
               pushToast(
@@ -1429,9 +1418,10 @@ export default function PortalWireframes({
           onOpenChange={setShowCloseModal}
         />
         <FilePreviewModal
-          open={showPreview}
-          file={previewFile}
-          onOpenChange={setShowPreview}
+          isOpen={showPreview}
+          fileId={previewFile?.id || ""}
+          fileName={previewFile?.name || ""}
+          onClose={() => setShowPreview(false)}
         />
 
         <AssignTaskSheet
@@ -1478,7 +1468,7 @@ export default function PortalWireframes({
         <WorkTypeManagerDialog
           open={showWorkTypeManager}
           onOpenChange={setShowWorkTypeManager}
-          groups={groups}
+          groups={groups as any}
           onSave={handleUpdateGroupWorkTypes}
         />
       )}

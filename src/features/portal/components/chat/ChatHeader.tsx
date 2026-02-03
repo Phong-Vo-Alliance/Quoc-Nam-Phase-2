@@ -7,7 +7,7 @@ import React from "react";
 import {
   ChevronLeft,
   MoreVertical,
-  Pin,
+  // [PHASE2-REMOVED] Pin,
   Star,
   PanelRightClose,
   PanelRightOpen,
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/popover";
 import { LinearTabs } from "../LinearTabs";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers"; // 🆕 NEW: Self-fetch members
+import { useAuthStore } from "@/stores/authStore"; // 🆕 NEW: Get current user ID for DM filtering
 import type { ConversationInfoDto } from "@/types/categories";
 
 interface ChatHeaderProps {
@@ -35,6 +36,7 @@ interface ChatHeaderProps {
   avatarUrl?: string;
   isMobile?: boolean;
   onBack?: () => void;
+  // [PHASE2-REMOVED] Desktop pin feature removed
   onOpenPinnedModal?: () => void;
   onOpenConversationStarredModal?: () => void;
   onOpenAllStarredModal?: () => void;
@@ -87,7 +89,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   avatarUrl,
   isMobile = false,
   onBack,
-  onOpenPinnedModal,
+ onOpenPinnedModal,
   onOpenConversationStarredModal,
   onOpenAllStarredModal,
 
@@ -127,8 +129,23 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       ? prevMemberCountRef.current
       : members.length;
 
-  // Display name for both title and avatar (prioritize category name if exists)
-  const headerDisplayName = conversationCategory || displayName;
+  // 🔧 FIX BUG-004: Display name for both title and avatar
+  const headerDisplayName = React.useMemo(() => {
+    // Priority 1: Category name (for category-based conversations)
+    if (conversationCategory) return conversationCategory;
+
+    // Priority 2: For DM, filter current user and show other participant
+    if (conversationType === "DM" && members.length > 0) {
+      const currentUserId = useAuthStore.getState().user?.id;
+      const otherMember = members.find((m) => m.userId !== currentUserId);
+      if (otherMember?.userName) {
+        return otherMember.userName;
+      }
+    }
+
+    // Priority 3: Default display name
+    return displayName;
+  }, [conversationCategory, conversationType, members, displayName]);
 
   return (
     <div className="flex items-center justify-between border-b px-4 pt-3 shrink-0">
@@ -147,7 +164,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
               {headerDisplayName}
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 mb-1">
             {!isDirect && memberCount > 0 && (
               <span className="text-xs text-gray-600">
                 {membersLoading ? "..." : memberCount} thành viên
@@ -175,12 +192,20 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                         <span className="truncate max-w-[150px]">
                           {conv.conversationName}
                         </span>
-                        {conv.unreadCount !== undefined &&
-                          conv.unreadCount > 0 && (
-                            <span className="ml-1 inline-flex min-w-[16px] h-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-medium text-white">
-                              {conv.unreadCount > 99 ? "99+" : conv.unreadCount}
-                            </span>
-                          )}
+                        {
+                          // `ConversationInfoDto` may not include `unreadCount`; use a runtime check
+                          (() => {
+                            const unread = (conv as any).unreadCount;
+                            if (unread !== undefined && unread > 0) {
+                              return (
+                                <span className="ml-1 inline-flex min-w-[16px] h-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-medium text-white">
+                                  {unread > 99 ? "99+" : unread}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()
+                        }
                       </div>
                     ),
                   }))}
@@ -201,7 +226,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       {/* Header actions */}
       <div className="flex items-center gap-2">
         {/* Menu button */}
-        <Popover>
+        {/* <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
@@ -211,10 +236,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             >
               <MoreVertical className="h-5 w-5 text-gray-600" />
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-2" align="end">
+          </PopoverTrigger> */}
+          {/* <PopoverContent className="w-64 p-2" align="end">
             <div className="flex flex-col gap-1">
-              {onOpenPinnedModal && (
+              {/* [PHASE2-REMOVED] Desktop pin feature removed */}
+        {/* {onOpenPinnedModal && (
                 <Button
                   variant="ghost"
                   className="justify-start gap-2 text-sm"
@@ -224,8 +250,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                   <Pin className="h-4 w-4 text-amber-600" />
                   Tin nhắn đã ghim
                 </Button>
-              )}
-              {onOpenConversationStarredModal && (
+              )} */}
+        {/* {onOpenConversationStarredModal && (
                 <Button
                   variant="ghost"
                   className="justify-start gap-2 text-sm"
@@ -235,8 +261,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                   <Star className="h-4 w-4 text-amber-600" />
                   Tin nhắn đã đánh dấu
                 </Button>
-              )}
-              {onOpenAllStarredModal && (
+              )} */}
+              {/* {onOpenAllStarredModal && (
                 <Button
                   variant="ghost"
                   className="justify-start gap-2 text-sm"
@@ -246,10 +272,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                   <Star className="h-4 w-4 text-blue-600" />
                   Tất cả tin nhắn đã đánh dấu
                 </Button>
-              )}
+              )}}
             </div>
           </PopoverContent>
-        </Popover>
+        </Popover> */}
 
         {/* Toggle right panel button */}
         {onToggleRightPanel && (

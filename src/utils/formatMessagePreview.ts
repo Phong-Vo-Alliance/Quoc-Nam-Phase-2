@@ -69,14 +69,6 @@ export function formatMessagePreview(
 ): string {
   const { senderName, content, attachments } = message;
 
-  // 🐛 DEBUG: Log để xem structure của message
-  // console.log("[formatMessagePreview] Debug:", {
-  //   senderName,
-  //   content,
-  //   attachments,
-  //   fullMessage: message,
-  // });
-
   // Case 1: Has attachments (check first before text)
   if (attachments && attachments.length > 0) {
     const images = attachments.filter(

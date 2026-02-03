@@ -11,18 +11,19 @@ import React, {
 import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
-import { usePinnedMessages } from "@/hooks/queries/usePinnedMessages";
+// [PHASE2-REMOVED] Pin feature removed from desktop
+// import { usePinnedMessages } from "@/hooks/queries/usePinnedMessages";
 import {
   useStarredMessages,
   useConversationStarredMessages,
 } from "@/hooks/queries/useStarredMessages";
 import { useMessageRealtime } from "@/hooks/useMessageRealtime";
 import { useConversationRealtime } from "@/hooks/useConversationRealtime"; // 🐛 FIX: Join category conversations
+import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime"; // 🆕 NEW: Realtime category updates
 import { useSendTypingIndicator } from "@/hooks/useSendTypingIndicator";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useAuthStore } from "@/stores/authStore";
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW (CBN-002)
-import { useGroups, flattenGroups } from "@/hooks/queries/useGroups"; // 🆕 NEW (v2.1.2): Realtime unread count
 import {
   saveSelectedConversation,
   getSelectedConversation,
@@ -36,6 +37,8 @@ import { MessageBubbleSimple } from "./MessageBubbleSimple";
 import { SystemMessageBubble } from "./SystemMessageBubble";
 import { ChatHeader } from "./ChatHeader";
 import { EmptyCategoryState } from "./EmptyCategoryState"; // 🆕 NEW (CBN-002)
+import MessageDateSeparator from "@/components/chat/MessageDateSeparator"; // 🆕 NEW: Date separators
+import { formatDateSeparator } from "@/utils/formatDateSeparator"; // 🆕 NEW: Date formatting
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import {
   RefreshCw,
@@ -44,10 +47,11 @@ import {
   Paperclip,
   ChevronLeft,
   Image as ImageIcon,
-  Pin,
+  // [PHASE2-REMOVED] Pin,
   Star,
   StarOff,
   MoreVertical,
+  ChevronDown,
 } from "lucide-react";
 import { Avatar } from "../Avatar";
 import { IconButton } from "@/components/ui/icon-button";
@@ -84,6 +88,10 @@ import FilePreviewModal from "@/components/FilePreviewModal";
 import type { ChatMessage } from "@/types/messages";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
 import type { ConversationInfoDto } from "@/types/categories"; // 🆕 NEW (CBN-002)
+import type {
+  PinnedMessageDto,
+  StarredMessageDto,
+} from "@/types/pinned_and_starred";
 import { FILE_CATEGORIES, MAX_FILES_PER_MESSAGE } from "@/types/files";
 import ImagePreviewModal from "@/components/ImagePreviewModal";
 
@@ -137,7 +145,8 @@ interface ChatMainContainerProps {
   avatarUrl?: string;
   isMobile?: boolean;
   onBack?: () => void;
-  onTogglePin?: (messageId: string, isPinned: boolean) => void;
+  // [PHASE2-REMOVED] Desktop pin feature removed
+  // onTogglePin?: (messageId: string, isPinned: boolean) => void;
   onToggleStar?: (messageId: string, isStarred: boolean) => void;
   onMessagesLoaded?: (messages: any[]) => void;
 
@@ -163,6 +172,10 @@ interface ChatMainContainerProps {
     messageContent: string;
     conversationId: string;
   }) => void;
+
+  // 🆕 NEW: Scroll to specific message (for navigation from starred/pinned)
+  scrollToMessageId?: PinnedMessageDto | StarredMessageDto | null;
+  onScrollComplete?: () => void; // Callback after scroll completes
 }
 
 /**
@@ -185,7 +198,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   avatarUrl,
   isMobile = false,
   onBack,
-  onTogglePin,
+  // [PHASE2-REMOVED] onTogglePin,
   onToggleStar,
   onMessagesLoaded,
 
@@ -200,6 +213,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // 🆕 NEW: Handle task creation (delegate to parent - PortalWireframes)
   onCreateTaskFromMessage,
+
+  // 🆕 NEW: Scroll to message
+  scrollToMessageId,
+  onScrollComplete,
 }) => {
   const user = useAuthStore((state) => state.user);
 
@@ -254,13 +271,16 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     Array<{ fileId: string; fileName: string }>
   >([]); // Phase 2.1: Gallery mode
   const [previewInitialIndex, setPreviewInitialIndex] = useState(0);
-  const [showPinnedModal, setShowPinnedModal] = useState(false);
+  // [PHASE2-REMOVED] Desktop pin feature removed
+  // const [showPinnedModal, setShowPinnedModal] = useState(false);
   const [showConversationStarredModal, setShowConversationStarredModal] =
     useState(false);
   const [showAllStarredModal, setShowAllStarredModal] = useState(false);
   // Phase 3.2: Unified file preview for all types (PDF, Word, Excel, PPT, TXT, Images)
   const [filePreviewId, setFilePreviewId] = useState<string | null>(null);
   const [filePreviewName, setFilePreviewName] = useState<string>("");
+  const [showGoToBottom, setShowGoToBottom] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -268,15 +288,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
 
-  // 🆕 NEW (CBN-002): Fetch categories (only if category-based navigation enabled)
   const categoriesQuery = useCategories();
   const categories = activeCategoryId ? categoriesQuery.data : undefined;
 
-  // 🆕 NEW (v2.1.2): Fetch groups for realtime unread count
-  const groupsQuery = useGroups({ enabled: !!activeCategoryId });
-  const apiGroups = flattenGroups(groupsQuery.data);
+  // 🗑️ REMOVED: useGroups merge logic (caused duplicate unread count increment)
+  // Now using categories cache as SINGLE SOURCE OF TRUTH
+  // const groupsQuery = useGroups({ enabled: !!activeCategoryId });
+  // const apiGroups = flattenGroups(groupsQuery.data);
 
-  // 🆕 NEW (CBN-002): Extract conversations from selected category with realtime unread count
   const categoryConversations = useMemo<ConversationInfoDto[]>(() => {
     if (!activeCategoryId || !categories) return [];
 
@@ -284,17 +303,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       (cat) => cat.id === activeCategoryId,
     );
 
-    // Merge unread count from groups (realtime) into category conversations
-    const conversations = selectedCategory?.conversations ?? [];
-    return conversations.map((conv) => {
-      const groupData = apiGroups.find((g) => g.id === conv.conversationId);
-      return {
-        ...conv,
-        // Use realtime unread count from groups if available
-        unreadCount: groupData?.unreadCount ?? conv.unreadCount ?? 0,
-      };
-    });
-  }, [activeCategoryId, categories, apiGroups, groupsQuery.dataUpdatedAt]); // 🐛 FIX: Add trigger for realtime updates
+    // 🐛 FIX: Use category conversations directly (no merge needed)
+    // useCategoriesRealtime already handles unread count updates via MessageSent/MessageRead events
+    return selectedCategory?.conversations ?? [];
+  }, [activeCategoryId, categories]); // 🐛 FIX: Removed apiGroups dependency
 
   // 🆕 NEW (CBN-002): Get category name for display (prioritize prop over derived)
   const conversationCategory = useMemo(() => {
@@ -345,6 +357,57 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     conversationCategory,
   ]);
 
+  // 🐛 FIX: Auto-detect category from conversationId on reload
+  // When user reloads page with conversationId from localStorage but no selectedCategoryId,
+  // we need to find which category the conversation belongs to
+  useEffect(() => {
+    // Only auto-detect if:
+    // 1. Categories have loaded successfully
+    // 2. We have a conversationId
+    // 3. We DON'T have an active category selected
+    if (
+      categoriesQuery.isSuccess &&
+      conversationId &&
+      !activeCategoryId &&
+      categoriesQuery.data
+    ) {
+      // Find which category contains this conversation
+      const categoryWithConversation = categoriesQuery.data.find((category) =>
+        category.conversations.some(
+          (conv) => conv.conversationId === conversationId,
+        ),
+      );
+
+      if (categoryWithConversation) {
+        // Auto-select this category
+        setInternalSelectedCategoryId(categoryWithConversation.id);
+        saveSelectedCategory(categoryWithConversation.id);
+
+        // Notify parent if callback exists
+        if (onChatChange) {
+          const conversation = categoryWithConversation.conversations.find(
+            (conv) => conv.conversationId === conversationId,
+          );
+          if (conversation) {
+            onChatChange({
+              type: "group",
+              id: conversationId,
+              name: conversation.conversationName,
+              category: categoryWithConversation.name,
+              categoryId: categoryWithConversation.id,
+            });
+          }
+        }
+      }
+    }
+  }, [
+    categoriesQuery.isSuccess,
+    categoriesQuery.data,
+    conversationId,
+    activeCategoryId,
+    onChatChange,
+  ]);
+
   // Handler for when user changes conversation via LinearTab
   const handleConversationChange = useCallback(
     (newConversationId: string) => {
@@ -376,14 +439,15 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // Fetch messages
   const messagesQuery = useMessages({
     conversationId, // Use conversation ID from props
-    enabled: !!conversationId,
+    enabled: !!conversationId && categoriesQuery.isSuccess, // 🆕 Wait for categories first
   });
 
+  // [PHASE2-REMOVED] Desktop pin feature removed
   // Fetch pinned messages for modal
-  const { data: pinnedMessages = [] } = usePinnedMessages({
-    conversationId,
-    enabled: !!conversationId && showPinnedModal,
-  });
+  // const { data: pinnedMessages = [] } = usePinnedMessages({
+  //   conversationId,
+  //   enabled: !!conversationId && showPinnedModal,
+  // });
 
   // Fetch starred messages in conversation for modal
   const { data: conversationStarredMessages = [] } =
@@ -396,7 +460,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const { data: allStarredMessages = [] } = useStarredMessages({
     enabled: showAllStarredModal,
   });
-
+  // console.log(allStarredMessages);
   // Send message mutation
   const sendMessageMutation = useSendMessage({
     workspaceId,
@@ -412,14 +476,16 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     activeConversationId: conversationId,
   });
 
+  // ✅ Realtime updates for categories (worktype changes + unread counts)
+  // 🐛 FIX: Pass conversationId to prevent unread increment for active conversation
+  useCategoriesRealtime(categoriesQuery.data, conversationId);
+
   // Realtime updates for message list (current conversation only)
   const { typingUsers } = useMessageRealtime({
     conversationId,
     onNewMessage: () => {
-      // Scroll to bottom on new message
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+      // Check if the new message is from another user (not from current user)
+      // We'll check this in a separate useEffect by comparing last message's senderId
     },
   });
 
@@ -432,39 +498,241 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // Network status (Phase 7: Timeout & Retry UI)
   const { isOnline, wasOffline } = useNetworkStatus();
 
+  // Scroll detection for go-to-bottom button
+  useEffect(() => {
+    const setupScrollDetection = () => {
+      const container = messagesContainerRef.current;
+      if (!container) {
+        // Retry after a short delay if container not ready yet
+        const retryTimer = setTimeout(setupScrollDetection, 100);
+        return () => clearTimeout(retryTimer);
+      }
+
+      const handleScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+        // 🔧 FIX BUG-001: Update threshold to 150px for more stable button visibility
+        const shouldShow = distanceFromBottom > 150;
+        setShowGoToBottom(shouldShow);
+
+        // Reset unread count when user reaches bottom
+        if (!shouldShow) {
+          setUnreadCount(0);
+        }
+      };
+
+      container.addEventListener("scroll", handleScroll);
+
+      // Initial check with small delay to ensure content is rendered
+      const initialCheckTimer = setTimeout(handleScroll, 100);
+
+      return () => {
+        container.removeEventListener("scroll", handleScroll);
+        clearTimeout(initialCheckTimer);
+      };
+    };
+
+    return setupScrollDetection();
+  }, []); // Only setup once - button visibility depends on scroll position only
+
+  // Handler for go-to-bottom button
+  const handleGoToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    setUnreadCount(0);
+  }, []);
+
+  // 🆕 AUTO mark-read when conversation becomes active
+  const { mutate: markAsRead } = useMarkConversationAsRead();
+  const prevActiveConversationRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    // Only mark-read when conversation changes (not on first mount)
+    const isConversationChanged =
+      conversationId &&
+      prevActiveConversationRef.current !== undefined &&
+      prevActiveConversationRef.current !== conversationId;
+
+    if (isConversationChanged) {
+      // Mark current conversation as read
+      markAsRead({ conversationId });
+    }
+
+    prevActiveConversationRef.current = conversationId;
+  }, [conversationId, markAsRead]);
+
   // Function to scroll to a message or jump via API if not in view
-  const handleScrollToMessage = useCallback(async (messageId: string) => {
-    // First, check if message exists in current view
-    const messageElement = document.querySelector(
-      `[data-testid="message-bubble-${messageId}"]`,
-    );
+  const handleScrollToMessage = useCallback(
+    async (messageData: PinnedMessageDto | StarredMessageDto) => {
+      const targetMessageId = messageData.messageId;
+      const targetConversationId = messageData.message.conversationId;
 
-    if (messageElement) {
-      // Message is in current view, scroll to it
-      messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Step 1: Check if message belongs to current conversation
+      if (targetConversationId !== conversationId) {
+        // 🆕 NEW: Auto-switch to target conversation if possible
+        if (onChatChange) {
+          // Try to find the conversation in category conversations
+          const targetConversation = categoryConversations.find(
+            (conv) => conv.conversationId === targetConversationId,
+          );
+          if (targetConversation) {
+            // Switch to target conversation
+            toast.info("Đang chuyển đến cuộc trò chuyện...");
+            onChatChange({
+              type: "group",
+              id: targetConversation.conversationId,
+              name: targetConversation.conversationName,
+              category: conversationCategory,
+              categoryId: activeCategoryId,
+            });
 
-      // Highlight the message briefly
-      messageElement.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
-      setTimeout(() => {
-        messageElement.classList.remove(
+            // Wait for conversation to switch and messages to load
+            // The message will be scrolled to via useEffect after messages load
+            setTimeout(() => {
+              const messageElement = document.querySelector(
+                `[data-testid="message-bubble-${targetMessageId}"]`,
+              );
+              if (messageElement) {
+                messageElement.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+                messageElement.classList.add(
+                  "ring-2",
+                  "ring-amber-400",
+                  "ring-offset-2",
+                );
+                setTimeout(() => {
+                  messageElement.classList.remove(
+                    "ring-2",
+                    "ring-amber-400",
+                    "ring-offset-2",
+                  );
+                }, 2000);
+              }
+            }, 1000); // Wait 1s for messages to load
+            return;
+          }
+        }
+
+        // Original error handling (if can't auto-switch)
+        // toast.error(
+        //   "Tin nhắn này thuộc cuộc trò chuyện khác. Vui lòng chuyển sang cuộc trò chuyện đó để xem.",
+        //   { duration: 3000 }
+        // );
+        toast.warning(
+          "Tin nhắn này thuộc cuộc trò chuyện khác không nằm trong danh mục hiện tại.",
+          { duration: 3000 },
+        );
+        return;
+      }
+
+      // Step 2: Check if message exists in current view
+      const messageElement = document.querySelector(
+        `[data-testid="message-bubble-${targetMessageId}"]`,
+      );
+
+      if (messageElement) {
+        // Message is in current view, scroll to it
+        messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        // Highlight the message briefly
+        messageElement.classList.add(
           "ring-2",
           "ring-amber-400",
           "ring-offset-2",
         );
-      }, 2000);
-    } else {
-      // Message not in current view, need to load it via API
-      // This is a simplified approach - in production, you'd implement proper message jumping
+        setTimeout(() => {
+          messageElement.classList.remove(
+            "ring-2",
+            "ring-amber-400",
+            "ring-offset-2",
+          );
+        }, 2000);
+        return;
+      }
+
+      // Step 3: Message not in current view, need to load via API
       toast.info("Đang tải tin nhắn...");
 
-      // For now, we'll just show a message
-      // In a full implementation, you would:
-      // 1. Call API with beforeMessageId to get messages around the target
-      // 2. Update the messages query with the new data
-      // 3. Scroll to the message once loaded
-      toast.warning("Tin nhắn không có trong khung nhìn hiện tại");
-    }
-  }, []);
+      try {
+        // Keep loading older messages until we find the target or reach the start
+        const MAX_ATTEMPTS = 1000; // Prevent infinite loop (20 * 50 = 1000 messages max)
+        let attempts = 0;
+        let found = false;
+
+        if (messagesQuery.isFetching || messagesQuery.isLoading) {
+          return;
+        }
+        while (attempts < MAX_ATTEMPTS && !found) {
+          attempts++;
+
+          // Check if we have more pages to load
+          if (!messagesQuery.hasNextPage) {
+            // Reached the start of conversation without finding message
+            toast.error(
+              "Không tìm thấy tin nhắn trong cuộc trò chuyện này. Tin nhắn có thể đã bị xóa.",
+            );
+            return;
+          }
+
+          // Fetch next page (older messages)
+          await messagesQuery.fetchNextPage();
+
+          // Wait a bit for DOM to update
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Check if message now exists in view
+          const updatedMessageElement = document.querySelector(
+            `[data-testid="message-bubble-${targetMessageId}"]`,
+          );
+
+          if (updatedMessageElement) {
+            found = true;
+
+            // Scroll to message
+            updatedMessageElement.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+
+            // Highlight briefly
+            updatedMessageElement.classList.add(
+              "ring-2",
+              "ring-amber-400",
+              "ring-offset-2",
+            );
+            setTimeout(() => {
+              updatedMessageElement.classList.remove(
+                "ring-2",
+                "ring-amber-400",
+                "ring-offset-2",
+              );
+            }, 2000);
+
+            toast.success("Đã tìm thấy tin nhắn!");
+          }
+        }
+
+        if (!found && attempts >= MAX_ATTEMPTS) {
+          toast.error(
+            "Không tìm thấy tin nhắn sau khi tải nhiều trang. Tin nhắn có thể quá xa.",
+          );
+        }
+      } catch (error) {
+        console.error("Error loading message:", error);
+        toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
+      }
+    },
+    [
+      conversationId,
+      messagesQuery,
+      onChatChange,
+      categoryConversations,
+      conversationCategory,
+      activeCategoryId,
+    ],
+  );
 
   // Phase 2: File upload
   const uploadFilesMutation = useUploadFiles();
@@ -473,7 +741,18 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const { validateAndAdd } = useFileValidation();
 
   // Get flattened messages
-  const messages = flattenMessages(messagesQuery.data);
+  // 🐛 FIX: Safeguard against stale cached messages during categories loading
+  // When categories are loading or messages query is not successful, return empty array
+  // This prevents React Query cached data from previous conversation being displayed
+  const messages = useMemo(() => {
+    // Don't use cached data if categories are loading
+    if (categoriesQuery.isLoading) return [];
+
+    // Don't use cached data if messages query hasn't successfully fetched yet
+    if (!messagesQuery.isSuccess) return [];
+
+    return flattenMessages(messagesQuery.data);
+  }, [messagesQuery.data, messagesQuery.isSuccess, categoriesQuery.isLoading]);
 
   // 🐛 FIX: Mark conversation as read when switching conversations OR receiving new messages
   const markAsReadMutation = useMarkConversationAsRead();
@@ -516,6 +795,45 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, lastMessageId]); // Trigger on conversation change OR new message
 
+  // 🆕 NEW: Auto-scroll to message when scrollToMessageId prop changes
+  const lastScrolledMessageIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (messagesQuery.isFetching || messagesQuery.isLoading) {
+      return;
+    }
+    if (!scrollToMessageId) {
+      // Reset ref when cleared
+      lastScrolledMessageIdRef.current = null;
+      return;
+    }
+
+    // Extract messageId from the DTO
+    const messageId = scrollToMessageId.messageId;
+
+    // Skip if we already processed this exact message
+    if (lastScrolledMessageIdRef.current === messageId) {
+      console.log("Skipping duplicate scroll request for message:", messageId);
+      return;
+    }
+    // Mark as processed
+    lastScrolledMessageIdRef.current = messageId;
+    // scrollToMessageId is already the full StarredMessageDto/PinnedMessageDto, just call handler
+    handleScrollToMessage(scrollToMessageId);
+    // Clear scroll state after handling
+    if (onScrollComplete) {
+      // Use timeout to allow scroll animation to complete
+      setTimeout(() => {
+        onScrollComplete();
+      }, 2100); // 2s highlight + 100ms buffer
+    }
+  }, [
+    scrollToMessageId,
+    handleScrollToMessage,
+    onScrollComplete,
+    messagesQuery,
+  ]); // Add proper dependencies
+
   // Call onMessagesLoaded callback when messages are loaded (only when data changes)
   const prevMessagesRef = React.useRef<string | null>(null);
   useEffect(() => {
@@ -538,6 +856,44 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     return groupMessages(messagesWithTimestamp, 10 * 60 * 1000); // 10 minutes
   }, [messages]);
 
+  // 🆕 NEW: Group Phase 4 grouped messages by date (NON-INVASIVE layer)
+  const messagesByDate = useMemo(() => {
+    type DateGroup = {
+      date: string; // "Hôm nay", "Thứ năm, 30/01/2026", etc.
+      dateKey: string; // "2026-02-01" for comparison
+      messages: typeof groupedMessages; // Array of GroupedMessage objects
+    };
+
+    const dateGroups: DateGroup[] = [];
+
+    // Iterate through grouped messages
+    groupedMessages.forEach((groupedMsg) => {
+      const message = groupedMsg.message;
+
+      // Get date from message
+      const msgDate = new Date(message.sentAt);
+      const dateKey = msgDate.toISOString().split("T")[0]; // "2026-02-01"
+      const dateLabel = formatDateSeparator(message.sentAt);
+
+      // Find or create date group
+      const lastDateGroup = dateGroups[dateGroups.length - 1];
+
+      if (lastDateGroup && lastDateGroup.dateKey === dateKey) {
+        // Same day - add to existing date group
+        lastDateGroup.messages.push(groupedMsg);
+      } else {
+        // New day - create new date group
+        dateGroups.push({
+          date: dateLabel,
+          dateKey: dateKey,
+          messages: [groupedMsg],
+        });
+      }
+    });
+
+    return dateGroups;
+  }, [groupedMessages]); // Re-compute when Phase 4 grouping changes
+
   // Auto scroll to bottom when conversation changes (always scroll, even when revisiting)
   const prevConversationIdForScrollRef = useRef<string | undefined>(undefined);
   const lastMessageIdRef = useRef<string | undefined>(undefined);
@@ -550,23 +906,39 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     }
   }, [conversationId]);
 
+  // 🆕 FIX: Instant scroll to bottom using useLayoutEffect (before paint)
+  // This ensures UI is at bottom immediately when conversation opens
+  useLayoutEffect(() => {
+    if (conversationId && messagesQuery.isSuccess && messages.length > 0) {
+      const shouldScrollOnLoad = shouldScrollOnLoadRef.current;
+
+      if (shouldScrollOnLoad) {
+        // Instant scroll (no animation) to bottom for new conversation
+        bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      }
+    }
+  }, [conversationId, messagesQuery.isSuccess]);
+
   // Scroll to bottom after messages are loaded for the active conversation
-  // BUT NOT when loading more older messages
+  // BUT NOT when loading more older messages OR when new messages arrive
   useEffect(() => {
     if (conversationId && messagesQuery.isSuccess && messages.length > 0) {
       const isLoadingMore = scrollPositionRef.current?.shouldRestore === true;
-      const currentLastMessageId = messages[messages.length - 1]?.id;
-      const hasNewMessage = currentLastMessageId !== lastMessageIdRef.current;
       const shouldScrollOnLoad = shouldScrollOnLoadRef.current;
 
-      // Only auto-scroll if:
+      // Only auto-scroll when conversation first loads (NOT when new messages arrive)
       // 1. NOT loading more older messages, AND
-      // 2. (New message arrived OR conversation just loaded)
-      if (!isLoadingMore && (hasNewMessage || shouldScrollOnLoad)) {
+      // 2. Conversation just loaded (shouldScrollOnLoad flag)
+      if (!isLoadingMore && shouldScrollOnLoad) {
+        const currentLastMessageId = messages[messages.length - 1]?.id;
+
         // Use setTimeout to ensure DOM is fully rendered (including image placeholders)
+        // Use "auto" for instant scroll when opening conversation
         setTimeout(() => {
-          bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, 100);
+          bottomRef.current?.scrollIntoView({
+            behavior: "auto",
+          });
+        }, 0); // Instant for new conversation
 
         // Update last message ID and reset scroll flag
         lastMessageIdRef.current = currentLastMessageId;
@@ -574,6 +946,35 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       }
     }
   }, [conversationId, messagesQuery.isSuccess, messages]); // Trigger when messages change
+
+  // 🆕 NEW: Handle new messages from others (not own messages)
+  const lastMessageSenderIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      const isNewMessage = lastMessage.id !== lastMessageIdRef.current;
+      const isFromOtherUser = lastMessage.senderId !== user?.id;
+
+      if (isNewMessage && isFromOtherUser) {
+        // This is a new message from another user
+        if (showGoToBottom) {
+          // User is scrolled up → increment unread count
+          setUnreadCount((prev) => prev + 1);
+        } else {
+          // User is at bottom → auto-scroll to see new message
+          setTimeout(() => {
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 100);
+        }
+
+        // Update ref to prevent counting the same message multiple times
+        lastMessageIdRef.current = lastMessage.id;
+      }
+
+      // Update sender ref to track last message sender
+      lastMessageSenderIdRef.current = lastMessage.senderId;
+    }
+  }, [messages, user?.id, showGoToBottom]);
 
   // Phase 2: Auto-focus input when conversation changes
   useEffect(() => {
@@ -686,7 +1087,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       setInputValue("");
       setIsUploading(false);
 
-      setTimeout(() => inputRef.current?.focus(), 0);
+      // Auto-scroll to bottom after sending message
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        inputRef.current?.focus();
+      }, 100);
     } catch (error) {
       console.error("Send message error:", error);
       toast.error("Lỗi gửi tin nhắn. Vui lòng thử lại.");
@@ -933,7 +1338,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // Get display name from DM format
   const getDisplayName = (name: string) => {
     if (conversationType === "DM") {
-      return name.replace(/^DM:\s*/, "").split(" <> ")[0];
+      // Format: "DM: UserA <> UserB"
+      // We need to show the OTHER user's name (not current user)
+      const cleaned = name.replace(/^DM:\s*/, "");
+      const [user1, user2] = cleaned.split(" <> ");
+
+      // Get current user's identifier
+      const currentUserIdentifier = user?.identifier || "";
+
+      // Compare both users with current user (trim whitespace)
+      const isUser1Current = user1?.trim() === currentUserIdentifier?.trim();
+      const isUser2Current = user2?.trim() === currentUserIdentifier?.trim();
+
+      // Return the user that is NOT the current user
+      if (isUser1Current) {
+        return user2?.trim() || user1?.trim() || cleaned;
+      } else if (isUser2Current) {
+        return user1?.trim() || user2?.trim() || cleaned;
+      }
+
+      return user1?.trim() || cleaned;
     }
     return name;
   };
@@ -973,7 +1397,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // Format status line
   const isDirect = conversationType === "DM";
-  // console.log({ status, memberCount, onlineCount, isDirect });
   const statusLine = formatStatusLine(
     status,
     memberCount || 0,
@@ -986,23 +1409,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     ? "flex flex-col w-full h-full min-h-0 bg-white"
     : "flex flex-col w-full rounded-2xl border border-gray-300 bg-white shadow-sm h-full min-h-0";
 
-  // 🆕 NEW (CBN-002): Empty state check - Show notification if category has no conversations
-  if (selectedCategoryId && categoryConversations.length === 0) {
-    return (
-      <div className={mainContainerCls} data-testid="chat-main-empty-category">
-        <EmptyCategoryState categoryName={conversationCategory} />
-      </div>
-    );
-  }
-
-  // Loading state
-  if (messagesQuery.isLoading) {
+  // 🐛 FIX: Show loading when categories OR messages are loading
+  if (categoriesQuery.isLoading || messagesQuery.isLoading) {
     return (
       <div className={mainContainerCls} data-testid="chat-main-loading">
         {/* Header */}
         <ChatHeader
           conversationId={conversationId}
-          conversationName={conversationName}
+          conversationName={displayName}
           conversationType={conversationType}
           conversationCategory={conversationCategory}
           onlineCount={onlineCount}
@@ -1013,10 +1427,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           showRightPanel={showRightPanel}
           onToggleRightPanel={onToggleRightPanel}
           categoryConversations={
-            selectedCategoryId ? categoryConversations : undefined
+            selectedCategoryId && !categoriesQuery.isLoading
+              ? categoryConversations
+              : undefined
           }
           onChangeConversation={
-            selectedCategoryId ? handleConversationChange : undefined
+            selectedCategoryId && !categoriesQuery.isLoading
+              ? handleConversationChange
+              : undefined
           }
         />
 
@@ -1031,14 +1449,71 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     );
   }
 
-  // Error state
+  // 🐛 FIX: Handle categories error
+  if (categoriesQuery.isError) {
+    return (
+      <div
+        className={mainContainerCls}
+        data-testid="chat-main-error-categories"
+      >
+        {/* Header */}
+        <ChatHeader
+          conversationId={conversationId}
+          conversationName={displayName}
+          conversationType={conversationType}
+          conversationCategory={conversationCategory}
+          onlineCount={onlineCount}
+          status={status}
+          avatarUrl={avatarUrl}
+          isMobile={isMobile}
+          onBack={onBack}
+          showRightPanel={showRightPanel}
+          onToggleRightPanel={onToggleRightPanel}
+          categoryConversations={undefined}
+          onChangeConversation={undefined}
+        />
+
+        {/* Error message */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center p-4">
+            <p className="text-sm text-gray-500 mb-3">
+              Không thể tải danh sách category. Vui lòng thử lại.
+            </p>
+            <button
+              onClick={() => categoriesQuery.refetch()}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm text-brand-600 hover:bg-brand-50 rounded-lg border border-brand-200"
+              data-testid="retry-categories-button"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Thử lại
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 🐛 FIX: Show empty state only when both loaded and truly empty
+  if (
+    selectedCategoryId &&
+    !categoriesQuery.isLoading &&
+    categoryConversations.length === 0
+  ) {
+    return (
+      <div className={mainContainerCls} data-testid="chat-main-empty-category">
+        <EmptyCategoryState categoryName={conversationCategory} />
+      </div>
+    );
+  }
+
+  // Error state (messages)
   if (messagesQuery.isError) {
     return (
       <div className={mainContainerCls} data-testid="chat-main-error">
         {/* Header */}
         <ChatHeader
           conversationId={conversationId}
-          conversationName={conversationName}
+          conversationName={displayName}
           conversationType={conversationType}
           conversationCategory={conversationCategory}
           onlineCount={onlineCount}
@@ -1081,7 +1556,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       {/* Header */}
       <ChatHeader
         conversationId={conversationId}
-        conversationName={conversationName}
+        conversationName={displayName}
         conversationType={conversationType}
         conversationCategory={conversationCategory}
         onlineCount={onlineCount}
@@ -1089,7 +1564,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         avatarUrl={avatarUrl}
         isMobile={isMobile}
         onBack={onBack}
-        onOpenPinnedModal={() => setShowPinnedModal(true)}
+        // [PHASE2-REMOVED] Desktop pin feature removed
+        // onOpenPinnedModal={() => setShowPinnedModal(true)}
         onOpenConversationStarredModal={() =>
           setShowConversationStarredModal(true)
         }
@@ -1141,47 +1617,55 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             </p>
           </div>
         ) : (
-          groupedMessages.map((groupedMsg) => {
-            const message = groupedMsg.message;
-            
-            // Render system messages differently
-            if (message.contentType === "SYS") {
-              return (
-                <SystemMessageBubble
-                  key={message.id}
-                  message={message}
-                  formatTime={formatTime}
-                />
-              );
-            }
-            
-            // Render regular messages
-            return (
-              <MessageBubbleSimple
-                key={message.id}
-                message={message}
-                isOwn={message.senderId === user?.id}
-                formatTime={formatTime}
-                onFilePreviewClick={(fileId, fileName) => {
-                  setFilePreviewId(fileId);
-                  setFilePreviewName(fileName);
-                }}
-                onImageClick={(images, initialIndex) => {
-                  // Phase 2.1: Gallery mode navigation
-                  setPreviewImages(images);
-                  setPreviewInitialIndex(initialIndex);
-                  setPreviewFileId(images[initialIndex]?.fileId || null);
-                }}
-                onTogglePin={onTogglePin}
-                onToggleStar={onToggleStar}
-                onCreateTask={handleCreateTask}
-                onRetry={handleRetry}
-                isFirstInGroup={groupedMsg.isFirstInGroup}
-                isMiddleInGroup={groupedMsg.isMiddleInGroup}
-                isLastInGroup={groupedMsg.isLastInGroup}
-              />
-            );
-          })
+          // 🆕 NEW: Render with date separators (NON-INVASIVE - wraps existing Phase 4 render)
+          messagesByDate.map((dateGroup) => (
+            <React.Fragment key={`date-${dateGroup.dateKey}`}>
+              {/* Date Separator */}
+              <MessageDateSeparator date={dateGroup.date} />
+
+              {/* Messages in this date (Phase 4 grouping preserved) */}
+              {dateGroup.messages.map((groupedMsg) => {
+                const message = groupedMsg.message;
+
+                // Render system messages differently
+                if (message.contentType === "SYS") {
+                  return (
+                    <SystemMessageBubble
+                      key={message.id}
+                      message={message}
+                      formatTime={formatTime}
+                    />
+                  );
+                }
+
+                // Render regular messages
+                return (
+                  <MessageBubbleSimple
+                    key={message.id}
+                    message={message}
+                    isOwn={message.senderId === user?.id}
+                    formatTime={formatTime}
+                    onFilePreviewClick={(fileId, fileName) => {
+                      setFilePreviewId(fileId);
+                      setFilePreviewName(fileName);
+                    }}
+                    onImageClick={(images, initialIndex) => {
+                      // Phase 2.1: Gallery mode navigation
+                      setPreviewImages(images);
+                      setPreviewInitialIndex(initialIndex);
+                      setPreviewFileId(images[initialIndex]?.fileId || null);
+                    }}
+                    onToggleStar={onToggleStar}
+                    onCreateTask={handleCreateTask}
+                    onRetry={handleRetry}
+                    isFirstInGroup={groupedMsg.isFirstInGroup}
+                    isMiddleInGroup={groupedMsg.isMiddleInGroup}
+                    isLastInGroup={groupedMsg.isLastInGroup}
+                  />
+                );
+              })}
+            </React.Fragment>
+          ))
         )}
 
         {/* Typing indicator */}
@@ -1196,6 +1680,57 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
         <div ref={bottomRef} />
       </div>
+
+      {/* Go to Bottom Button - Floating button with unread count */}
+      {showGoToBottom && (
+        <div className="absolute bottom-24 right-6 z-10 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <button
+            onClick={handleGoToBottom}
+            className="
+              relative group
+              w-12 h-12
+              rounded-full
+              bg-gradient-to-br from-white to-gray-50
+              border border-gray-200
+              shadow-lg hover:shadow-2xl
+              backdrop-blur-sm
+              transition-all duration-300 ease-out
+              hover:scale-110 hover:border-brand-400
+              active:scale-95
+              flex items-center justify-center
+            "
+            data-testid="go-to-bottom-button"
+            aria-label="Cuộn xuống cuối"
+          >
+            {/* Unread badge */}
+            {unreadCount > 0 && (
+              <div
+                className="
+                  absolute -top-1.5 -right-1.5
+                  min-w-[22px] h-[22px] px-1.5
+                  flex items-center justify-center
+                  bg-gradient-to-br from-red-500 to-red-600
+                  text-white
+                  text-[10px] font-bold
+                  rounded-full
+                  border-2 border-white
+                  shadow-md
+                  animate-in zoom-in duration-200
+                "
+                data-testid="unread-count-badge"
+              >
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </div>
+            )}
+
+            {/* Icon with gradient background on hover */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-brand-500 to-brand-600 rounded-full opacity-0 group-hover:opacity-10 transition-opacity duration-300" />
+              <ChevronDown className="h-5 w-5 text-brand-600 group-hover:text-brand-700 transition-colors duration-200 relative z-10" />
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* File Preview */}
       <FilePreview
@@ -1305,8 +1840,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         initialIndex={previewInitialIndex}
       />
 
+      {/* [PHASE2-REMOVED] Desktop pin feature removed - Modal commented out */}
       {/* Pinned Messages Modal */}
-      <Dialog open={showPinnedModal} onOpenChange={setShowPinnedModal}>
+      {/* <Dialog open={showPinnedModal} onOpenChange={setShowPinnedModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1328,7 +1864,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   key={pinned.messageId}
                   className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition"
                   onClick={() => {
-                    handleScrollToMessage(pinned.messageId);
+                    handleScrollToMessage(pinned);
                     setShowPinnedModal(false);
                   }}
                 >
@@ -1359,7 +1895,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             )}
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
 
       {/* Conversation Starred Messages Modal */}
       <Dialog
@@ -1387,7 +1923,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   key={starred.messageId}
                   className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition"
                   onClick={() => {
-                    handleScrollToMessage(starred.messageId);
+                    handleScrollToMessage(starred);
                     setShowConversationStarredModal(false);
                   }}
                 >
@@ -1443,13 +1979,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   key={starred.messageId}
                   className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition"
                   onClick={() => {
-                    // For all starred, if it's in a different conversation, we'd need to navigate
-                    // For now, just try to scroll if in same conversation
-                    if (starred.message.conversationId === conversationId) {
-                      handleScrollToMessage(starred.messageId);
-                    } else {
-                      toast.info("Tin nhắn này ở cuộc trò chuyện khác");
-                    }
+                    console.log("Scrolling to starred message:", starred);
+                    // handleScrollToMessage will check if it's in correct conversation
+                    handleScrollToMessage(starred);
                     setShowAllStarredModal(false);
                   }}
                 >

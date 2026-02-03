@@ -34,9 +34,7 @@ export function useSecurity() {
   );
 
   useEffect(() => {
-    if (isWhitelisted) {
-      console.log("[Security] User is whitelisted - protections bypassed");
-    }
+    // User is whitelisted - protections bypassed
   }, [isWhitelisted]);
 
   return {

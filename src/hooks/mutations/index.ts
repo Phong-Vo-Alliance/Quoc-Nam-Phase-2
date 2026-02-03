@@ -10,3 +10,14 @@ export { useStarMessage, useUnstarMessage } from './useStarMessage';
 
 // Task mutations
 export { useCreateTask } from './useCreateTask';
+export { 
+  useAddCheckItem, 
+  useToggleCheckItem,
+  useUpdateCheckItem,
+  useUpdateTaskStatus,
+  useUpdateTask,
+  useCreateChecklistTemplate,
+  useUpdateChecklistTemplate,
+  usePatchChecklistTemplate,
+  useDeleteChecklistTemplate
+} from './useTaskMutations';

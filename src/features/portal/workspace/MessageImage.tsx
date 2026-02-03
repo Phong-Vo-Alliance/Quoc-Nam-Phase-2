@@ -24,22 +24,20 @@ export default function MessageImage({
   forceLoad = false,
 }: MessageImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(forceLoad); // Start visible if forceLoad
+  const [isVisible, setIsVisible] = useState(forceLoad);
   const [isLoading, setIsLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   // Lazy load: Setup Intersection Observer (skip if forceLoad)
   useEffect(() => {
-    // Skip lazy loading if forceLoad is true
     if (forceLoad) {
       setIsVisible(true);
       return;
     }
 
-    // Fallback for browsers without Intersection Observer support
     if (!("IntersectionObserver" in window)) {
-      setIsVisible(true); // Load immediately (graceful degradation)
+      setIsVisible(true);
       return;
     }
 
@@ -50,25 +48,36 @@ export default function MessageImage({
       (entries) => {
         if (entries[0].isIntersecting) {
           setIsVisible(true);
-          observer.disconnect(); // Load only once
+          observer.disconnect();
         }
       },
       {
-        threshold: 0.01, // Trigger when 1% visible
-        rootMargin: "100px", // Preload 100px before visible
+        threshold: 0.01,
+        rootMargin: "100px",
       },
     );
 
     observer.observe(container);
 
+    // 🐛 FIX: Delay check to allow scroll-to-bottom animation to complete
+    const timeoutId = setTimeout(() => {
+      const rect = container.getBoundingClientRect();
+      const isInViewport =
+        rect.top < window.innerHeight + 100 && rect.bottom > -100;
+      if (isInViewport) {
+        setIsVisible(true);
+      }
+    }, 100); // Wait 100ms for scroll animation
+
     return () => {
       observer.disconnect();
+      clearTimeout(timeoutId);
     };
-  }, [forceLoad]); // Add forceLoad to dependencies
+  }, [forceLoad, fileId]);
 
   // Fetch thumbnail when visible
   useEffect(() => {
-    if (!isVisible || imageUrl || error) return;
+    if (!isVisible || imageUrl) return;
 
     const fetchThumbnail = async () => {
       setIsLoading(true);
@@ -88,7 +97,7 @@ export default function MessageImage({
     };
 
     fetchThumbnail();
-  }, [isVisible, fileId, imageUrl, error]);
+  }, [isVisible, fileId]);
 
   // Cleanup: Revoke blob URL
   useEffect(() => {
@@ -99,12 +108,18 @@ export default function MessageImage({
     };
   }, [imageUrl]);
 
-  // Handle click - Open preview modal
+  // Reset state when fileId changes
+  useEffect(() => {
+    setImageUrl(null);
+    setIsLoading(false);
+    // DON'T clear error - let it persist until next fetch starts
+  }, [fileId, forceLoad]);
+
   const handleClick = () => {
     onPreviewClick(fileId);
   };
 
-  // Render: Error → Error placeholder (clickable)
+  // Render: Error
   if (error) {
     return (
       <div
@@ -129,14 +144,13 @@ export default function MessageImage({
             d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
           />
         </svg>
-        <p className="text-sm text-gray-500">Failed to load image</p>
-        <p className="text-xs text-gray-400 mt-1">Click to try preview</p>
+        <p className="text-sm text-gray-500">Không thể tải ảnh</p>
+        <p className="text-xs text-gray-400 mt-1">Nhấn để xem ảnh gốc</p>
       </div>
     );
   }
 
-  // Render: Loading or waiting → Skeleton
-  // ALWAYS show skeleton to prevent bubble size jump
+  // Render: Loading
   if (!imageUrl) {
     return (
       <div
@@ -150,7 +164,7 @@ export default function MessageImage({
     );
   }
 
-  // Render: Success → Image (clickable)
+  // Render: Success
   return (
     <div
       ref={containerRef}

@@ -66,11 +66,18 @@ interface BaseConversation {
   lastMessage: LastMessage | null;
 }
 
+// Category reference within conversation (from API)
+export interface ConversationCategoryRef {
+  id: string;
+  name: string;
+}
+
 // Group Conversation (GRP)
 export interface GroupConversation extends BaseConversation {
   type: "GRP";
   description: string;
   memberCount: number;
+  categories?: ConversationCategoryRef[] | null; // Categories this group belongs to
 }
 
 // Direct Message Conversation (DM)

@@ -3,23 +3,18 @@
 
 export const conversationKeys = {
   // Root key for all conversation-related queries
-  all: ['conversations'] as const,
-
-  // Groups
-  groups: () => [...conversationKeys.all, 'groups'] as const,
-  groupsList: (cursor?: string) =>
-    [...conversationKeys.groups(), { cursor }] as const,
+  all: ["conversations"] as const,
 
   // Direct Messages
-  directs: () => [...conversationKeys.all, 'directs'] as const,
+  directs: () => [...conversationKeys.all, "directs"] as const,
   directsList: (cursor?: string) =>
     [...conversationKeys.directs(), { cursor }] as const,
 
   // Single conversation detail (for future use)
   detail: (conversationId: string) =>
-    [...conversationKeys.all, 'detail', conversationId] as const,
+    [...conversationKeys.all, "detail", conversationId] as const,
 
   // Conversation members
   members: (conversationId: string) =>
-    [...conversationKeys.all, 'members', conversationId] as const,
+    [...conversationKeys.all, "members", conversationId] as const,
 };

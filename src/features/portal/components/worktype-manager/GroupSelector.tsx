@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { GroupChat } from "../../types";
+import { DialogTitle } from "@/components/ui/dialog";
+import type { CategoryDto } from "@/types/categories";
 
 interface GroupSelectorProps {
-  groups: GroupChat[];
-  onSelect: (group: GroupChat) => void;
+  groups: CategoryDto[];
+  onSelect: (group: CategoryDto) => void;
   onClose: () => void;
 }
 
@@ -25,9 +26,9 @@ export const GroupSelector:  React.FC<GroupSelectorProps> = ({
     <div className="flex flex-col max-h-[80vh]">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <DialogTitle className="text-lg font-semibold text-gray-900">
           Quản lý Loại Việc
-        </h2>
+        </DialogTitle>
         {/* <button
           onClick={onClose}
           className="p-1 rounded-full hover:bg-gray-100 transition-colors"
@@ -79,14 +80,8 @@ export const GroupSelector:  React.FC<GroupSelectorProps> = ({
                     </h3>
                     <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                       <span>
-                        {group.workTypes?.length ??  0} loại việc
+                        {group.conversations?.length ?? 0} loại việc
                       </span>
-                      {group.members && (
-                        <>
-                          <span>•</span>
-                          <span>{group.members.length} thành viên</span>
-                        </>
-                      )}
                     </div>
                   </div>
                 </div>

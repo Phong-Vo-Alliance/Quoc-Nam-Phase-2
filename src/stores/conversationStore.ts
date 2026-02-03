@@ -23,10 +23,12 @@ export type ChatTarget = {
 interface ConversationState {
   // State
   selectedConversation: ChatTarget | null;
+  activeTabType: "group" | "dm" | null; // 🆕 Track active tab in sidebar
 
   // Actions
   setSelectedConversation: (conversation: ChatTarget) => void;
   clearSelectedConversation: () => void;
+  setActiveTabType: (tabType: "group" | "dm") => void; // 🆕 Set active tab
 
   // Convenience getters
   getConversationId: () => string | null;
@@ -55,10 +57,14 @@ export const useConversationStore = create<ConversationState>()(
     (set, get) => ({
       // Initial state
       selectedConversation: null,
+      activeTabType: null, // 🆕 Initialize active tab type
 
       // Set selected conversation and sync to localStorage
       setSelectedConversation: (conversation) => {
-        set({ selectedConversation: conversation });
+        set({
+          selectedConversation: conversation,
+          activeTabType: conversation.type, // 🆕 Auto-sync tab type
+        });
 
         // Sync to legacy localStorage keys for backward compatibility
         saveSelectedConversation(conversation.id);
@@ -69,7 +75,17 @@ export const useConversationStore = create<ConversationState>()(
 
       // Clear selected conversation
       clearSelectedConversation: () => {
+        console.log(
+          "[ConversationStore] clearSelectedConversation called",
+          new Error().stack,
+        );
         set({ selectedConversation: null });
+        // 🆕 Keep activeTabType to preserve tab state when no conversation selected
+      },
+
+      // 🆕 Set active tab type (independent of conversation selection)
+      setActiveTabType: (tabType) => {
+        set({ activeTabType: tabType });
       },
 
       // Getters - Convenient selectors to avoid null checks
@@ -88,8 +104,9 @@ export const useConversationStore = create<ConversationState>()(
     {
       name: "conversation-storage", // localStorage key
       partialize: (state) => ({
-        // Only persist selectedConversation (not getters)
+        // Only persist selectedConversation and activeTabType (not getters)
         selectedConversation: state.selectedConversation,
+        activeTabType: state.activeTabType, // 🆕 Persist tab type
       }),
     },
   ),

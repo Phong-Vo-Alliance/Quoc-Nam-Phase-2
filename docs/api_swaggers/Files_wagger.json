@@ -1,0 +1,1948 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Vega File API",
+    "description": "File management API for Vega platform",
+    "version": "v1"
+  },
+  "paths": {
+    "/api/Files/ping": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Ping endpoint to test MediatR pipeline.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/debug": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Debug endpoint to check file in DB and user claims.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Files/test-direct": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Test upload endpoint - bypasses MediatR to test handler directly.",
+        "parameters": [
+          {
+            "name": "sourceModule",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Vega_File_Domain_Enums_SourceModule"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_Upload_UploadFileResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_Upload_UploadFileResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_Upload_UploadFileResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file.",
+        "description": "**Endpoint Naming Rationale:**\r\n- REST convention: POST /collection creates a new resource\r\n- Alternative `/api/files/upload` is redundant (POST already implies upload)\r\n- Sub-resources use explicit names: `/download`, `/thumbnail`\r\n\r\n**SourceModule is REQUIRED:**\r\n- Client MUST specify which module is uploading (Task, Chat, Company, User)\r\n- No default value to prevent ambiguous file ownership\r\n- Returns 400 Bad Request if missing",
+        "parameters": [
+          {
+            "name": "sourceModule",
+            "in": "query",
+            "description": "Source module (Task=0, Chat=1, Company=2, User=3). REQUIRED.",
+            "schema": {
+              "$ref": "#/components/schemas/Vega_File_Domain_Enums_SourceModule"
+            }
+          },
+          {
+            "name": "sourceEntityId",
+            "in": "query",
+            "description": "Optional source entity ID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "The file to upload.",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_Upload_UploadFileResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_Upload_UploadFileResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_Upload_UploadFileResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/batch": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload multiple files in a single request (batch upload).",
+        "description": "**Batch Upload Rules:**\r\n- Maximum 10 files per request\r\n- Maximum 100MB total size per request\r\n- Each file is validated independently\r\n- Partial success: some files may succeed while others fail\r\n- Response contains individual result for each file\r\n\r\nCreated by: GitHub Copilot - 2026-01-12",
+        "parameters": [
+          {
+            "name": "sourceModule",
+            "in": "query",
+            "description": "Source module (Task=0, Chat=1, Company=2, User=3). REQUIRED.",
+            "schema": {
+              "$ref": "#/components/schemas/Vega_File_Domain_Enums_SourceModule"
+            }
+          },
+          {
+            "name": "sourceEntityId",
+            "in": "query",
+            "description": "Optional source entity ID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "The files to upload (max 10 files, max 100MB total)."
+                  }
+                }
+              },
+              "encoding": {
+                "files": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_BatchUpload_BatchUploadResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_BatchUpload_BatchUploadResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Commands_BatchUpload_BatchUploadResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get file metadata by ID.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Queries_GetById_FileDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Queries_GetById_FileDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_Queries_GetById_FileDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Delete a file (soft delete).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/download": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Download file content.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/thumbnail": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get file thumbnail.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "description": "Max width.",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "description": "Max height.",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/watermarked-thumbnail": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get watermarked thumbnail for a file.",
+        "description": "Created by: GitHub Copilot\r\nCreated at: 2026-01-07\r\nThis is the generic storage endpoint - no business logic.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Thumbnail size: small (100px), medium (200px), large (400px).",
+            "schema": {
+              "type": "string",
+              "default": "medium"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/preview": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Preview a file with watermark.\r\nReturns file content optimized for in-browser display.\r\nFor PDF files, returns the first page as an image with redacted sensitive info.",
+        "description": "Created by: GitHub Copilot\r\nCreated at: 2026-01-07\r\nThis is generic storage endpoint - no business logic.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/preview-page": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Preview a specific page of a PDF file.",
+        "description": "Created by: GitHub Copilot\r\nCreated at: 2026-01-07",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (1-based).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/preview/excel": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Preview Excel file (.xlsx, .xls) as JSON data.\r\nReturns parsed sheets with cells, styles, and watermark info.",
+        "description": "Created by: GitHub Copilot\r\nCreated at: 2026-01-08",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "maxRows",
+            "in": "query",
+            "description": "Max rows per sheet (default: 500).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 500
+            }
+          },
+          {
+            "name": "maxColumns",
+            "in": "query",
+            "description": "Max columns per sheet (default: 50).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "maxSheets",
+            "in": "query",
+            "description": "Max sheets to parse (default: 5).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 5
+            }
+          },
+          {
+            "name": "includeStyles",
+            "in": "query",
+            "description": "Include cell styles (default: true).",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_ExcelPreviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_ExcelPreviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_ExcelPreviewDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported Media Type",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/preview/word": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get Word file preview as HTML.\r\nConverts DOCX to semantic HTML using Mammoth library.",
+        "description": "Created by: GitHub Copilot\r\nCreated at: 2026-01-08\r\n\r\nSupported formats:\r\n- .docx (OOXML) - fully supported\r\n- .doc (legacy) - NOT supported\r\n\r\nMammoth converts to semantic HTML:\r\n- Headings, paragraphs, lists\r\n- Bold, italic, underline\r\n- Tables (basic)\r\n- Images (embedded as base64)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "maxContentLength",
+            "in": "query",
+            "description": "Max HTML content length in characters (default: 500000).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 500000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_DTOs_Word_WordPreviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_DTOs_Word_WordPreviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vega_File_Application_DTOs_Word_WordPreviewDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported Media Type",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Files/{id}/view": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "View file with watermark.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "File ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "position",
+            "in": "query",
+            "description": "Watermark position (Center, BottomRight, Diagonal).",
+            "schema": {
+              "$ref": "#/components/schemas/Vega_File_Domain_Enums_WatermarkPosition"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdf/{fileId}/pages/count": {
+      "get": {
+        "tags": [
+          "Pdf"
+        ],
+        "summary": "Get PDF page count",
+        "parameters": [
+          {
+            "name": "fileId",
+            "in": "path",
+            "description": "File ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": { }
+              },
+              "application/json": {
+                "schema": { }
+              },
+              "text/json": {
+                "schema": { }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdf/{fileId}/pages/{pageNumber}/render": {
+      "get": {
+        "tags": [
+          "Pdf"
+        ],
+        "summary": "Render single PDF page to image",
+        "parameters": [
+          {
+            "name": "fileId",
+            "in": "path",
+            "description": "File ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "path",
+            "description": "Page number (1-based)",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "dpi",
+            "in": "query",
+            "description": "DPI (default: 300)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 300
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdf/{fileId}/pages/render-all": {
+      "get": {
+        "tags": [
+          "Pdf"
+        ],
+        "summary": "Render all pages of PDF",
+        "parameters": [
+          {
+            "name": "fileId",
+            "in": "path",
+            "description": "File ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "dpi",
+            "in": "query",
+            "description": "DPI (default: 300)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 300
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": { }
+              },
+              "application/json": {
+                "schema": { }
+              },
+              "text/json": {
+                "schema": { }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Microsoft_AspNetCore_Mvc_ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Microsoft_AspNetCore_Mvc_ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": { }
+      },
+      "Vega_File_Application_Commands_BatchUpload_BatchUploadItemResult": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "fileId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "storagePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_Commands_BatchUpload_BatchUploadResult": {
+        "required": [
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "totalFiles": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "successCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vega_File_Application_Commands_BatchUpload_BatchUploadItemResult"
+            },
+            "nullable": true
+          },
+          "allSuccess": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "partialSuccess": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_Commands_Upload_UploadFileResult": {
+        "required": [
+          "contentType",
+          "fileId",
+          "fileName",
+          "size",
+          "storagePath"
+        ],
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "storagePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_CellDataDto": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "formattedValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "style": {
+            "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_CellStyleDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_CellStyleDto": {
+        "type": "object",
+        "properties": {
+          "bold": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "italic": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "backgroundColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "fontColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "horizontalAlign": {
+            "type": "string",
+            "nullable": true
+          },
+          "fontSize": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_ColumnInfoDto": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "letter": {
+            "type": "string",
+            "nullable": true
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_ExcelMetadataDto": {
+        "type": "object",
+        "properties": {
+          "totalSheets": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalRows": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCells": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isTruncated": {
+            "type": "boolean"
+          },
+          "truncationReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "fileSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_ExcelPreviewDto": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_ExcelMetadataDto"
+          },
+          "sheets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_SheetDataDto"
+            },
+            "nullable": true
+          },
+          "watermark": {
+            "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_WatermarkInfoDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_MergedCellDto": {
+        "type": "object",
+        "properties": {
+          "firstRow": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastRow": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "firstColumn": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastColumn": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_SheetDataDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rowCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "columnCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "mergedCells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_MergedCellDto"
+            },
+            "nullable": true
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_ColumnInfoDto"
+            },
+            "nullable": true
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Vega_File_Application_DTOs_Excel_CellDataDto"
+              }
+            },
+            "nullable": true
+          },
+          "isTruncated": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Excel_WatermarkInfoDto": {
+        "type": "object",
+        "properties": {
+          "userIdentifier": {
+            "type": "string",
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "textColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "textOutlineColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "textOutlineWidth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "textShadow": {
+            "type": "boolean"
+          },
+          "fontSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fontFamily": {
+            "type": "string",
+            "nullable": true
+          },
+          "rotation": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "opacity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Word_WatermarkInfoDto": {
+        "type": "object",
+        "properties": {
+          "userIdentifier": {
+            "type": "string",
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "textColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "textOutlineColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "textOutlineWidth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "textShadow": {
+            "type": "boolean"
+          },
+          "fontSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fontFamily": {
+            "type": "string",
+            "nullable": true
+          },
+          "rotation": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "opacity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Word_WordMetadataDto": {
+        "type": "object",
+        "properties": {
+          "fileSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasImages": {
+            "type": "boolean"
+          },
+          "imageCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hasTables": {
+            "type": "boolean"
+          },
+          "isTruncated": {
+            "type": "boolean"
+          },
+          "truncationReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_DTOs_Word_WordPreviewDto": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Vega_File_Application_DTOs_Word_WordMetadataDto"
+          },
+          "htmlContent": {
+            "type": "string",
+            "nullable": true
+          },
+          "cssStyles": {
+            "type": "string",
+            "nullable": true
+          },
+          "watermark": {
+            "$ref": "#/components/schemas/Vega_File_Application_DTOs_Word_WatermarkInfoDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Application_Queries_GetById_FileDto": {
+        "required": [
+          "contentType",
+          "fileName",
+          "id",
+          "size",
+          "storageProvider",
+          "uploadedAt",
+          "uploadedBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "storageProvider": {
+            "$ref": "#/components/schemas/Vega_File_Domain_Enums_StorageProviderType"
+          },
+          "uploadedBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vega_File_Domain_Enums_SourceModule": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "Vega_File_Domain_Enums_StorageProviderType": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "Vega_File_Domain_Enums_WatermarkPosition": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "apiKey",
+        "description": "JWT Authorization header using the Bearer scheme",
+        "name": "Authorization",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": [ ]
+    }
+  ]
+}

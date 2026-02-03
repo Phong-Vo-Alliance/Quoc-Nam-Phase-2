@@ -59,9 +59,6 @@ export function useMarkConversationAsRead() {
       await queryClient.cancelQueries({ queryKey: categoriesKeys.all }); // 🆕 NEW
 
       // Snapshot previous value
-      const previousGroups = queryClient.getQueryData<
-        InfiniteData<ConversationPage>
-      >(conversationKeys.groups());
       const previousDirects = queryClient.getQueryData<
         InfiniteData<ConversationPage>
       >(conversationKeys.directs());
@@ -69,19 +66,18 @@ export function useMarkConversationAsRead() {
         categoriesKeys.list(),
       ); // 🆕 NEW
 
-      // Optimistically update groups
-      if (previousGroups) {
-        queryClient.setQueryData<InfiniteData<ConversationPage>>(
-          conversationKeys.groups(),
-          {
-            ...previousGroups,
-            pages: previousGroups.pages.map((page) => ({
-              ...page,
-              items: (page.items || []).map((conv) =>
-                conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv,
-              ),
-            })),
-          },
+      // Optimistically update categories (contains conversations)
+      if (previousCategories) {
+        queryClient.setQueryData<CategoryWithUnread[]>(
+          categoriesKeys.list(),
+          previousCategories.map((cat) => ({
+            ...cat,
+            conversations: cat.conversations.map((conv) =>
+              conv.conversationId === conversationId
+                ? { ...conv, unreadCount: 0 }
+                : conv,
+            ),
+          })),
         );
       }
 
@@ -101,35 +97,12 @@ export function useMarkConversationAsRead() {
         );
       }
 
-      // 🆕 NEW: Optimistically update categories (for category badges)
-      if (previousCategories) {
-        queryClient.setQueryData<CategoryWithUnread[]>(
-          categoriesKeys.list(),
-          previousCategories.map((category) => ({
-            ...category,
-            conversations: category.conversations.map((conv) =>
-              conv.conversationId === conversationId
-                ? { ...conv, unreadCount: 0 }
-                : conv,
-            ),
-          })),
-        );
-      }
-
       // Return context for rollback
-      return { previousGroups, previousDirects, previousCategories }; // 🆕 NEW: Include previousCategories
+      return { previousDirects, previousCategories };
     },
 
     // 🆕 NEW: Rollback on error
     onError: (_err, { conversationId }, context) => {
-      // Rollback groups
-      if (context?.previousGroups) {
-        queryClient.setQueryData(
-          conversationKeys.groups(),
-          context.previousGroups,
-        );
-      }
-
       // Rollback directs
       if (context?.previousDirects) {
         queryClient.setQueryData(

@@ -16,7 +16,8 @@ import WordPreview from "@/features/portal/components/file-sheet/WordPreview";
 import ExcelPreview from "@/features/portal/components/file-sheet/ExcelPreview";
 
 // Helper to get file extension
-function getFileExtension(fileName: string): string {
+function getFileExtension(fileName?: string): string {
+  if (!fileName) return "";
   const parts = fileName.split(".");
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : "";
 }

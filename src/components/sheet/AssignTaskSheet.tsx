@@ -120,9 +120,15 @@ export function AssignTaskSheet({
       // Send system message about task creation
       if (conversationId) {
         try {
+          // Find assigned user's name
+          const assignedMember = members.find(
+            (m) => m.userId === formData.assignTo,
+          );
+          const assignedUserName = assignedMember?.userName || "người dùng";
+
           const systemMessageData: SendChatMessageRequest = {
             conversationId,
-            content: `Công việc "${formData.title}" đã được tạo và giao thành công`,
+            content: `Công việc "${formData.title}" đã được tạo và giao cho ${assignedUserName}`,
             messageType: "SYS", // System message type
           };
           await sendMessage(systemMessageData);
@@ -303,6 +309,8 @@ export function AssignTaskSheet({
       assignTo: formData.assignTo,
       conversationId,
       checklistTemplateId: formData.checklistTemplateId,
+      // Include messageId when creating task from a message
+      messageId: messageId ?? undefined,
     };
 
     createTaskMutation.mutate(createTaskData);
@@ -393,7 +401,7 @@ export function AssignTaskSheet({
             </div>
 
             {/* Priority */}
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <Label
                 htmlFor="priority"
                 className="text-xs font-medium text-gray-700"
@@ -430,7 +438,7 @@ export function AssignTaskSheet({
               {formErrors.priority && (
                 <p className="text-xs text-red-500">{formErrors.priority}</p>
               )}
-            </div>
+            </div> */}
 
             {/* Checklist Template */}
             <div className="space-y-2">

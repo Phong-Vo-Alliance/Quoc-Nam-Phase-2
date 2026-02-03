@@ -16,8 +16,9 @@ import { useChecklistTemplates, checklistTemplateKeys } from "@/hooks/queries/us
 import { 
   useCreateChecklistTemplate, 
   useUpdateChecklistTemplate, 
-  useDeleteChecklistTemplate 
-} from "@/hooks/mutations/useChecklistTemplateMutations";
+  useDeleteChecklistTemplate,
+} from "@/hooks/mutations";
+import { useCreateGroup } from "@/hooks/mutations/useConversationMutations";
 import { useQueries } from "@tanstack/react-query";
 import { checklistTemplatesApi } from "@/api/checklist-templates.api";
 import type { MemberRole } from "@/types/groups";
@@ -63,7 +64,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
   const [editNameConversation, setEditNameConversation] = useState<ConversationDto | null>(null);
 
   // Fetch conversations in this category
-  const { data: conversations, isLoading: isLoadingConversations } = useCategoryConversations(categoryId);
+  const { data: conversations, isLoading: isLoadingConversations, refetch: refetchConversations } = useCategoryConversations(categoryId);
 
   // Fetch checklist templates for selected conversation (if any)
   const { data: checklistTemplates, refetch: refetchTemplates } = useChecklistTemplates();
@@ -94,6 +95,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
   const createMutation = useCreateChecklistTemplate();
   const updateMutation = useUpdateChecklistTemplate();
   const deleteMutation = useDeleteChecklistTemplate();
+  const createGroupMutation = useCreateGroup();
 
   // Get current user role from localStorage (hardcoded check as per requirements)
   const getCurrentUserRole = (): MemberRole => {
@@ -147,7 +149,6 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
     try {
       await deleteMutation.mutateAsync({ 
         templateId: template.id,
-        conversationId: selectedConversation?.id 
       });
       refetchTemplates();
     } catch (error) {
@@ -162,27 +163,40 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
   }) => {
     try {
       if (editingTemplate) {
-        // Update existing template
+        // Update existing template - transform string[] to ChecklistItem[]
+        const transformedItems = data.items.map((item, index) => ({
+          content: item,
+          order: index,
+          isRequired: false,
+        }));
+
         await updateMutation.mutateAsync({
           templateId: editingTemplate.id,
           payload: {
             id: editingTemplate.id,
             name: data.name,
             description: data.description,
-            items: data.items,
+            items: transformedItems.map(item => item.content), // API expects string[] for items
           },
         });
       } else {
-        // Create new template
+        // Create new template - transform string[] to ChecklistItem[]
         if (!selectedConversation?.id) {
           console.error('No conversation selected');
           return;
         }
+
+        const transformedItems = data.items.map((item, index) => ({
+          content: item,
+          order: index,
+          isRequired: false,
+        }));
+
         await createMutation.mutateAsync({
           conversationId: selectedConversation.id,
           name: data.name,
           description: data.description,
-          items: data.items,
+          items: transformedItems,
         });
       }
       setShowTemplateDialog(false);
@@ -373,23 +387,36 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
         {/* Category Info */}
         <div className="px-6 py-3 bg-gray-50 border-b">
           <p className="text-sm text-gray-600">
-            Category: <span className="font-medium text-gray-900">{categoryName}</span>
+            Tên Nhóm: <span className="font-medium text-gray-900">{categoryName}</span>
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
             Chọn một conversation để quản lý checklist templates
           </p>
         </div>
 
-        {/* Search */}
+        {/* Search + Add Conversation */}
         <div className="px-6 py-4 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm conversation..."
-              className="pl-9"
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm conversation..."
+                className="pl-9"
+              />
+            </div>
+            <Button 
+              onClick={() => {
+                setEditingWorkType(null);
+                setShowAddEdit(true);
+              }}
+              className="shrink-0"
+              data-testid="add-conversation-button"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Thêm Conversation
+            </Button>
           </div>
         </div>
 
@@ -472,6 +499,35 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
             .map(c => c.name)}
         />
       )}
+
+      {/* Add/Edit Conversation Dialog */}
+      <AddEditWorkTypeDialog
+        open={showAddEdit}
+        onOpenChange={setShowAddEdit}
+        workType={editingWorkType}
+        existingNames={(conversationsWithTemplates || []).map(c => c.name)}
+        onSave={async (name) => {
+          try {
+            // Create new group conversation in this category
+            await createGroupMutation.mutateAsync({
+              name: name,
+              categoryId: categoryId,
+              description: null,
+              memberIds: null,
+            });
+            
+            // Close dialog
+            setShowAddEdit(false);
+            setEditingWorkType(null);
+            
+            // Refetch conversations to show the new one
+            refetchConversations();
+          } catch (error) {
+            console.error('Failed to create conversation:', error);
+            // TODO: Show error toast to user
+          }
+        }}
+      />
     </>
   );
 };

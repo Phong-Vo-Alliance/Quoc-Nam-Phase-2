@@ -18,6 +18,7 @@ import type {
   TaskLogMessage,
   ChecklistVariant,
 } from "../types";
+import type { StarredMessageDto } from "@/types/pinned_and_starred";
 import { ChecklistTemplatePanel } from "../components/ChecklistTemplatePanel";
 import {
   TaskChecklistEditor,
@@ -30,8 +31,9 @@ import { transformTemplatesToMap } from "@/utils/checklistTemplateTransform";
 import {
   useAddCheckItem,
   useToggleCheckItem,
+  useUpdateCheckItem,
   useUpdateTaskStatus,
-} from "@/hooks/mutations/useTaskMutations";
+} from "@/hooks/mutations";
 
 import {
   Users,
@@ -63,6 +65,7 @@ import { Button } from "@/components/ui/button";
 import { HintBubble } from "../components/HintBubble";
 import { useAuthStore } from "@/stores/authStore";
 import { useConversationStore } from "@/stores";
+import { isDirectConversation } from "@/types/conversations";
 import { FileNode } from "../components/FileManager";
 import { FileManagerPhase1A } from "../components/FileManagerPhase1A";
 import { group } from "console";
@@ -143,18 +146,23 @@ const TaskCard: React.FC<{
   members: MinimalMember[];
   viewMode: ViewMode;
   isLeaderOwnTask?: boolean; // Flag when leader is task owner
+  groupName?: string; // Group/conversation name to display
+  checklistVariants?: ChecklistVariant[]; // Available checklist variants to look up template name
   onChangeStatus?: (id: string, next: Task["status"]) => void;
   onReassign?: (id: string, assignTo: string) => void;
   onToggleChecklist?: (taskId: string, itemId: string, done: boolean) => void;
   onUpdateTaskChecklist?: (taskId: string, next: ChecklistItem[]) => void;
   taskLogs?: Record<string, TaskLogMessage[]>;
   onOpenTaskLog?: (taskId: string) => void;
-  onClickTitle?: (sourceMessageId: string) => void;
+  onClickTitle?: (messageDto: StarredMessageDto | null) => void;
+  messages?: MessageLike[]; // Messages array to build StarredMessageDto
 }> = ({
   t,
   members,
   viewMode,
   isLeaderOwnTask = false,
+  groupName,
+  checklistVariants,
   onChangeStatus,
   onReassign,
   onToggleChecklist,
@@ -162,6 +170,7 @@ const TaskCard: React.FC<{
   taskLogs,
   onOpenTaskLog,
   onClickTitle,
+  messages = [],
 }) => {
   const [open, setOpen] = React.useState(false);
   const assigneeName =
@@ -174,17 +183,20 @@ const TaskCard: React.FC<{
   // Mutation hooks for API calls
   const addCheckItemMutation = useAddCheckItem();
   const toggleCheckItemMutation = useToggleCheckItem();
+  const updateCheckItemMutation = useUpdateCheckItem();
   const updateStatusMutation = useUpdateTaskStatus();
 
   const total = t.checklist?.length ?? 0;
   const doneCount = t.checklist?.filter((c) => c.done).length ?? 0;
   const progress = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const workTypeLabel = t.workTypeName ?? t.workTypeId;
-  const displayWorkTypeLabel = t.checklistVariantName
-    ? `${workTypeLabel} · ${t.checklistVariantName}`
-    : workTypeLabel;
-
+  const displayLabel = groupName || "không xác định";
+  // Look up template name from checklistTemplateId
+  console.log("t.checklistTemplateId", t.checklistTemplateId);
+  console.log("checklistVariants", checklistVariants);
+  const templateName = t.checklistTemplateId
+    ? checklistVariants?.find((v) => v.id === t.checklistTemplateId)?.name
+    : null;
   const progressText =
     t.progressText ??
     (total ? `${doneCount}/${total} mục` : "Không có checklist");
@@ -194,7 +206,6 @@ const TaskCard: React.FC<{
 
   // Get permissions from task (from API)
   const permissions = t.permissions;
-
   return (
     <>
       {/* Checklist Edit Dialog */}
@@ -221,7 +232,7 @@ const TaskCard: React.FC<{
               </button>
               <button
                 className="text-xs px-3 py-1 rounded bg-emerald-600 text-white"
-                disabled={addCheckItemMutation.isPending || !newLabel.trim()}
+                disabled={addCheckItemMutation.isPending || updateCheckItemMutation.isPending || !newLabel.trim()}
                 onClick={async () => {
                   if (!newLabel.trim()) return;
 
@@ -240,17 +251,24 @@ const TaskCard: React.FC<{
                       // Optionally show error message to user
                     }
                   } else {
-                    // For editing existing items, use the old callback
-                    // (API doesn't have an update endpoint yet)
-                    const updated = (t.checklist ?? []).map((i) =>
-                      i.id === editingItem.id ? { ...i, label: newLabel } : i,
-                    );
-                    onUpdateTaskChecklist?.(t.id, updated);
-                    setEditingItem(null);
+                    // Call API to update existing checklist item
+                    try {
+                      await updateCheckItemMutation.mutateAsync({
+                        taskId: t.id,
+                        itemId: editingItem.id,
+                        content: newLabel.trim(),
+                      });
+                      setEditingItem(null);
+                      setNewLabel("");
+                      setOpen(true); // Keep checklist open
+                    } catch (error) {
+                      console.error("Failed to update checklist item:", error);
+                      // Optionally show error message to user
+                    }
                   }
                 }}
               >
-                {addCheckItemMutation.isPending ? "Đang lưu..." : "Lưu"}
+                {(addCheckItemMutation.isPending || updateCheckItemMutation.isPending) ? "Đang lưu..." : "Lưu"}
               </button>
             </div>
           </div>
@@ -283,16 +301,50 @@ const TaskCard: React.FC<{
             <div className="text-[13px] font-semibold leading-snug truncate">
               {/* ✅ UPDATED:  Clickable Title */}
               <a
-                href={
-                  t.sourceMessageId ? `#msg-${t.sourceMessageId}` : undefined
-                }
+                href={t.messageId ? `#msg-${t.messageId}` : undefined}
                 onClick={(e) => {
-                  if (!t.sourceMessageId) {
-                    e.preventDefault();
+                  e.preventDefault();
+                  if (!t.messageId) {
                     return;
                   }
-                  e.preventDefault();
-                  onClickTitle?.(t.sourceMessageId);
+                  // Build StarredMessageDto object (same pattern as PinnedMessagesPanel)
+                  console.log("messages", messages);
+                  const messageDto: StarredMessageDto = {
+                    messageId: t.messageId,
+                    starredAt: t.createdAt || new Date().toISOString(),
+                    message: {
+                      id: t.messageId,
+                      conversationId: t.workTypeId || "",
+                      senderId: "", // MessageLike doesn't have senderId
+                      senderName: t.assignFrom || "Không xác định",
+                      senderIdentifier: null,
+                      senderFullName: t.assignFrom || null,
+                      senderRoles: null,
+                      parentMessageId: null,
+                      content: t.title || t.description || "", // MessageLike doesn't store content separately
+                      contentType: "TXT",
+                      sentAt: t.createdAt || new Date().toISOString(),
+                      editedAt: null,
+                      linkedTaskId: t.id,
+                      reactions: [],
+                      attachments: (t.attachments || []).map((att) => ({
+                        id: att.id || "",
+                        fileId: att.id|| "",
+                        fileName: att.fileName || null,
+                        fileSize: att.fileSize || 0,
+                        contentType: att.contentType || null,
+                        createdAt: t.createdAt || new Date().toISOString(),
+                      })),
+                      replyCount: 0,
+                      isStarred: false,
+                      isPinned: false,
+                      threadPreview: null,
+                      mentions: [],
+                    },
+                  };
+                  
+                  // Switch to chat tab and scroll to message
+                  onClickTitle?.(messageDto);
                 }}
                 className={`
                   block w-full text-left
@@ -300,7 +352,7 @@ const TaskCard: React.FC<{
                   truncate
                   transition-colors duration-200
                   ${
-                    t.sourceMessageId
+                    t.messageId
                       ? `
                       text-gray-800 
                       hover:text-brand-600 
@@ -318,42 +370,41 @@ const TaskCard: React.FC<{
                   }
                 `}
                 title={
-                  t.sourceMessageId
+                  t.messageId
                     ? "📌 Nhấn để xem tin nhắn gốc"
                     : "⚠️ Không có tin nhắn nguồn"
                 }
-                aria-disabled={!t.sourceMessageId}
+                aria-disabled={!t.messageId}
                 data-testid="task-title"
               >
-                {truncateMessageTitle(t.title || t.description)}
+                {truncateMessageTitle(t.title || t.description || "")}
               </a>
             </div>
 
-            {/* Meta: loại việc, progress, assignee */}
+            {/* Meta: group name, progress, assignee */}
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
               <span className="inline-flex items-center gap-1">
-                <span>Loại việc:</span>
+                <span>Nhóm:</span>
 
-                {/* WorkType name */}
+                {/* Group/Conversation name */}
                 <span className="font-medium text-gray-700">
-                  {workTypeLabel}
+                  {displayLabel}
                 </span>
+              </span>
 
-                {/* CHIP variant */}
-                {t.checklistVariantName && (
-                  <span
-                    className="
+              {/* CHIP template name */}
+              {templateName && (
+                <span
+                  className="
                       inline-flex items-center px-1.5 py-0.5
                       rounded-md text-[10px] font-semibold
                       bg-emerald-50 text-emerald-700 border border-emerald-200
                       shadow-sm
                     "
-                  >
-                    {t.checklistVariantName}
-                  </span>
-                )}
-              </span>
-
+                >
+                  {templateName}
+                </span>
+              )}
               {/* {total > 0 && (
                 <>
                   <span>•</span>
@@ -464,36 +515,35 @@ const TaskCard: React.FC<{
                         className="group flex items-center gap-2 text-[12px] leading-snug rounded-md px-2 py-1 hover:bg-gray-50 transition-all"
                       >
                         {/* Checkbox */}
-                        {c.done ? (
-                          <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
-                            <Check className="w-3 h-3" />
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className=" checklist-btn
+                        <button
+                          type="button"
+                          className={`
                             h-4 w-4 shrink-0 rounded-full
-                            border-[1px] border-emerald-300
-                            bg-white
-                            hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]
                             transition flex items-center justify-center
-                          "
-                            disabled={toggleCheckItemMutation.isPending}
-                            onClick={async () => {
-                              try {
-                                await toggleCheckItemMutation.mutateAsync({
-                                  taskId: t.id,
-                                  itemId: c.id,
-                                });
-                              } catch (error) {
-                                console.error(
-                                  "Failed to toggle checklist item:",
-                                  error,
-                                );
-                              }
-                            }}
-                          />
-                        )}
+                            ${
+                              c.done
+                                ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer"
+                                : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
+                            }
+                          `}
+                          disabled={toggleCheckItemMutation.isPending}
+                          onClick={async () => {
+                            try {
+                              await toggleCheckItemMutation.mutateAsync({
+                                taskId: t.id,
+                                itemId: c.id,
+                              });
+                            } catch (error) {
+                              console.error(
+                                "Failed to toggle checklist item:",
+                                error,
+                              );
+                            }
+                          }}
+                          title={c.done ? "Nhấn để bỏ chọn" : "Nhấn để hoàn thành"}
+                        >
+                          {c.done && <Check className="w-3 h-3" />}
+                        </button>
 
                         {/* Label */}
                         <span
@@ -786,7 +836,7 @@ export const ConversationDetailPanel: React.FC<{
   ) => void;
   taskLogs?: Record<string, TaskLogMessage[]>;
   onOpenTaskLog?: (taskId: string) => void;
-  onOpenSourceMessage?: (messageId: string) => void;
+  onOpenSourceMessage?: (messageDto: StarredMessageDto | null) => void;
   checklistVariants?: ChecklistVariant[];
   messages?: MessageLike[]; // Messages from chat to extract files from
 
@@ -831,6 +881,33 @@ export const ConversationDetailPanel: React.FC<{
   const groupName =
     useConversationStore((s) => s.getConversationName()) || "Nhóm";
 
+  // 🆕 Check if conversation is DM (personal chat) to hide tasks tab
+  // Use activeTabType to handle tab switches even when no conversation selected
+  const selectedConversation = useConversationStore(
+    (s) => s.selectedConversation,
+  );
+  const activeTabType = useConversationStore((s) => s.activeTabType);
+  const isDM = activeTabType === "dm" || selectedConversation?.type === "dm";
+
+  // 🆕 Dynamic tabs based on conversation type
+  const detailTabs = React.useMemo(() => {
+    const baseTabs = [{ key: "info", label: "Thông Tin" }];
+
+    // Only add tasks tab for group chats (not DM)
+    if (!isDM) {
+      baseTabs.push({ key: "order", label: "Công Việc" });
+    }
+
+    return baseTabs;
+  }, [isDM]);
+
+  // 🆕 Auto-switch to "info" tab if DM and currently on "order"
+  React.useEffect(() => {
+    if (isDM && tab === "order") {
+      setTab("info");
+    }
+  }, [isDM, tab, setTab]);
+
   // State for View All Tasks Modal
 
   const [showViewAllTasksModal, setShowViewAllTasksModal] =
@@ -838,7 +915,62 @@ export const ConversationDetailPanel: React.FC<{
   // State for Add Member Dialog
   const [showAddMemberDialog, setShowAddMemberDialog] = React.useState(false);
 
-  // console.log("chatMessages", messages);
+  // Helper: Convert messageId to StarredMessageDto for child components
+  // This allows legacy components (FileManagerPhase1A) that only pass messageId
+  // to still trigger the message scroll functionality
+  const handleOpenSourceMessageById = React.useCallback(
+    (messageId: string) => {
+      // Find the message from messages array
+      const sourceMessage = messages.find((m) => m.id === messageId);
+      
+      if (!sourceMessage) {
+        console.warn("Source message not found:", messageId);
+        return;
+      }
+      
+      // Build StarredMessageDto object
+      const messageDto: StarredMessageDto = {
+        messageId: sourceMessage.id,
+        starredAt: sourceMessage.createdAt || sourceMessage.time || new Date().toISOString(),
+        message: {
+          id: sourceMessage.id,
+          conversationId: sourceMessage.groupId || "",
+          senderId: "",
+          senderName: sourceMessage.senderName || sourceMessage.sender || "Unknown",
+          senderIdentifier: null,
+          senderFullName: sourceMessage.senderName || null,
+          senderRoles: null,
+          parentMessageId: null,
+          content: "",
+          contentType: sourceMessage.type === "image" ? "IMG" : sourceMessage.type === "file" ? "FILE" : "TXT",
+          sentAt: sourceMessage.createdAt || sourceMessage.time || new Date().toISOString(),
+          editedAt: null,
+          linkedTaskId: null,
+          reactions: [],
+          attachments: (sourceMessage.attachments || []).map((att) => ({
+            id: att.fileId || "",
+            fileId: att.fileId || "",
+            fileName: att.fileName || att.name || null,
+            fileSize: att.fileSize || 0,
+            contentType: att.contentType || null,
+            createdAt: sourceMessage.createdAt || new Date().toISOString(),
+          })),
+          replyCount: 0,
+          isStarred: false,
+          isPinned: false,
+          threadPreview: null,
+          mentions: [],
+        },
+      };
+      
+      // Switch to chat tab
+      setTab("chat");
+      // Trigger scroll to message
+      onOpenSourceMessage?.(messageDto);
+    },
+    [messages, onOpenSourceMessage, setTab]
+  );
+
   // Fetch all tasks for conversation (no user task filter)
   const {
     data: linkedTasksData,
@@ -993,19 +1125,15 @@ export const ConversationDetailPanel: React.FC<{
   }, [tasksByWorkRaw, currentUserId]);
   // Get auth user as fallback when currentUserId prop is not provided
   const authUser = useAuthStore((state) => state.user);
-  const effectiveUserId = currentUserId ?? authUser?.id;
+  const effectiveUserId = authUser?.id;
 
   // Filter leader's own tasks
-  // console.log("currentUserId", currentUserId);
-  // console.log("authUser", authUser);
-  // console.log("effectiveUserId", effectiveUserId);
   const leaderOwnTasks = React.useMemo(() => {
     if (!hasLeaderPermissions() || !effectiveUserId) return [];
 
     return tasksByWorkRaw.filter((t) => t.assignTo === effectiveUserId);
   }, [tasksByWorkRaw, viewMode, effectiveUserId]);
 
-  // console.log("Leader own tasks:", leaderOwnTasks);
   // Group leader own tasks by status
   const leaderOwnBuckets = React.useMemo(
     () => ({
@@ -1038,7 +1166,6 @@ export const ConversationDetailPanel: React.FC<{
         return db.getTime() - da.getTime(); // Newest first
       });
   }, [tasksByWorkRaw, viewMode, effectiveUserId, selectedWorkTypeId]);
-
   const myTasks = React.useMemo(
     () =>
       effectiveUserId
@@ -1091,7 +1218,6 @@ export const ConversationDetailPanel: React.FC<{
 
   const workTypeTemplate =
     mergedChecklistTemplates?.[workTypeKey]?.[activeVariantId] ?? [];
-
   return (
     <aside
       className="bg-white shadow-sm flex flex-col min-h-0"
@@ -1104,10 +1230,7 @@ export const ConversationDetailPanel: React.FC<{
         data-testid="detail-panel-header"
       >
         <SegmentedTabs
-          tabs={[
-            { key: "info", label: "Thông Tin" },
-            { key: "order", label: "Công Việc" },
-          ]}
+          tabs={detailTabs}
           active={isTasksTab ? "order" : "info"}
           onChange={(v) => setTab(v as any)}
         />
@@ -1121,21 +1244,23 @@ export const ConversationDetailPanel: React.FC<{
         {/* INFO TAB */}
         {!isTasksTab ? (
           <div className="space-y-4 min-h-0" data-testid="info-tab-content">
-            {/* Group + WorkType */}
-            <div
-              className="rounded-xl border p-6 bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50"
-              data-testid="conversation-info-card"
-            >
-              <div className="flex flex-col items-center text-center gap-1">
-                <div className="text-sm font-semibold">{categoryName}</div>
-                <div className="text-xs text-gray-700">
-                  Đang xem thông tin cho{" "}
-                  <span className="font-medium text-brand-600">
-                    {groupName}
-                  </span>
+            {/* Group + WorkType - Only show for group chats */}
+            {!isDM && (
+              <div
+                className="rounded-xl border p-6 bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50"
+                data-testid="conversation-info-card"
+              >
+                <div className="flex flex-col items-center text-center gap-1">
+                  <div className="text-sm font-semibold">{categoryName}</div>
+                  <div className="text-xs text-gray-700">
+                    Đang xem thông tin cho{" "}
+                    <span className="font-medium text-brand-600">
+                      Loại việc: {groupName}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Ảnh / Video (GRID) */}
             <div
@@ -1148,7 +1273,7 @@ export const ConversationDetailPanel: React.FC<{
                   mode="media"
                   groupId={groupId}
                   selectedWorkTypeId={selectedWorkTypeId}
-                  onOpenSourceMessage={onOpenSourceMessage}
+                  onOpenSourceMessage={handleOpenSourceMessageById}
                   onNavigateToChat={() => setTab("chat")}
                   messages={messages}
                   messagesQuery={messagesQuery}
@@ -1167,7 +1292,7 @@ export const ConversationDetailPanel: React.FC<{
                   mode="docs"
                   groupId={groupId}
                   selectedWorkTypeId={selectedWorkTypeId}
-                  onOpenSourceMessage={onOpenSourceMessage}
+                  onOpenSourceMessage={handleOpenSourceMessageById}
                   onNavigateToChat={() => setTab("chat")}
                   messages={messages}
                   messagesQuery={messagesQuery}
@@ -1175,8 +1300,8 @@ export const ConversationDetailPanel: React.FC<{
               </RightAccordion>
             </div>
 
-            {/* Thành viên (Leader only) */}
-            {hasLeaderPermissions() && (
+            {/* Thành viên (Leader only + Group chat only) */}
+            {hasLeaderPermissions() && !isDM && (
               <div
                 className="premium-accordion-wrapper"
                 data-testid="members-section"
@@ -1273,6 +1398,8 @@ export const ConversationDetailPanel: React.FC<{
                           t={t}
                           members={members}
                           viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
                           onChangeStatus={onChangeTaskStatus}
                           onReassign={onReassignTask}
                           onToggleChecklist={onToggleChecklist}
@@ -1280,10 +1407,14 @@ export const ConversationDetailPanel: React.FC<{
                             onUpdateTaskChecklist?.(taskId, next);
                           }}
                           taskLogs={taskLogs}
-                          onClickTitle={(messageId) => {
-                            onOpenSourceMessage?.(messageId);
+                          onClickTitle={(messageDto) => {
+                            // Switch to chat tab
+                            setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
                           }}
                           onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
                         />
                       ))}
                       {staffBuckets.inProgress.map((t) => (
@@ -1292,6 +1423,8 @@ export const ConversationDetailPanel: React.FC<{
                           t={t}
                           members={members}
                           viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
                           onChangeStatus={onChangeTaskStatus}
                           onReassign={onReassignTask}
                           onToggleChecklist={onToggleChecklist}
@@ -1299,10 +1432,14 @@ export const ConversationDetailPanel: React.FC<{
                             onUpdateTaskChecklist?.(taskId, next);
                           }}
                           taskLogs={taskLogs}
-                          onClickTitle={(messageId) => {
-                            onOpenSourceMessage?.(messageId);
+                          onClickTitle={(messageDto) => {
+                            // Switch to chat tab
+                            setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
                           }}
                           onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
                         />
                       ))}
                     </div>
@@ -1330,14 +1467,20 @@ export const ConversationDetailPanel: React.FC<{
                           t={t}
                           members={members}
                           viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
                           onChangeStatus={onChangeTaskStatus}
                           onReassign={onReassignTask}
                           onToggleChecklist={onToggleChecklist}
                           taskLogs={taskLogs}
-                          onClickTitle={(messageId) => {
-                            onOpenSourceMessage?.(messageId);
+                          onClickTitle={(messageDto) => {
+                            // Switch to chat tab
+                            setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
                           }}
                           onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
                         />
                       ))}
                     </div>
@@ -1484,7 +1627,7 @@ export const ConversationDetailPanel: React.FC<{
                                             {/* Title */}
                                             <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
                                               {truncateMessageTitle(
-                                                t.title || t.description,
+                                                t.title || t.description || "",
                                               )}
                                             </div>
 
@@ -1522,20 +1665,12 @@ export const ConversationDetailPanel: React.FC<{
                                                 )}
                                             </div>
 
-                                            {/* WorkType + Variant chips */}
-                                            {(t.workTypeName ||
-                                              t.checklistVariantName) && (
+                                            {/* WorkType chip */}
+                                            {t.workTypeName && (
                                               <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-                                                {t.workTypeName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                                                    {t.workTypeName}
-                                                  </span>
-                                                )}
-                                                {t.checklistVariantName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    {t.checklistVariantName}
-                                                  </span>
-                                                )}
+                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                                  {t.workTypeName}
+                                                </span>
                                               </div>
                                             )}
                                           </div>
@@ -1648,22 +1783,25 @@ export const ConversationDetailPanel: React.FC<{
                           <Users className="h-4 w-4 text-brand-600" />
                           <span className="text-sm font-semibold">
                             Công Việc Của Nhóm{" "}
-                            <span className="text-brand-500"> {groupName}</span>
+                            <span className="text-brand-500">
+                              {" "}
+                              {categoryName}
+                            </span>
                           </span>
                           <span className="text-xs text-gray-500">
                             • Loại việc:{" "}
                             <span className="font-medium text-gray-700">
-                              {workTypeName}
+                              {groupName}
                             </span>
                           </span>
                         </div>
 
                         {/* Filter - Select nhân viên */}
-                        <div className="flex justify-start mt-2">
+                        <div className="flex justify-between items-center w-full mt-2">
                           <div className="flex items-center gap-2 text-xs">
                             <span>Nhân viên:</span>
                             <select
-                              className="rounded-lg border border-brand-200 px-2 py-1 bg-white"
+                              className="w-full rounded-lg border border-brand-200 px-2 py-1 bg-white"
                               value={assigneeFilter}
                               onChange={(e) =>
                                 setAssigneeFilter(e.target.value)
@@ -1679,13 +1817,14 @@ export const ConversationDetailPanel: React.FC<{
                             </select>
                           </div>
 
-                          <span
-                            className="ml-auto mt-2 text-[12px] text-emerald-700 cursor-pointer hover:underline select-none"
+                          <button
+                            className="ml-auto mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors group"
                             onClick={() => setTemplateOpen(true)}
                             data-testid="default-checklist-link"
+                            title="Xem và chỉnh sửa checklist mặc định"
                           >
-                            Checklist mặc định
-                          </span>
+                            <FileText className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
+                          </button>
                         </div>
                       </div>
 
@@ -1716,9 +1855,8 @@ export const ConversationDetailPanel: React.FC<{
                       </div>
                     ) : (
                       <div className="space-y-6">
-                        {/* AWAITING REVIEW */}
-                        {leadBuckets.awaiting.length > 0 && (
-                          <section data-testid="leader-awaiting-section">
+                        {/* AWAITING REVIEW - Always show */}
+                        <section data-testid="leader-awaiting-section">
                             <div
                               className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
                               onClick={() => {
@@ -1757,24 +1895,28 @@ export const ConversationDetailPanel: React.FC<{
                                     members={members}
                                     viewMode="lead"
                                     isLeaderOwnTask={false} // ✅ Team task
+                                    groupName={groupName}
+                                    checklistVariants={checklistVariants}
                                     onChangeStatus={onChangeTaskStatus}
                                     onReassign={onReassignTask}
                                     onToggleChecklist={onToggleChecklist}
                                     taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
+                                    onClickTitle={(messageDto) => {
+                                      // Switch to chat tab
+                                      setTab("chat");
+                                      // Trigger scroll to message
+                                      onOpenSourceMessage?.(messageDto);
                                     }}
                                     onOpenTaskLog={onOpenTaskLog}
+                                    messages={messages}
                                   />
                                 ))}
                               </div>
                             )}
                           </section>
-                        )}
 
-                        {/* TODO */}
-                        {leadBuckets.todo.length > 0 && (
-                          <section data-testid="leader-todo-section">
+                        {/* TODO - Always show */}
+                        <section data-testid="leader-todo-section">
                             <div
                               className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
                               onClick={() => setShowLeadTodo((v) => !v)}
@@ -1794,6 +1936,8 @@ export const ConversationDetailPanel: React.FC<{
                                     members={members}
                                     viewMode="lead"
                                     isLeaderOwnTask={false} // ✅ Team task
+                                    groupName={groupName}
+                                    checklistVariants={checklistVariants}
                                     onChangeStatus={onChangeTaskStatus}
                                     onReassign={onReassignTask}
                                     onToggleChecklist={onToggleChecklist}
@@ -1801,20 +1945,22 @@ export const ConversationDetailPanel: React.FC<{
                                       onUpdateTaskChecklist
                                     }
                                     taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
+                                    onClickTitle={(messageDto) => {
+                                      // Switch to chat tab
+                                      setTab("chat");
+                                      // Trigger scroll to message
+                                      onOpenSourceMessage?.(messageDto);
                                     }}
                                     onOpenTaskLog={onOpenTaskLog}
+                                    messages={messages}
                                   />
                                 ))}
                               </div>
                             )}
                           </section>
-                        )}
 
-                        {/* IN PROGRESS */}
-                        {leadBuckets.inProgress.length > 0 && (
-                          <section data-testid="leader-inprogress-section">
+                        {/* IN PROGRESS - Always show */}
+                        <section data-testid="leader-inprogress-section">
                             <div
                               className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
                               onClick={() => setShowLeadInProgress((v) => !v)}
@@ -1835,52 +1981,62 @@ export const ConversationDetailPanel: React.FC<{
                                     members={members}
                                     viewMode="lead"
                                     isLeaderOwnTask={false} // Team task
+                                    groupName={groupName}
+                                    checklistVariants={checklistVariants}
                                     onChangeStatus={onChangeTaskStatus}
                                     onReassign={onReassignTask}
                                     onToggleChecklist={onToggleChecklist}
                                     taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
+                                    onClickTitle={(messageDto) => {
+                                      // Switch to chat tab
+                                      setTab("chat");
+                                      // Trigger scroll to message
+                                      onOpenSourceMessage?.(messageDto);
                                     }}
                                     onOpenTaskLog={onOpenTaskLog}
+                                    messages={messages}
                                   />
                                 ))}
                               </div>
                             )}
                           </section>
-                        )}
 
-                        {/* DONE TODAY */}
-                        {leadBuckets.done.length > 0 && (
-                          <section data-testid="leader-done-section">
+                        {/* DONE TODAY - Always show, filter only today */}
+                        <section data-testid="leader-done-section">
                             <div
                               className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
                               onClick={() => setShowLeadDone((v) => !v)}
                             >
                               <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
                               <span>
-                                Hoàn thành ({leadBuckets.done.length}){" "}
+                                Hoàn thành ({leadBuckets.done.filter((t) => isToday(t.updatedAt || t.createdAt)).length}){" "}
                                 {showLeadDone ? " ▲" : " ▼"}
                               </span>
                             </div>
 
                             {showLeadDone && (
                               <div className="space-y-3">
-                                {leadBuckets.done.map((t) => (
+                                {leadBuckets.done.filter((t) => isToday(t.updatedAt || t.createdAt)).map((t) => (
                                   <TaskCard
                                     key={t.id}
                                     t={t}
                                     members={members}
                                     viewMode="lead"
                                     isLeaderOwnTask={false} // ✅ Team task
+                                    groupName={groupName}
+                                    checklistVariants={checklistVariants}
                                     onChangeStatus={onChangeTaskStatus}
                                     onReassign={onReassignTask}
                                     onToggleChecklist={onToggleChecklist}
                                     taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
+                                    onClickTitle={(messageDto) => {
+                                      // Switch to chat tab
+                                      setTab("chat");
+                                      // Trigger scroll to message
+                                      onOpenSourceMessage?.(messageDto);
                                     }}
                                     onOpenTaskLog={onOpenTaskLog}
+                                    messages={messages}
                                   />
                                 ))}
                               </div>
@@ -1896,7 +2052,6 @@ export const ConversationDetailPanel: React.FC<{
                               </button>
                             </div>
                           </section>
-                        )}
                       </div>
                     )}
 
@@ -2006,7 +2161,9 @@ export const ConversationDetailPanel: React.FC<{
                                               >
                                                 <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
                                                   {truncateMessageTitle(
-                                                    t.title || t.description,
+                                                    t.title ||
+                                                      t.description ||
+                                                      "",
                                                   )}
                                                 </div>
 
@@ -2200,15 +2357,21 @@ export const ConversationDetailPanel: React.FC<{
                                 members={members}
                                 viewMode="lead"
                                 isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
                                 onChangeStatus={onChangeTaskStatus}
                                 onReassign={onReassignTask}
                                 onToggleChecklist={onToggleChecklist}
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
-                                onClickTitle={(messageId) => {
-                                  onOpenSourceMessage?.(messageId);
+                                onClickTitle={(messageDto) => {
+                                  // Switch to chat tab
+                                  setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
                                 }}
                                 onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
                               />
                             ))}
                           </div>
@@ -2243,15 +2406,21 @@ export const ConversationDetailPanel: React.FC<{
                                 members={members}
                                 viewMode="lead"
                                 isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
                                 onChangeStatus={onChangeTaskStatus}
                                 onReassign={onReassignTask}
                                 onToggleChecklist={onToggleChecklist}
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
-                                onClickTitle={(messageId) => {
-                                  onOpenSourceMessage?.(messageId);
+                                onClickTitle={(messageDto) => {
+                                  // Switch to chat tab
+                                  setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
                                 }}
                                 onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
                               />
                             ))}
                           </div>
@@ -2287,15 +2456,21 @@ export const ConversationDetailPanel: React.FC<{
                                 members={members}
                                 viewMode="lead"
                                 isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
                                 onChangeStatus={onChangeTaskStatus}
                                 onReassign={onReassignTask}
                                 onToggleChecklist={onToggleChecklist}
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
-                                onClickTitle={(messageId) => {
-                                  onOpenSourceMessage?.(messageId);
+                                onClickTitle={(messageDto) => {
+                                  // Switch to chat tab
+                                  setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
                                 }}
                                 onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
                               />
                             ))}
                           </div>
@@ -2429,7 +2604,7 @@ export const ConversationDetailPanel: React.FC<{
                                             {/* Title */}
                                             <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
                                               {truncateMessageTitle(
-                                                t.title || t.description,
+                                                t.title || t.description || "",
                                               )}
                                             </div>
 
@@ -2467,20 +2642,12 @@ export const ConversationDetailPanel: React.FC<{
                                                 )}
                                             </div>
 
-                                            {/* WorkType + Variant */}
-                                            {(t.workTypeName ||
-                                              t.checklistVariantName) && (
+                                            {/* WorkType */}
+                                            {t.workTypeName && (
                                               <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-                                                {t.workTypeName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                                                    {t.workTypeName}
-                                                  </span>
-                                                )}
-                                                {t.checklistVariantName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    {t.checklistVariantName}
-                                                  </span>
-                                                )}
+                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                                  {t.workTypeName}
+                                                </span>
                                               </div>
                                             )}
                                           </div>
@@ -2518,6 +2685,7 @@ export const ConversationDetailPanel: React.FC<{
           workTypeName={workTypeName}
           template={workTypeTemplate}
           checklistVariants={checklistVariants}
+          conversationId={groupId ?? ""}
           activeVariantId={
             activeVariantId !== "__default__" ? activeVariantId : undefined
           }

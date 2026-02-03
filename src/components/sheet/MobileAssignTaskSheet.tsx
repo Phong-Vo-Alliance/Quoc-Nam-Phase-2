@@ -27,7 +27,7 @@ interface Props {
 
   onCreateTask: (payload: {
     title: string;
-    sourceMessageId: string;
+    messageId: string;
     assignTo: string;
     checklistVariantId?: string;
     checklistVariantName?: string;
@@ -80,12 +80,12 @@ export const MobileAssignTaskSheet: React.FC<Props> = ({
     if (!canSubmit) return;
     const variant = checklistVariantId || undefined;
     const selectedVariant = checklistVariants?.find((v) => v.id === variant);
-    const sourceMessageId =
+    const messageId =
       (source === "message" ? message?.id : info?.messageId) || "";
 
     onCreateTask({
       title: title.trim(),
-      sourceMessageId,
+      messageId,
       assignTo: assignee,
       checklistVariantId: variant,
       checklistVariantName: selectedVariant?.name,

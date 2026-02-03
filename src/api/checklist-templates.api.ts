@@ -61,7 +61,7 @@ export const checklistTemplatesApi = {
     templateId: string,
     payload: UpdateCheckListTemplateRequest
   ): Promise<CheckListTemplateResponse> => {
-    const { data } = await taskApiClient.put<CheckListTemplateResponse>(
+    const { data } = await taskApiClient.patch<CheckListTemplateResponse>(
       `/api/checklist-templates/${templateId}`,
       payload
     );

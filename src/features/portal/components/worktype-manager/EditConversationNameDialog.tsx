@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { usePatchChecklistTemplate } from "@/hooks/mutations/useChecklistTemplateMutations";
+import { usePatchChecklistTemplate } from "@/hooks/mutations/useTaskMutations";
 
 interface EditConversationNameDialogProps {
   open: boolean;
@@ -77,7 +77,6 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
         payload: {
           name: trimmedName,
         },
-        conversationId: conversationId,
       });
 
       onOpenChange(false);

@@ -49,7 +49,7 @@ interface MessageBubbleProps {
   defaultChecklistVariantId?: string;
   onCreateTaskFromMessage?: (payload: {
     title: string;
-    sourceMessageId: string;
+    messageId: string;
     assignTo: string;
     checklistVariantId?: string;
     checklistVariantName?: string;

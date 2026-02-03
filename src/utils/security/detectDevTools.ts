@@ -36,7 +36,7 @@ export function detectDevTools(): boolean {
         return "";
       },
     });
-    console.log(element);
+    element.toString();
 
     return devtoolsOpen || consoleOpen;
   } catch (error) {

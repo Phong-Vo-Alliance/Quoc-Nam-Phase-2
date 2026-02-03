@@ -121,7 +121,7 @@ export function transformTaskDetailToLocal(
       ? `${apiTask.completionPercentage}%` 
       : undefined,
     
-    sourceMessageId: apiTask.messageId || '',
+    messageId: apiTask.messageId || '',
     title: apiTask.title || 'Untitled Task',
     description: apiTask.description || undefined,
     
@@ -142,6 +142,7 @@ export function transformTaskDetailToLocal(
     
     createdAt: apiTask.createdAt,
     updatedAt: apiTask.updatedAt || apiTask.createdAt,
+    checklistTemplateId: apiTask.checklistTemplateId || undefined,
   };
 }
 

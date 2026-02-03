@@ -111,17 +111,14 @@ class ChatHubConnection {
 
   async start(accessToken?: string): Promise<void> {
     if (this.connection?.state === signalR.HubConnectionState.Connected) {
-      console.log("SignalR: Already connected");
       return;
     }
 
     if (this.isConnecting) {
-      console.log("SignalR: Connection already in progress");
       return;
     }
 
     this.isConnecting = true;
-    console.log("SignalR: Connecting to hub:", HUB_URL);
 
     try {
       this.connection = new signalR.HubConnectionBuilder()
@@ -146,19 +143,16 @@ class ChatHubConnection {
       });
 
       this.connection.onreconnected((connectionId) => {
-        console.log("SignalR: Reconnected with ID:", connectionId);
         this.reconnectAttempts = 0;
       });
 
       this.connection.onclose((error) => {
-        console.log("SignalR: Connection closed", error);
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
           console.error("SignalR: Max reconnect attempts reached");
         }
       });
 
       await this.connection.start();
-      console.log("SignalR: Connected successfully");
       this.reconnectAttempts = 0;
     } catch (error) {
       // Don't log AbortError as it's expected when connection is stopped during negotiation
@@ -319,6 +313,10 @@ class ChatHubConnection {
 
   offMessageRead(): void {
     this.connection?.off(SIGNALR_EVENTS.MESSAGE_READ);
+  }
+
+  offMessageSent(): void {
+    this.connection?.off(SIGNALR_EVENTS.MESSAGE_SENT);
   }
 
   // Remove all listeners

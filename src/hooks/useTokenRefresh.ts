@@ -42,7 +42,6 @@ export function useTokenRefresh() {
     // Check if token will expire soon (within 10 minutes)
     if (willTokenExpireSoon(accessToken, AUTH_CONFIG.tokenRefreshBeforeExpireMs)) {
       // TODO: Implement token refresh when API supports it
-      console.log('[Auth] Token will expire soon, refresh not implemented yet');
     }
   }, [accessToken, isAuthenticated, logout, navigate]);
 

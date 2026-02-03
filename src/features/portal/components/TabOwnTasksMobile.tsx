@@ -428,7 +428,7 @@ const TaskCardMobile: React.  FC<{
   taskLogs?: Record<string, TaskLogMessage[]>;
   formatTime: (iso:  string) => string;
   truncateTitle: (t?: string) => string;
-  onClickTitle?: (sourceMessageId:  string) => void;
+  onClickTitle?: (messageId:  string) => void;
 }> = ({
   task:   t,
   members,
@@ -455,20 +455,20 @@ const TaskCardMobile: React.  FC<{
       {/* Title */}
       <div className="text-sm font-semibold text-gray-800 leading-snug mb-1">
         <a
-          href={t.sourceMessageId ? `#msg-${t.sourceMessageId}` : undefined}
+          href={t.messageId ? `#msg-${t.messageId}` : undefined}
           onClick={(e) => {
-            if (!t.sourceMessageId) {
+            if (!t.messageId) {
               e.preventDefault();
               return;
             }
             e.preventDefault();
-            onClickTitle?.(t.sourceMessageId);
+            onClickTitle?.(t.messageId);
           }}
           className={`
             block w-full text-left
             text-sm font-semibold leading-snug
             transition-colors duration-200
-            ${t.sourceMessageId
+            ${t.messageId
                     ? `
                 text-gray-800 
                 active:text-brand-600 
@@ -479,7 +479,7 @@ const TaskCardMobile: React.  FC<{
               : 'text-gray-400 no-underline'
             }
           `}
-          aria-disabled={!t.sourceMessageId}
+          aria-disabled={!t.messageId}
         >
           {truncateTitle(t.title || t.description)}
         </a>

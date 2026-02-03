@@ -85,7 +85,7 @@ const MobileTaskCard: React.FC<{
   onUpdateTaskChecklist?:  (taskId: string, next:  ChecklistItem[]) => void;
   onOpenTaskLog?: (taskId: string) => void;
   currentUserId?: string;
-  onClickTitle?: (sourceMessageId:  string) => void;
+  onClickTitle?: (messageId:  string) => void;
 }> = ({ t, members, viewMode, onChangeStatus, onReassign, onToggleChecklist, onUpdateTaskChecklist, onOpenTaskLog, currentUserId, onClickTitle }) => {
   const [showChecklist, setShowChecklist] = React.useState(false);
   const [showActions, setShowActions] = React. useState(false);
@@ -225,21 +225,21 @@ const MobileTaskCard: React.FC<{
           <div className="flex-1 min-w-0">
             {/* UPDATED: Clickable Title */}
             <a
-              href={t.sourceMessageId ? `#msg-${t.sourceMessageId}` : undefined}
+              href={t.messageId ? `#msg-${t.messageId}` : undefined}
               onClick={(e) => {
-                if (!t.sourceMessageId) {
+                if (!t.messageId) {
                   e.preventDefault();
                   return;
                 }
                 e.preventDefault();
-                onClickTitle?.(t.sourceMessageId);
+                onClickTitle?.(t.messageId);
               }}
               className={`
                 block w-full text-left
                 text-sm font-semibold leading-snug
                 line-clamp-2
                 transition-colors duration-200
-                ${t.sourceMessageId
+                ${t.messageId
                           ? `
                     text-gray-800 
                     active:text-brand-600 
@@ -250,7 +250,7 @@ const MobileTaskCard: React.FC<{
                   : 'text-gray-400 no-underline'
                 }
               `}
-              aria-disabled={!t.sourceMessageId}
+              aria-disabled={!t.messageId}
             >
               {truncateTitle(t.title || t.description, 80)}
             </a>

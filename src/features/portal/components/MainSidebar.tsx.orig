@@ -254,7 +254,7 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
                 <span className="text-xs font-medium">Danh sách việc cần làm</span>
               </div>
 
-              {/* Quản lý loại việc (Leader only) */}
+              {/*  (Leader only) */}
               {viewMode === 'lead' && (
                 <div
                   className="flex flex-col items-center text-center text-gray-500 hover:text-brand-700 cursor-pointer"

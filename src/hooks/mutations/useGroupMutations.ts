@@ -5,6 +5,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { addGroupMember } from "@/api/conversations.api";
 import { conversationKeys } from "@/hooks/queries";
+import { categoriesKeys } from "@/hooks/queries/useCategories"; // 🆕 For updating categories
 
 /**
  * Add a member to a group
@@ -21,9 +22,9 @@ export function useAddGroupMember() {
       queryClient.invalidateQueries({
         queryKey: conversationKeys.members(variables.groupId),
       });
-      // Also invalidate groups list in case member count changed
+      // Invalidate categories (contains conversations with member counts)
       queryClient.invalidateQueries({
-        queryKey: conversationKeys.groups(),
+        queryKey: categoriesKeys.all,
       });
     },
   });
