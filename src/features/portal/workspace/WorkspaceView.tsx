@@ -21,13 +21,17 @@ import type {
   ChecklistTemplateMap,
   TaskLogMessage,
 } from "../types";
-import type { PinnedMessageDto, StarredMessageDto } from "@/types/pinned_and_starred";
+import type {
+  PinnedMessageDto,
+  StarredMessageDto,
+} from "@/types/pinned_and_starred";
 import { MessageSquareIcon, ClipboardListIcon, UserIcon } from "lucide-react";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useAllTasks } from "@/hooks/queries/useTasks";
 import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW: Fetch categories first before messages
 import { useUpdateTask } from "@/hooks/mutations";
+import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { tasksKeys } from "@/hooks/queries/useTasks";
@@ -303,13 +307,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   const LEFT_WIDTH = 360; // px
   const MIN_RIGHT_WIDTH = 360; // px
   const DIVIDER_WIDTH = 8; // px (w-2)
-  const MIN_LEFT_TOTAL = 600; // px — lock when the whole left side (Left + Chat + Divider) would be < 500
+  const MIN_LEFT_TOTAL = 818; // px — lock when the whole left side (Left + Chat + Divider) would be < 818 (ensures chat area min 450px)
 
   // State
   const [rightPanelWidth, setRightPanelWidth] = React.useState<number>(360);
 
   // 🆕 NEW: Track message to scroll to (from starred/pinned navigation)
   const [scrollToMessage, setScrollToMessage] = React.useState<
+    PinnedMessageDto | StarredMessageDto | null
+  >(null);
+
+  // 🆕 NEW: Track pending scroll - message to scroll to after conversation loads
+  const [pendingScrollMessage, setPendingScrollMessage] = React.useState<
     PinnedMessageDto | StarredMessageDto | null
   >(null);
 
@@ -466,6 +475,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   // Task update mutation for reassigning tasks
   const updateTaskMutation = useUpdateTask();
 
+  // Send message mutation for system notifications
+  const sendMessageMutation = useSendMessage({
+    workspaceId: selectedConversation?.id || "",
+    conversationId: selectedConversation?.id || "",
+  });
+
   // Fetch messages for the conversation from Chat API
   // This will re-fetch whenever selectedConversation changes (conversation switch)
   const messagesQuery = useMessages({
@@ -573,21 +588,45 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
         return;
       }
 
+      // Find assignee name from members
+      const assigneeMember = apiGroupMembers.find((m) => m.id === assignTo);
+      const assigneeName = assigneeMember?.name || assignTo;
+
       // Update task with new assignee
-      updateTaskMutation.mutate({
-        taskId,
-        data: {
-          title: task.title,
-          description: task.description || null,
-          priority: task.priority,
-          dueDate: task.dueDate || null,
-          conversationId: task.workTypeId || null,
-          messageId: task.messageId || null,
-          assignTo: assignTo,
+      updateTaskMutation.mutate(
+        {
+          taskId,
+          data: {
+            title: task.title,
+            description: task.description || null,
+            priority: task.priority,
+            dueDate: task.dueDate || null,
+            conversationId: task.workTypeId || null,
+            messageId: task.messageId || null,
+            assignTo: assignTo,
+          },
         },
-      });
+        {
+          onSuccess: () => {
+            // Send system message notification
+            if (selectedConversation?.id) {
+              sendMessageMutation.mutate({
+                conversationId: selectedConversation.id,
+                content: `Công việc "${task.title}" đã được chuyển giao cho ${assigneeName}`,
+                messageType: "SYS",
+              });
+            }
+          },
+        },
+      );
     },
-    [apiTasks, updateTaskMutation]
+    [
+      apiTasks,
+      apiGroupMembers,
+      updateTaskMutation,
+      sendMessageMutation,
+      selectedConversation?.id,
+    ],
   );
 
   // Handler to update conversation name when selecting from API
@@ -624,6 +663,22 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     return new Date().toISOString();
   };
 
+  // 🆕 NEW: Effect to handle pending scroll after conversation change
+  React.useEffect(() => {
+    if (
+      pendingScrollMessage &&
+      selectedConversation?.id === pendingScrollMessage.message.conversationId
+    ) {
+      // Conversation has loaded, now scroll to message
+      console.log(
+        "🎯 Conversation loaded, scrolling to message:",
+        pendingScrollMessage.messageId,
+      );
+      setScrollToMessage(pendingScrollMessage);
+      setPendingScrollMessage(null);
+    }
+  }, [selectedConversation?.id, pendingScrollMessage]);
+
   if (isMobile) {
     const [showQuickMessageMobile, setShowQuickMessageMobile] =
       React.useState(false);
@@ -646,10 +701,58 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                     onClosePinned || (() => props.setWorkspaceMode("default"))
                   }
                   onOpenChat={(messageDto) => {
-                    // Navigate to conversation first
-                    handleMobileSelectChat({ type: "group", id: messageDto.message.conversationId });
-                    // Then set StarredMessageDto to scroll to
-                    setScrollToMessage(messageDto);
+                    // Get category from messageDto
+                    const conversationId = messageDto.message.conversationId;
+
+                    // Find category that contains this conversation
+                    const category = categoriesQuery.data?.find((cat) =>
+                      cat.conversations?.some(
+                        (conv) => conv.conversationId === conversationId,
+                      ),
+                    );
+
+                    if (!category) {
+                      console.error(
+                        "Category not found for conversation:",
+                        conversationId,
+                      );
+                      return;
+                    }
+
+                    console.log("🎯 Navigating to starred message:", {
+                      conversationId,
+                      categoryId: category.id,
+                      currentConversationId: selectedConversation?.id,
+                    });
+
+                    // Check if we're already in the correct conversation
+                    if (selectedConversation?.id === conversationId) {
+                      // Same conversation - scroll immediately
+                      console.log(
+                        "🎯 Already in correct conversation, scrolling immediately",
+                      );
+                      setScrollToMessage(messageDto);
+                    } else {
+                      // Different conversation - navigate first, then scroll after load
+                      console.log(
+                        "🎯 Different conversation, navigating first...",
+                      );
+
+                      // Set pending scroll
+                      setPendingScrollMessage(messageDto);
+
+                      // Navigate to conversation
+                      const categoryTarget = {
+                        type: "group" as const,
+                        id: conversationId,
+                        categoryId: category.id,
+                      };
+
+                      setSelectedConversation(categoryTarget);
+                      onSelectChat(categoryTarget);
+
+                      // The useEffect will trigger scroll after conversation loads
+                    }
                   }}
                   onPreview={(file) => openPreview?.(file as any)}
                 />
@@ -848,15 +951,25 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                   senderFullName: pin.sender,
                   senderId: "",
                   sentAt: pin.time,
-                  contentType: pin.type === "image" ? "IMG" : pin.type === "file" ? "FILE" : "TXT",
-                  attachments: pin.fileInfo ? [{
-                    fileId: pin.fileInfo.url,
-                    fileName: pin.fileInfo.name,
-                    fileSize: parseInt(pin.fileInfo.size || "0"),
-                    contentType: pin.fileInfo.type === "image" ? "IMG" : "FILE"
-                  }] : undefined
+                  contentType:
+                    pin.type === "image"
+                      ? "IMG"
+                      : pin.type === "file"
+                        ? "FILE"
+                        : "TXT",
+                  attachments: pin.fileInfo
+                    ? [
+                        {
+                          fileId: pin.fileInfo.url,
+                          fileName: pin.fileInfo.name,
+                          fileSize: parseInt(pin.fileInfo.size || "0"),
+                          contentType:
+                            pin.fileInfo.type === "image" ? "IMG" : "FILE",
+                        },
+                      ]
+                    : undefined,
                 },
-                starredAt: pin.time
+                starredAt: pin.time,
               } as StarredMessageDto);
             }}
             onPreview={(file) => openPreview?.(file as any)}
@@ -885,11 +998,56 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           <PinnedMessagesPanel
             onClose={onClosePinned || (() => props.setWorkspaceMode("default"))}
             onOpenChat={(messageDto) => {
-              // Navigate to conversation
-              console.log("Navigating to pinned message's conversation:", messageDto);
-              onSelectChat({ type: "group", id: messageDto.message.conversationId, categoryId: "" });
-              // Set StarredMessageDto to scroll to
-              setScrollToMessage(messageDto);
+              // Get category from messageDto
+              const conversationId = messageDto.message.conversationId;
+
+              // Find category that contains this conversation
+              const category = categoriesQuery.data?.find((cat) =>
+                cat.conversations?.some(
+                  (conv) => conv.conversationId === conversationId,
+                ),
+              );
+
+              if (!category) {
+                console.error(
+                  "Category not found for conversation:",
+                  conversationId,
+                );
+                return;
+              }
+
+              console.log("🎯 Navigating to starred message:", {
+                conversationId,
+                categoryId: category.id,
+                currentConversationId: selectedConversation?.id,
+              });
+
+              // Check if we're already in the correct conversation
+              if (selectedConversation?.id === conversationId) {
+                // Same conversation - scroll immediately
+                console.log(
+                  "🎯 Already in correct conversation, scrolling immediately",
+                );
+                setScrollToMessage(messageDto);
+              } else {
+                // Different conversation - navigate first, then scroll after load
+                console.log("🎯 Different conversation, navigating first...");
+
+                // Set pending scroll
+                setPendingScrollMessage(messageDto);
+
+                // Navigate to conversation
+                const categoryTarget = {
+                  type: "group" as const,
+                  id: conversationId,
+                  categoryId: category.id,
+                };
+
+                setSelectedConversation(categoryTarget);
+                onSelectChat(categoryTarget);
+
+                // The useEffect will trigger scroll after conversation loads
+              }
             }}
             onPreview={(file) => openPreview?.(file as any)}
           />

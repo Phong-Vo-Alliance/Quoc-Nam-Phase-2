@@ -95,4 +95,15 @@ export const checklistTemplatesApi = {
   deleteTemplate: async (templateId: string): Promise<void> => {
     await taskApiClient.delete(`/api/checklist-templates/${templateId}`);
   },
+
+  /**
+   * Set a template as default for its conversation
+   * POST /api/checklist-templates/{id}/set-default
+   * @param templateId - The template UUID
+   * @returns Void (204 No Content expected)
+   * @throws {AxiosError} On API error (400 if global template, 404 if not found, 401, etc.)
+   */
+  setTemplateAsDefault: async (templateId: string): Promise<void> => {
+    await taskApiClient.post(`/api/checklist-templates/${templateId}/set-default`);
+  },
 };

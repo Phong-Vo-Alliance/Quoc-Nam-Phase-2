@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Pencil, Star, AlertCircle, Loader2 } from "lucide-react";
 import { AddEditVariantDialog } from "./AddEditVariantDialog";
 import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
+import { useSetTemplateAsDefault } from "@/hooks/mutations/useSetTemplateAsDefault";
 import type { WorkType, ChecklistVariant } from "../../types";
 
 /**
@@ -54,6 +55,15 @@ export const ManageVariantsDialog: React.FC<ManageVariantsDialogProps> = ({
     refetch: refetchTemplates
   } = useChecklistTemplates();
 
+  // Mutation to set template as default
+  const setDefaultMutation = useSetTemplateAsDefault({
+    conversationId,
+    onSuccess: () => {
+      // Refetch templates to get updated isDefault flags
+      refetchTemplates();
+    },
+  });
+
   // Initialize variants from API or workType
   useEffect(() => {
     if (open) {
@@ -61,11 +71,12 @@ export const ManageVariantsDialog: React.FC<ManageVariantsDialogProps> = ({
         // Map API templates to ChecklistVariant format
         const mappedVariants: ChecklistVariant[] = apiTemplates
           .filter(template => template.name !== null)
-          .map((template, index) => ({
+          .filter(template => template.conversationId === conversationId)
+          .map((template) => ({
             id: template.id,
             name: template.name!,
             description: template.description || undefined,
-            isDefault: index === 0, // First template as default
+            isDefault: template.isDefault, // Use isDefault from API
           }));
         setVariants(mappedVariants);
       } else {
@@ -121,12 +132,18 @@ export const ManageVariantsDialog: React.FC<ManageVariantsDialogProps> = ({
   };
 
   const handleSetDefault = (variantId: string) => {
-    setVariants((prev) =>
-      prev.map((v) => ({
-        ...v,
-        isDefault: v.id === variantId,
-      }))
-    );
+    // If conversationId exists, call API to set default
+    if (conversationId) {
+      setDefaultMutation.mutate(variantId);
+    } else {
+      // Fallback to local state update for non-API mode
+      setVariants((prev) =>
+        prev.map((v) => ({
+          ...v,
+          isDefault: v.id === variantId,
+        }))
+      );
+    }
   };
 
   const handleSaveAll = () => {
@@ -250,21 +267,26 @@ export const ManageVariantsDialog: React.FC<ManageVariantsDialogProps> = ({
                         {/* Default star */}
                         <button
                           onClick={() => handleSetDefault(variant.id)}
+                          disabled={setDefaultMutation.isPending}
                           className={`shrink-0 p-1 rounded transition-colors ${
                             variant. isDefault
                               ? "text-amber-500"
                               : "text-gray-300 hover:text-amber-400"
-                          }`}
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={
                             variant.isDefault
                               ? "Dạng mặc định"
                               :  "Đặt làm mặc định"
                           }
                         >
-                          <Star
-                            className="h-4 w-4"
-                            fill={variant.isDefault ? "currentColor" : "none"}
-                          />
+                          {setDefaultMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Star
+                              className="h-4 w-4"
+                              fill={variant.isDefault ? "currentColor" : "none"}
+                            />
+                          )}
                         </button>
 
                         {/* Name */}

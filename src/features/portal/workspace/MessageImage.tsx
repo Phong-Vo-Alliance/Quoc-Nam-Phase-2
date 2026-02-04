@@ -127,12 +127,12 @@ export default function MessageImage({
         data-testid="image-error-placeholder"
         onClick={handleClick}
         className={cn(
-          "bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors",
-          isInGrid ? "w-full aspect-square" : "w-[320px] h-[180px]",
+          "@container bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors",
+          isInGrid ? "w-full aspect-square" : "w-[320px] h-[180px] max-w-full",
         )}
       >
         <svg
-          className="w-12 h-12 text-gray-400 mb-2"
+          className="w-12 h-12 text-gray-400 mb-2 min-w-[48px]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -144,8 +144,12 @@ export default function MessageImage({
             d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
           />
         </svg>
-        <p className="text-sm text-gray-500">Không thể tải ảnh</p>
-        <p className="text-xs text-gray-400 mt-1">Nhấn để xem ảnh gốc</p>
+        <p className="text-sm text-gray-500 hidden @[200px]:block">
+          Không thể tải ảnh
+        </p>
+        <p className="text-xs text-gray-400 mt-1 hidden @[240px]:block">
+          Nhấn để xem ảnh gốc
+        </p>
       </div>
     );
   }
@@ -158,7 +162,7 @@ export default function MessageImage({
         data-testid="image-skeleton-loader"
         className={cn(
           "bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 animate-pulse rounded-lg",
-          "w-[320px] h-[180px]",
+          isInGrid ? "w-full aspect-square" : "w-[320px] h-[180px] max-w-full",
         )}
       />
     );
@@ -171,7 +175,9 @@ export default function MessageImage({
       data-testid="message-image-container"
       className={cn(
         "cursor-pointer group overflow-hidden rounded-lg",
-        isInGrid ? "w-full aspect-square" : "w-[320px] h-[180px]",
+        isInGrid
+          ? "w-full aspect-square"
+          : "w-[320px] max-w-full max-h-[180px]",
       )}
       onClick={handleClick}
     >
@@ -180,8 +186,8 @@ export default function MessageImage({
         src={imageUrl!}
         alt={fileName}
         className={cn(
-          "w-full h-full transition-all duration-200 group-hover:opacity-90",
-          "object-cover",
+          "w-full transition-all duration-200 group-hover:opacity-90",
+          isInGrid ? "h-full object-cover" : "max-h-[400px] object-contain",
         )}
       />
     </div>

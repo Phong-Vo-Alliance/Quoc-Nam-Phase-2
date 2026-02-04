@@ -177,6 +177,23 @@ export const updateCheckItem = async (
 };
 
 /**
+ * DELETE /api/tasks/{id}/check-items/{itemId}
+ * Remove a checklist item from a task
+ * 
+ * @param taskId - The task ID
+ * @param itemId - The checklist item ID
+ * @returns void (204 No Content)
+ */
+export const deleteCheckItem = async (
+  taskId: string,
+  itemId: string
+): Promise<void> => {
+  await taskApiClient.delete(
+    `/api/tasks/${taskId}/check-items/${itemId}`
+  );
+};
+
+/**
  * PATCH /api/tasks/{id}/status
  * Update task status
  * 

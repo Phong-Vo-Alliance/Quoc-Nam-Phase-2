@@ -5,6 +5,8 @@ import {
   sendMessage,
   deleteMessage,
   editMessage,
+  getMessagesAround,
+  getMessagesAfter,
 } from "../messages.api";
 import { apiClient } from "../client";
 import type {
@@ -227,6 +229,263 @@ describe("messages.api", () => {
       await expect(
         editMessage("conv-123", "msg-1", "New content")
       ).rejects.toThrow("Edit failed");
+    });
+  });
+
+  describe("getMessagesAround", () => {
+    it("should call API with correct URL and params", async () => {
+      const mockResponse: GetMessagesResponse = {
+        items: [
+          {
+            id: "msg-1",
+            conversationId: "conv-123",
+            senderId: "user-1",
+            senderName: "User 1",
+            content: "Test message",
+            contentType: "TXT",
+            sentAt: "2025-02-03T10:00:00Z",
+            replyCount: 0,
+            isStarred: false,
+            isPinned: false,
+          },
+        ],
+        nextCursor: "msg-1",
+        hasMore: false,
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockResponse });
+
+      const result = await getMessagesAround({
+        conversationId: "conv-123",
+        aroundMessageId: "msg-25",
+        limit: 50,
+      });
+
+      // Verify correct endpoint
+      expect(apiClient.get).toHaveBeenCalledWith(
+        "/api/conversations/conv-123/messages",
+        {
+          params: {
+            aroundMessageId: "msg-25",
+            limit: 50,
+          },
+        }
+      );
+
+      // Verify response
+      expect(result).toEqual(mockResponse);
+    });
+
+    it("should handle missing optional limit parameter", async () => {
+      const mockResponse: GetMessagesResponse = {
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockResponse });
+
+      await getMessagesAround({
+        conversationId: "conv-456",
+        aroundMessageId: "msg-100",
+      });
+
+      // Should use 50 for limit when not specified
+      expect(apiClient.get).toHaveBeenCalledWith(
+        "/api/conversations/conv-456/messages",
+        {
+          params: {
+            aroundMessageId: "msg-100",
+            limit: 50,
+          },
+        }
+      );
+    });
+
+    it("should propagate API errors", async () => {
+      const mockError = new Error("API Error");
+      vi.mocked(apiClient.get).mockRejectedValueOnce(mockError);
+
+      await expect(
+        getMessagesAround({
+          conversationId: "conv-123",
+          aroundMessageId: "msg-25",
+        })
+      ).rejects.toThrow("API Error");
+    });
+
+    it("should handle 404 when message not found", async () => {
+      const mockError = {
+        response: { status: 404 },
+        message: "Message not found",
+      };
+
+      vi.mocked(apiClient.get).mockRejectedValueOnce(mockError);
+
+      await expect(
+        getMessagesAround({
+          conversationId: "conv-123",
+          aroundMessageId: "deleted-msg",
+        })
+      ).rejects.toMatchObject({
+        response: { status: 404 },
+      });
+    });
+
+    it("should handle 403 when unauthorized", async () => {
+      const mockError = {
+        response: { status: 403 },
+        message: "Forbidden",
+      };
+
+      vi.mocked(apiClient.get).mockRejectedValueOnce(mockError);
+
+      await expect(
+        getMessagesAround({
+          conversationId: "private-conv",
+          aroundMessageId: "msg-25",
+        })
+      ).rejects.toMatchObject({
+        response: { status: 403 },
+      });
+    });
+  });
+
+  describe("getMessagesAfter", () => {
+    it("should call API with correct URL and params", async () => {
+      const mockResponse: GetMessagesResponse = {
+        items: [
+          {
+            id: "msg-101",
+            conversationId: "conv-123",
+            senderId: "user-1",
+            senderName: "User 1",
+            content: "Newer message",
+            contentType: "TXT",
+            sentAt: "2025-02-03T13:00:00Z",
+            replyCount: 0,
+            isStarred: false,
+            isPinned: false,
+          },
+        ],
+        nextCursor: "msg-101",
+        hasMore: true,
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockResponse });
+
+      const result = await getMessagesAfter({
+        conversationId: "conv-123",
+        afterMessageId: "msg-100",
+        limit: 20,
+      });
+
+      // Verify correct endpoint
+      expect(apiClient.get).toHaveBeenCalledWith(
+        "/api/conversations/conv-123/messages",
+        {
+          params: {
+            afterMessageId: "msg-100",
+            limit: 20,
+          },
+        }
+      );
+
+      // Verify response
+      expect(result).toEqual(mockResponse);
+    });
+
+    it("should handle missing optional limit parameter", async () => {
+      const mockResponse: GetMessagesResponse = {
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockResponse });
+
+      await getMessagesAfter({
+        conversationId: "conv-456",
+        afterMessageId: "msg-200",
+      });
+
+      // Should use 50 for limit when not specified
+      expect(apiClient.get).toHaveBeenCalledWith(
+        "/api/conversations/conv-456/messages",
+        {
+          params: {
+            afterMessageId: "msg-200",
+            limit: 50,
+          },
+        }
+      );
+    });
+
+    it("should propagate API errors", async () => {
+      const mockError = new Error("Network Error");
+      vi.mocked(apiClient.get).mockRejectedValueOnce(mockError);
+
+      await expect(
+        getMessagesAfter({
+          conversationId: "conv-123",
+          afterMessageId: "msg-100",
+        })
+      ).rejects.toThrow("Network Error");
+    });
+
+    it("should handle 404 when message not found", async () => {
+      const mockError = {
+        response: { status: 404 },
+        message: "Message not found",
+      };
+
+      vi.mocked(apiClient.get).mockRejectedValueOnce(mockError);
+
+      await expect(
+        getMessagesAfter({
+          conversationId: "conv-123",
+          afterMessageId: "deleted-msg",
+        })
+      ).rejects.toMatchObject({
+        response: { status: 404 },
+      });
+    });
+
+    it("should handle 403 when unauthorized", async () => {
+      const mockError = {
+        response: { status: 403 },
+        message: "Forbidden",
+      };
+
+      vi.mocked(apiClient.get).mockRejectedValueOnce(mockError);
+
+      await expect(
+        getMessagesAfter({
+          conversationId: "private-conv",
+          afterMessageId: "msg-100",
+        })
+      ).rejects.toMatchObject({
+        response: { status: 403 },
+      });
+    });
+
+    it("should handle empty response with hasMore: false", async () => {
+      const mockResponse: GetMessagesResponse = {
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockResponse });
+
+      const result = await getMessagesAfter({
+        conversationId: "conv-123",
+        afterMessageId: "msg-last",
+      });
+
+      expect(result).toEqual(mockResponse);
+      expect(result.hasMore).toBe(false);
+      expect(result.nextCursor).toBeNull();
     });
   });
 });

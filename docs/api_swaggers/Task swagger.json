@@ -295,6 +295,72 @@
         }
       }
     },
+    "/api/checklist-templates/{id}/set-default": {
+      "post": {
+        "tags": [
+          "ChecklistTemplates"
+        ],
+        "summary": "Sets a template as default for its conversation.",
+        "description": "Created by: GitHub Copilot\r\nCreated at: 2026-02-03\r\nReference: docs/modules/task/checklist_default/01-IMPLEMENTATION-PLAN.md (Phase 5)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The template ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks/{taskId}/comments": {
       "post": {
         "tags": [
@@ -3316,6 +3382,10 @@
             "format": "uuid",
             "nullable": true
           },
+          "isDefault": {
+            "type": "boolean",
+            "description": "Indicates if this is the default template for its conversation.\r\nAlways false for global templates."
+          },
           "items": {
             "type": "array",
             "items": {
@@ -3393,6 +3463,10 @@
             },
             "description": "Gets the list of template items.",
             "nullable": true
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "Whether to set this template as default for its conversation.\r\nIgnored for global templates (ConversationId = null)."
           }
         },
         "additionalProperties": false,

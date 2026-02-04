@@ -132,3 +132,63 @@ export const linkTaskToMessage = async (
   console.log("API: Response from link-task:", response.data);
   return response.data;
 };
+
+/**
+ * GET /api/conversations/{guid}/messages?aroundMessageId={messageId}
+ * Fetch messages around a specific message (for jump-to-message functionality)
+ * Returns approximately equal messages before and after the target message
+ * 
+ * @param conversationId - UUID of the conversation
+ * @param aroundMessageId - UUID of the target message to fetch around
+ * @param limit - Number of messages to fetch (default: 50)
+ * @returns Messages centered around the target message
+ */
+export const getMessagesAround = async (params: {
+  conversationId: string;
+  aroundMessageId: string;
+  limit?: number;
+}): Promise<GetMessagesResponse> => {
+  const { conversationId, aroundMessageId, limit = 50 } = params;
+  
+  const response = await apiClient.get<GetMessagesResponse>(
+    `/api/conversations/${conversationId}/messages`,
+    {
+      params: {
+        aroundMessageId,
+        limit,
+      },
+    }
+  );
+  
+  return response.data;
+};
+
+/**
+ * GET /api/conversations/{guid}/messages?afterMessageId={messageId}
+ * Fetch messages after a specific message (for scroll-down pagination)
+ * Returns messages that are newer than the specified message
+ * 
+ * @param conversationId - UUID of the conversation
+ * @param afterMessageId - UUID of the message to fetch after
+ * @param limit - Number of messages to fetch (default: 50)
+ * @returns Newer messages after the specified message
+ */
+export const getMessagesAfter = async (params: {
+  conversationId: string;
+  afterMessageId: string;
+  limit?: number;
+}): Promise<GetMessagesResponse> => {
+  const { conversationId, afterMessageId, limit = 50 } = params;
+  
+  const response = await apiClient.get<GetMessagesResponse>(
+    `/api/conversations/${conversationId}/messages`,
+    {
+      params: {
+        afterMessageId,
+        limit,
+      },
+    }
+  );
+  
+  return response.data;
+};

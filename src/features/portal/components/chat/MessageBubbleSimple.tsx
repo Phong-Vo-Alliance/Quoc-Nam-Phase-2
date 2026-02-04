@@ -369,7 +369,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         {hasFiles ? (
                           // Mixed attachments: Always use 3-col square grid for compact display (smaller size)
                           <div
-                            className="grid grid-cols-3 gap-2 max-w-[200px]"
+                            className="grid grid-cols-3 gap-2"
                             data-testid="image-grid-mixed-3cols"
                           >
                             {images.slice(0, 6).map((image, index) => {
@@ -438,8 +438,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             })}
                           </div>
                         ) : images.length === 1 ? (
-                          // Single image: Full width max 320px
-                          <div className="max-w-[320px]">
+                          <div>
                             <MessageImage
                               key={images[0].fileId}
                               fileId={images[0].fileId}
@@ -466,9 +465,8 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             />
                           </div>
                         ) : images.length === 2 ? (
-                          // 2 images: 2 columns grid (preserve aspect ratio)
                           <div
-                            className="grid grid-cols-2 gap-2 max-w-[320px]"
+                            className="grid grid-cols-2 gap-2"
                             data-testid="image-grid-2cols"
                           >
                             {images.map((image, index) => (
@@ -505,7 +503,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         ) : images.length >= 3 && images.length <= 6 ? (
                           // 3-6 images: 3 columns grid
                           <div
-                            className="grid grid-cols-3 gap-2 max-w-[320px]"
+                            className="grid grid-cols-3 gap-2"
                             data-testid="image-grid-3cols"
                           >
                             {images.map((image, index) => (
@@ -542,7 +540,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         ) : (
                           // 7+ images: 3 cols with first 6 + "+N more" overlay
                           <div
-                            className="grid grid-cols-3 gap-2 max-w-[320px]"
+                            className="grid grid-cols-3 gap-2"
                             data-testid="image-grid-with-overlay"
                           >
                             {images.slice(0, 6).map((image, index) => {

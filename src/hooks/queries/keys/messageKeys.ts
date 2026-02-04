@@ -16,4 +16,12 @@ export const messageKeys = {
   // Single message detail
   detail: (messageId: string) =>
     [...messageKeys.all, 'detail', messageId] as const,
+
+  // 🆕 NEW: Messages around a specific message (for jump-to-message)
+  around: (conversationId: string, messageId: string) =>
+    [...messageKeys.conversation(conversationId), 'around', messageId] as const,
+
+  // 🆕 NEW: Messages after a specific message (for scroll-down)
+  after: (conversationId: string, messageId: string) =>
+    [...messageKeys.conversation(conversationId), 'after', messageId] as const,
 };

@@ -15,6 +15,8 @@ interface MessageImageProps {
   onClick?: () => void;
   /** Optional CSS class names */
   className?: string;
+  /** Whether image is in grid layout (use square aspect ratio) */
+  isInGrid?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export default function MessageImage({
   alt = "Image",
   onClick,
   className,
+  isInGrid = false,
 }: MessageImageProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,7 +83,7 @@ export default function MessageImage({
       <div
         className={cn(
           "w-full aspect-square rounded-lg bg-gray-200 animate-pulse",
-          className
+          className,
         )}
         data-testid="message-image-skeleton"
       />
@@ -92,7 +95,7 @@ export default function MessageImage({
       <div
         className={cn(
           "w-full aspect-square rounded-lg bg-gray-100 flex items-center justify-center text-gray-400",
-          className
+          className,
         )}
         data-testid="message-image-error"
       >
@@ -107,8 +110,11 @@ export default function MessageImage({
       alt={alt}
       onClick={onClick}
       className={cn(
-        "w-full aspect-square object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity",
-        className
+        "w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity",
+        isInGrid
+          ? "aspect-square object-cover"
+          : "object-contain max-h-[400px]",
+        className,
       )}
       data-testid="message-image"
     />

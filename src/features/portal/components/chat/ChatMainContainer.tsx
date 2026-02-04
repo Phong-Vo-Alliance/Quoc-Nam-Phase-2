@@ -8,6 +8,7 @@ import React, {
   useState,
   useMemo,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
@@ -30,6 +31,8 @@ import {
   saveSelectedCategory,
   getSelectedCategory,
 } from "@/utils/storage"; // 🆕 NEW: Persist active conversation + category
+import { getMessagesAround, getMessagesAfter } from "@/api/messages.api"; // 🆕 NEW: Jump-to-message APIs
+import { messageKeys } from "@/hooks/queries/keys/messageKeys"; // 🆕 NEW: Query keys
 // import { MessageSkeleton } from "../components/MessageSkeleton";
 import { MessageSkeleton } from "../MessageSkeleton";
 import { groupMessages } from "@/utils/messageGrouping";
@@ -219,6 +222,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   onScrollComplete,
 }) => {
   const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient(); // 🆕 NEW: For cache manipulation in jump-to-message
 
   // 🆕 NEW: Category state with localStorage persistence
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] = useState<
@@ -498,7 +502,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // Network status (Phase 7: Timeout & Retry UI)
   const { isOnline, wasOffline } = useNetworkStatus();
 
-  // Scroll detection for go-to-bottom button
+  // 🆕 NEW: State for bidirectional scroll
+  const [hasUnloadedNewerMessages, setHasUnloadedNewerMessages] =
+    useState(false);
+  const [isLoadingNewer, setIsLoadingNewer] = useState(false);
+
+  // Get flattened messages (MOVED UP - needed by handleLoadNewerMessages)
+  // 🐛 FIX: Safeguard against stale cached messages during categories loading
+  // When categories are loading or messages query is not successful, return empty array
+  // This prevents React Query cached data from previous conversation being displayed
+  const messages = useMemo(() => {
+    // Don't use cached data if categories are loading
+    if (categoriesQuery.isLoading) return [];
+
+    // Don't use cached data if messages query hasn't successfully fetched yet
+    if (!messagesQuery.isSuccess) return [];
+
+    return flattenMessages(messagesQuery.data);
+  }, [messagesQuery.data, messagesQuery.isSuccess, categoriesQuery.isLoading]);
+
+  // Scroll detection for go-to-bottom button + bidirectional loading
   useEffect(() => {
     const setupScrollDetection = () => {
       const container = messagesContainerRef.current;
@@ -511,6 +534,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       const handleScroll = () => {
         const { scrollTop, scrollHeight, clientHeight } = container;
         const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+        const distanceFromTop = scrollTop;
 
         // 🔧 FIX BUG-001: Update threshold to 150px for more stable button visibility
         const shouldShow = distanceFromBottom > 150;
@@ -519,6 +543,24 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         // Reset unread count when user reaches bottom
         if (!shouldShow) {
           setUnreadCount(0);
+        }
+
+        // ✅ Existing: Scroll up detection (load older messages)
+        if (
+          distanceFromTop < 200 &&
+          messagesQuery.hasNextPage &&
+          !messagesQuery.isFetchingNextPage
+        ) {
+          handleLoadMore();
+        }
+
+        // 🆕 NEW: Scroll down detection (load newer messages)
+        if (
+          distanceFromBottom < 200 &&
+          hasUnloadedNewerMessages &&
+          !isLoadingNewer
+        ) {
+          handleLoadNewerMessages();
         }
       };
 
@@ -534,7 +576,76 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     };
 
     return setupScrollDetection();
-  }, []); // Only setup once - button visibility depends on scroll position only
+  }, [
+    messagesQuery.hasNextPage,
+    messagesQuery.isFetchingNextPage,
+    hasUnloadedNewerMessages,
+    isLoadingNewer,
+  ]); // Dependencies for bidirectional scroll
+
+  // 🆕 NEW: Handler for loading newer messages (scroll-down pagination)
+  const handleLoadNewerMessages = useCallback(async () => {
+    if (!messages.length || isLoadingNewer) return;
+
+    const lastLoadedMessageId = messages[messages.length - 1]?.id;
+    if (!lastLoadedMessageId) return;
+
+    setIsLoadingNewer(true);
+    try {
+      const result = await getMessagesAfter({
+        conversationId,
+        afterMessageId: lastLoadedMessageId,
+        limit: 50,
+      });
+
+      // Merge into cache
+      queryClient.setQueryData(
+        messageKeys.conversation(conversationId),
+        (oldData: any) => {
+          if (!oldData) return oldData;
+
+          const newMessages = result.items.filter(
+            (msg) =>
+              !oldData.pages.some((p: any) =>
+                p.items.some((m: any) => m.id === msg.id),
+              ),
+          );
+
+          if (newMessages.length === 0) {
+            // No new messages, we've reached the newest
+            setHasUnloadedNewerMessages(false);
+            return oldData;
+          }
+
+          // Append new messages to last page
+          const lastPageIndex = oldData.pages.length - 1;
+          const updatedPages = [...oldData.pages];
+          updatedPages[lastPageIndex] = {
+            ...updatedPages[lastPageIndex],
+            items: [...updatedPages[lastPageIndex].items, ...newMessages].sort(
+              (a, b) =>
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+            ),
+          };
+
+          // Check if we've reached the newest messages
+          if (!result.hasMore) {
+            setHasUnloadedNewerMessages(false);
+          }
+
+          return {
+            ...oldData,
+            pages: updatedPages,
+          };
+        },
+      );
+    } catch (error) {
+      console.error("Error loading newer messages:", error);
+      toast.error("Lỗi khi tải tin nhắn mới hơn.");
+    } finally {
+      setIsLoadingNewer(false);
+    }
+  }, [conversationId, messages, isLoadingNewer, queryClient]);
 
   // Handler for go-to-bottom button
   const handleGoToBottom = useCallback(() => {
@@ -561,7 +672,17 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     prevActiveConversationRef.current = conversationId;
   }, [conversationId, markAsRead]);
 
+  // 🆕 NEW: Helper function to scroll to and highlight a message
+  const scrollToAndHighlight = useCallback((element: Element) => {
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
+    setTimeout(() => {
+      element.classList.remove("ring-2", "ring-amber-400", "ring-offset-2");
+    }, 2000);
+  }, []);
+
   // Function to scroll to a message or jump via API if not in view
+  // ✅ REFACTORED: Using aroundMessageId for instant jump (no loop)
   const handleScrollToMessage = useCallback(
     async (messageData: PinnedMessageDto | StarredMessageDto) => {
       const targetMessageId = messageData.messageId;
@@ -593,22 +714,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                 `[data-testid="message-bubble-${targetMessageId}"]`,
               );
               if (messageElement) {
-                messageElement.scrollIntoView({
-                  behavior: "smooth",
-                  block: "center",
-                });
-                messageElement.classList.add(
-                  "ring-2",
-                  "ring-amber-400",
-                  "ring-offset-2",
-                );
-                setTimeout(() => {
-                  messageElement.classList.remove(
-                    "ring-2",
-                    "ring-amber-400",
-                    "ring-offset-2",
-                  );
-                }, 2000);
+                scrollToAndHighlight(messageElement);
               }
             }, 1000); // Wait 1s for messages to load
             return;
@@ -616,10 +722,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         }
 
         // Original error handling (if can't auto-switch)
-        // toast.error(
-        //   "Tin nhắn này thuộc cuộc trò chuyện khác. Vui lòng chuyển sang cuộc trò chuyện đó để xem.",
-        //   { duration: 3000 }
-        // );
         toast.warning(
           "Tin nhắn này thuộc cuộc trò chuyện khác không nằm trong danh mục hiện tại.",
           { duration: 3000 },
@@ -634,103 +736,121 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
       if (messageElement) {
         // Message is in current view, scroll to it
-        messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
-
-        // Highlight the message briefly
-        messageElement.classList.add(
-          "ring-2",
-          "ring-amber-400",
-          "ring-offset-2",
-        );
-        setTimeout(() => {
-          messageElement.classList.remove(
-            "ring-2",
-            "ring-amber-400",
-            "ring-offset-2",
-          );
-        }, 2000);
+        scrollToAndHighlight(messageElement);
         return;
       }
 
-      // Step 3: Message not in current view, need to load via API
+      // Step 3: ✅ NEW - Fetch messages around target (single API call)
       toast.info("Đang tải tin nhắn...");
 
       try {
-        // Keep loading older messages until we find the target or reach the start
-        const MAX_ATTEMPTS = 1000; // Prevent infinite loop (20 * 50 = 1000 messages max)
-        let attempts = 0;
-        let found = false;
+        const result = await getMessagesAround({
+          conversationId,
+          aroundMessageId: targetMessageId,
+          limit: 50,
+        });
 
-        if (messagesQuery.isFetching || messagesQuery.isLoading) {
-          return;
-        }
-        while (attempts < MAX_ATTEMPTS && !found) {
-          attempts++;
 
-          // Check if we have more pages to load
-          if (!messagesQuery.hasNextPage) {
-            // Reached the start of conversation without finding message
-            toast.error(
-              "Không tìm thấy tin nhắn trong cuộc trò chuyện này. Tin nhắn có thể đã bị xóa.",
+        // ✅ Merge messages into main cache (deduplicate by ID)
+        queryClient.setQueryData(
+          messageKeys.conversation(conversationId),
+          (oldData: any) => {
+            if (!oldData) {
+              // No existing data - create new cache structure
+              // ✅ FIX: Preserve hasMore flag for infinite scroll
+              return {
+                pages: [
+                  {
+                    items: result.items,
+                    nextCursor: result.nextCursor,
+                    hasMore: result.hasMore,
+                  },
+                ],
+                pageParams: [undefined],
+              };
+            }
+
+            // Merge with existing data (deduplicate by message ID)
+            const existingMessageIds = new Set(
+              oldData.pages.flatMap((p: any) => p.items.map((m: any) => m.id)),
             );
-            return;
-          }
 
-          // Fetch next page (older messages)
-          await messagesQuery.fetchNextPage();
-
-          // Wait a bit for DOM to update
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          // Check if message now exists in view
-          const updatedMessageElement = document.querySelector(
-            `[data-testid="message-bubble-${targetMessageId}"]`,
-          );
-
-          if (updatedMessageElement) {
-            found = true;
-
-            // Scroll to message
-            updatedMessageElement.scrollIntoView({
-              behavior: "smooth",
-              block: "center",
-            });
-
-            // Highlight briefly
-            updatedMessageElement.classList.add(
-              "ring-2",
-              "ring-amber-400",
-              "ring-offset-2",
+            const newMessages = result.items.filter(
+              (msg) => !existingMessageIds.has(msg.id),
             );
-            setTimeout(() => {
-              updatedMessageElement.classList.remove(
-                "ring-2",
-                "ring-amber-400",
-                "ring-offset-2",
-              );
-            }, 2000);
 
-            toast.success("Đã tìm thấy tin nhắn!");
-          }
-        }
+            if (newMessages.length === 0) {
+              // All messages already cached - preserve existing pagination state
+              return oldData;
+            }
 
-        if (!found && attempts >= MAX_ATTEMPTS) {
-          toast.error(
-            "Không tìm thấy tin nhắn sau khi tải nhiều trang. Tin nhắn có thể quá xa.",
-          );
+            // Insert new messages in chronological order (newest first, like API returns)
+            const allMessages = [
+              ...oldData.pages.flatMap((p: any) => p.items),
+              ...newMessages,
+            ].sort(
+              (a, b) =>
+                new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(), // Newest first
+            );
+
+            // ✅ FIX: Determine if there are older messages to load
+            // Find the oldest message ID in our merged cache
+            const oldestCachedMessage = allMessages[allMessages.length - 1];
+            const oldestCachedMessageId = oldestCachedMessage?.id;
+            
+            // Check if the API's nextCursor points to an older message
+            // If result.hasMore is true OR if we have a nextCursor, there are older messages
+            const hasMoreOlderMessages = result.hasMore || !!result.nextCursor;
+
+            return {
+              pages: [
+                {
+                  items: allMessages,
+                  nextCursor: hasMoreOlderMessages ? (result.nextCursor || oldestCachedMessageId) : undefined,
+                  hasMore: hasMoreOlderMessages,
+                },
+              ],
+              pageParams: [undefined],
+            };
+          },
+        );
+
+        // Wait for DOM update
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Find and scroll to message
+        const updatedMessageElement = document.querySelector(
+          `[data-testid="message-bubble-${targetMessageId}"]`,
+        );
+
+        if (updatedMessageElement) {
+          scrollToAndHighlight(updatedMessageElement);
+          toast.success("Đã tìm thấy tin nhắn!");
+          // ✅ Mark that we may have unloaded newer messages (after jumping to old message)
+          setHasUnloadedNewerMessages(true);
+        } else {
+          toast.error("Không thể hiển thị tin nhắn. Vui lòng thử lại.");
         }
-      } catch (error) {
-        console.error("Error loading message:", error);
-        toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
+      } catch (error: any) {
+        console.error("Error jumping to message:", error);
+
+        if (error.response?.status === 404) {
+          toast.error("Tin nhắn không tồn tại hoặc đã bị xóa.");
+        } else if (error.response?.status === 403) {
+          toast.error("Bạn không có quyền xem tin nhắn này.");
+        } else {
+          toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
+        }
       }
     },
     [
       conversationId,
-      messagesQuery,
+      queryClient,
       onChatChange,
       categoryConversations,
       conversationCategory,
       activeCategoryId,
+      scrollToAndHighlight,
     ],
   );
 
@@ -739,20 +859,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const uploadBatchMutation = useUploadFilesBatch();
   // File validation
   const { validateAndAdd } = useFileValidation();
-
-  // Get flattened messages
-  // 🐛 FIX: Safeguard against stale cached messages during categories loading
-  // When categories are loading or messages query is not successful, return empty array
-  // This prevents React Query cached data from previous conversation being displayed
-  const messages = useMemo(() => {
-    // Don't use cached data if categories are loading
-    if (categoriesQuery.isLoading) return [];
-
-    // Don't use cached data if messages query hasn't successfully fetched yet
-    if (!messagesQuery.isSuccess) return [];
-
-    return flattenMessages(messagesQuery.data);
-  }, [messagesQuery.data, messagesQuery.isSuccess, categoriesQuery.isLoading]);
 
   // 🐛 FIX: Mark conversation as read when switching conversations OR receiving new messages
   const markAsReadMutation = useMarkConversationAsRead();
@@ -1675,6 +1781,19 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             data-testid="typing-indicator"
           >
             {typingUsers.map((u) => u.userName).join(", ")} đang nhập...
+          </div>
+        )}
+
+        {/* 🆕 NEW: Loading indicator for newer messages (scroll-down) */}
+        {isLoadingNewer && (
+          <div
+            className="flex justify-center items-center py-3"
+            data-testid="loading-newer-messages"
+          >
+            <Loader2 className="h-4 w-4 animate-spin text-brand-600 mr-2" />
+            <span className="text-sm text-gray-500">
+              Đang tải tin nhắn mới hơn...
+            </span>
           </div>
         )}
 

@@ -96,7 +96,7 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[400px]">
         <DialogHeader>
-          <DialogTitle>Đổi tên Conversation</DialogTitle>
+          <DialogTitle>Đổi tên loại việc</DialogTitle>
         </DialogHeader>
 
         <div className="py-4 space-y-4">

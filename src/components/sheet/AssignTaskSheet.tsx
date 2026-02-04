@@ -243,15 +243,28 @@ export function AssignTaskSheet({
     }));
   }, [open, priorities, formData.priority]);
 
-  // Set default checklist template when templates load
+  // Set default checklist template when sheet opens
   useEffect(() => {
-    if (!open || templates.length === 0 || formData.checklistTemplateId) return;
+    if (!open || !conversationId || formData.checklistTemplateId) return;
+
+    // Filter templates for this conversation
+    const conversationTemplates = templates.filter(
+      (t) => t.conversationId === conversationId
+    );
+
+    if (conversationTemplates.length === 0) {
+      // No templates for this conversation - leave empty
+      return;
+    }
+
+    // Find default template for this conversation
+    const defaultTemplate = conversationTemplates.find((t) => t.isDefault);
 
     setFormData((prev) => ({
       ...prev,
-      checklistTemplateId: templates[0].id,
+      checklistTemplateId: defaultTemplate?.id || conversationTemplates[0].id,
     }));
-  }, [open, templates, formData.checklistTemplateId]);
+  }, [open, conversationId, templates, formData.checklistTemplateId]);
 
   // Reset form when sheet closes
   useEffect(() => {
@@ -284,9 +297,7 @@ export function AssignTaskSheet({
       errors.priority = "Vui lòng chọn độ ưu tiên";
     }
 
-    if (!formData.checklistTemplateId) {
-      errors.checklistTemplateId = "Vui lòng chọn mẫu checklist";
-    }
+    // checklistTemplateId is optional - can be null if no templates available
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -308,7 +319,7 @@ export function AssignTaskSheet({
       priority: formData.priority,
       assignTo: formData.assignTo,
       conversationId,
-      checklistTemplateId: formData.checklistTemplateId,
+      checklistTemplateId: formData.checklistTemplateId || null,
       // Include messageId when creating task from a message
       messageId: messageId ?? undefined,
     };
@@ -446,31 +457,40 @@ export function AssignTaskSheet({
                 htmlFor="checklist-template"
                 className="text-xs font-medium text-gray-700"
               >
-                Mẫu checklist <span className="text-red-500">*</span>
+                Mẫu checklist
               </Label>
-              <Select
-                value={formData.checklistTemplateId || undefined}
-                onValueChange={(value) =>
-                  handleFieldChange("checklistTemplateId", value || "")
-                }
-              >
-                <SelectTrigger
-                  id="checklist-template"
-                  className={
-                    formErrors.checklistTemplateId ? "border-red-500" : ""
+              {templates.filter(template => template.conversationId === conversationId).length === 0 ? (
+                <div className="text-sm text-gray-500 italic py-2">
+                  Không có Mẫu checklist nào cho cuộc trò chuyện này
+                </div>
+              ) : (
+                <Select
+                  value={formData.checklistTemplateId || undefined}
+                  onValueChange={(value) =>
+                    handleFieldChange("checklistTemplateId", value || "")
                   }
-                  data-testid="checklist-template-dropdown"
                 >
-                  <SelectValue placeholder="Chọn mẫu checklist" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    id="checklist-template"
+                    className={
+                      formErrors.checklistTemplateId ? "border-red-500" : ""
+                    }
+                    data-testid="checklist-template-dropdown"
+                  >
+                    <SelectValue placeholder="Chọn mẫu checklist" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates
+                      .filter(template => template.conversationId === conversationId)
+                      .map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                          {template.isDefault && " (Mặc định)"}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              )}
               {formErrors.checklistTemplateId && (
                 <p className="text-xs text-red-500">
                   {formErrors.checklistTemplateId}

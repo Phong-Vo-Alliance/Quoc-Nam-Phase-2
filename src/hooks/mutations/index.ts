@@ -14,6 +14,7 @@ export {
   useAddCheckItem, 
   useToggleCheckItem,
   useUpdateCheckItem,
+  useDeleteCheckItem,
   useUpdateTaskStatus,
   useUpdateTask,
   useCreateChecklistTemplate,

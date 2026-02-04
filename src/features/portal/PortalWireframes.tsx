@@ -388,9 +388,11 @@ export default function PortalWireframes({
 
   // Handle star/unstar toggle from message bubble
   const handleToggleStar = (msg: Message) => {
-    // Note: Message type from API doesn't have isStarred property
-    // This would need to be updated based on actual API response
-    starMessageMutation.mutate({ messageId: msg.id });
+    if (msg.isStarred) {
+      unstarMessageMutation.mutate({ messageId: msg.id });
+    } else {
+      starMessageMutation.mutate({ messageId: msg.id });
+    }
   };
 
   // Simple handlers for API-based components (accept messageId and current state)

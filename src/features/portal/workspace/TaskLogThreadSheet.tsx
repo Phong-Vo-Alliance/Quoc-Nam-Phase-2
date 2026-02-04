@@ -129,7 +129,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
                     <span className="font-medium">
                       {task.status === "todo" && "Chưa xử lý"}
                       {task.status === "in_progress" && "Đang xử lý"}
-                      {task.status === "awaiting_review" && "Chờ duyệt"}
+                      {task.status === "need_to_verified" && "Chờ duyệt"}
                       {task.status === "done" && "Hoàn thành"}
                     </span>
                     <span>

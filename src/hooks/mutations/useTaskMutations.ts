@@ -6,6 +6,7 @@ import {
   addCheckItem, 
   toggleCheckItem,
   updateCheckItem,
+  deleteCheckItem,
   updateTaskStatus,
   updateTask,
   createChecklistTemplate,
@@ -69,6 +70,26 @@ export function useUpdateCheckItem() {
       itemId: string;
       content: string;
     }) => updateCheckItem(taskId, itemId, content),
+    onSuccess: () => {
+      // Invalidate and refetch tasks queries
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['linkedTasks'] });
+    },
+  });
+}
+
+/**
+ * Hook to delete a checklist item from a task
+ * Invalidates tasks query cache on success
+ */
+export function useDeleteCheckItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ taskId, itemId }: { 
+      taskId: string; 
+      itemId: string;
+    }) => deleteCheckItem(taskId, itemId),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

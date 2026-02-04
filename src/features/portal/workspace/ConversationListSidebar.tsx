@@ -406,6 +406,12 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         return;
       }
 
+      // 🐛 FIX: Early exit if already has selection (prevent re-running on cache updates)
+      // Note: selectedConversationId can be "" for empty categories, which is still a valid selection
+      if (selectedConversationId !== undefined) {
+        return;
+      }
+
       const savedConversationId = getSelectedConversation();
       const savedCategoryId = getSelectedCategory();
 
@@ -467,7 +473,12 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
       // If no saved conversation or saved conversation deleted, auto-select first group
       // 🐛 FIX: Also check hasAutoSelected to prevent race condition when restoring DM
-      if (apiGroups.length > 0 && !selectedConversationId && !hasAutoSelected) {
+      // 🐛 FIX (category-active-state-empty-20260204): Use strict undefined check to allow empty string
+      if (
+        apiGroups.length > 0 &&
+        selectedConversationId === undefined &&
+        !hasAutoSelected
+      ) {
         const firstGroup = apiGroups[0];
         const category = apiCategories.find((cat) =>
           cat.conversations?.some((c) => c.conversationId === firstGroup.id),
@@ -780,14 +791,15 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                             );
                           } else {
                             // No conversations - show empty state
-                            onSelectChat({
-                              type: "group",
-                              id: "",
-                              name: "",
-                              category: category.name,
-                              categoryId: category.id,
-                              memberCount: 0,
-                            });
+                            // 🐛 FIX (category-active-state-empty-20260204): Use handleGroupSelect
+                            // to ensure internal state and localStorage are properly synced
+                            handleGroupSelect(
+                              "", // conversationId (empty)
+                              "", // conversationName (empty)
+                              category.name,
+                              category.id,
+                              0, // unreadCount
+                            );
                           }
                         }}
                       >

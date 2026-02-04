@@ -180,17 +180,8 @@ export function useCategoriesRealtime(
         },
       );
 
-      // Don't use invalidateQueries - it refetches from API and overwrites our update!
-      // Instead, just notify observers by setting data again (forces re-render)
-      // This is a workaround to trigger React Query's observers without refetching
-      setTimeout(() => {
-        const currentData = queryClient.getQueryData<CategoryWithUnread[]>(
-          categoriesKeys.list(),
-        );
-        if (currentData) {
-          queryClient.setQueryData(categoriesKeys.list(), [...currentData]);
-        }
-      }, 0);
+      // ✅ setQueryData already triggers React Query observers - no need for setTimeout workaround
+      // The setTimeout trick was causing race conditions where MessageRead could be overwritten
     };
 
     // Register event listener

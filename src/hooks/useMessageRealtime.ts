@@ -18,6 +18,14 @@ import type {
   GroupConversation,
   DirectConversation,
 } from "@/types/conversations";
+import type { CategoryWithUnread } from "@/types/categories";
+
+// API response structure for conversation pages
+type ConversationPage = {
+  items: (GroupConversation | DirectConversation)[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
 
 interface UseMessageRealtimeOptions {
   conversationId: string;
@@ -136,11 +144,36 @@ export function useMessageRealtime({
         };
       });
 
-      // 2. Update CONVERSATION cache - Invalidate categories (contains conversations with lastMessage + unreadCount)
-      queryClient.invalidateQueries({
-        queryKey: categoriesKeys.all,
-        refetchType: "none",
-      });
+      // 2. Update CATEGORIES cache - Update lastMessage and unreadCount directly (don't invalidate)
+      const categoriesData = queryClient.getQueryData<CategoryWithUnread[]>(
+        categoriesKeys.list(),
+      );
+
+      if (categoriesData) {
+        const updatedCategories = categoriesData.map((category) => ({
+          ...category,
+          conversations: category.conversations.map((conv) => {
+            if (conv.conversationId === message.conversationId) {
+              const currentUnreadCount = conv.unreadCount ?? 0;
+              const newUnreadCount = isOwnMessage ? 0 : currentUnreadCount + 1;
+
+              return {
+                ...conv,
+                lastMessage: {
+                  senderId: message.senderId,
+                  senderName: message.senderName,
+                  content: message.content,
+                  sentAt: message.sentAt,
+                },
+                unreadCount: newUnreadCount,
+              };
+            }
+            return conv;
+          }),
+        }));
+
+        queryClient.setQueryData(categoriesKeys.list(), updatedCategories);
+      }
 
       // 3. Update CONVERSATION cache (directs) - Same logic
       const directsData = queryClient.getQueryData<

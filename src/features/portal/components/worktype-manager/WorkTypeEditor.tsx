@@ -379,7 +379,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
               <ChevronLeft className="h-5 w-5 text-gray-600" />
             </button>
             <h2 className="text-lg font-semibold text-gray-900">
-              Quản lý Conversations
+              Quản lý Loại Công Việc
             </h2>
           </div>
         </div>
@@ -390,7 +390,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
             Tên Nhóm: <span className="font-medium text-gray-900">{categoryName}</span>
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
-            Chọn một conversation để quản lý checklist templates
+            Chọn một loại công việc để quản lý checklist templates
           </p>
         </div>
 
@@ -402,7 +402,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm conversation..."
+                placeholder="Tìm loại công việc..."
                 className="pl-9"
               />
             </div>
@@ -415,7 +415,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
               data-testid="add-conversation-button"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Thêm Conversation
+              Thêm
             </Button>
           </div>
         </div>
@@ -443,12 +443,14 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
                     id: conversation.id,
                     key: conversation.id,
                     name: conversation.name,
-                    checklistVariants: (conversation.checklistVariants || []).map(variant => ({
-                      id: variant.id,
-                      name: variant.name,
-                      description: variant.description || undefined,
-                      isDefault: false,
-                    }))
+                    checklistVariants: (conversation.checklistVariants || [])
+                      .filter(variant => variant.conversationId === conversation.id)
+                      .map(variant => ({
+                        id: variant.id,
+                        name: variant.name,
+                        description: variant.description || undefined,
+                        isDefault: false,
+                      }))
                   }}
                   onEdit={() => handleEditConversation(conversation)}
                   onManageVariants={() => handleManageTemplates(conversation)}
@@ -475,12 +477,14 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
             id: manageVariantsConversation.id,
             key: manageVariantsConversation.id,
             name: manageVariantsConversation.name,
-            checklistVariants: (conversationsWithTemplates.find(c => c.id === manageVariantsConversation.id)?.checklistVariants || []).map(variant => ({
-              id: variant.id,
-              name: variant.name,
-              description: variant.description || undefined,
-              isDefault: false,
-            }))
+            checklistVariants: (conversationsWithTemplates.find(c => c.id === manageVariantsConversation.id)?.checklistVariants || [])
+              .filter(variant => !variant.conversationId || variant.conversationId === manageVariantsConversation.id)
+              .map(variant => ({
+                id: variant.id,
+                name: variant.name,
+                description: variant.description || undefined,
+                isDefault: false,
+              }))
           }}
           conversationId={manageVariantsConversation.id}
           onSave={handleSaveVariants}

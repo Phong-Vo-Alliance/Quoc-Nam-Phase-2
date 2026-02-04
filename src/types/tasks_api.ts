@@ -41,6 +41,8 @@ export interface CheckListTemplateResponse {
   id: string;
   name: string | null;
   description: string | null;
+  conversationId: string | null; // UUID - links template to conversation (null = global)
+  isDefault: boolean; // Indicates if this is the default template for its conversation
   items: TemplateItemDto[] | null;
   createdAt: string;
   updatedAt: string | null;

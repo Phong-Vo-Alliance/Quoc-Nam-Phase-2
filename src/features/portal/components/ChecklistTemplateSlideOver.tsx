@@ -159,8 +159,13 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
   // Get conversation/group name from store (MUST be before early return to follow React hooks rules)
   const conversationName = useConversationStore((s) => s.getConversationName()) || "Nhóm";
 
+  console.log("Rendering ChecklistTemplateSlideOver with items:", items);
+  console.log("Selected API Template ID:", selectedApiTemplateId);
   if (!open) return null;
   const _apiTemplates = apiTemplates?.filter( api_template => {return checklistVariants?.map( _ => _.id).includes(api_template.id)});
+  console.log("Filtered API Templates for current variants:",checklistVariants);
+  console.log(apiTemplates)
+  console.log(_apiTemplates)
   
   return (
     <div className="fixed inset-0 z-[999] flex justify-end bg-black/30">

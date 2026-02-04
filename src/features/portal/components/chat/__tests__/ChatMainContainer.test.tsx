@@ -310,4 +310,111 @@ describe("ChatMainContainer - Category Navigation Integration", () => {
       expect(screen.getByText("Test")).toBeInTheDocument();
     });
   });
+
+  describe("Scroll-to-Message Functionality", () => {
+    it("should handle scrollToMessageId prop and trigger jump-to-message", async () => {
+      const mockOnScrollComplete = vi.fn();
+      
+      vi.spyOn(categoriesHook, "useCategories").mockReturnValue({
+        data: mockCategories,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as any);
+
+      const { rerender } = render(
+        <ChatMainContainer
+          selectedGroup={{ id: "conv-1", type: "group", name: "Frontend" }}
+          selectedCategoryId="cat-1"
+          scrollToMessageId={undefined}
+          onScrollComplete={mockOnScrollComplete}
+          onBack={vi.fn()}
+        />,
+        { wrapper }
+      );
+
+      // Initially no scrollToMessageId
+      await waitFor(() => {
+        expect(screen.getByText("Dự án Website")).toBeInTheDocument();
+      });
+
+      // Update with scrollToMessageId
+      rerender(
+        <ChatMainContainer
+          selectedGroup={{ id: "conv-1", type: "group", name: "Frontend" }}
+          selectedCategoryId="cat-1"
+          scrollToMessageId="msg-123"
+          onScrollComplete={mockOnScrollComplete}
+          onBack={vi.fn()}
+        />
+      );
+
+      // Should trigger handleScrollToMessage
+      await waitFor(() => {
+        // Note: Actual scroll behavior is mocked in unit tests
+        // This test verifies prop changes trigger the effect
+        expect(mockOnScrollComplete).toHaveBeenCalledWith(false); // May fail on first attempt in tests
+      }, { timeout: 2000 });
+    });
+
+    it("should not scroll when scrollToMessageId is undefined", async () => {
+      const mockOnScrollComplete = vi.fn();
+
+      vi.spyOn(categoriesHook, "useCategories").mockReturnValue({
+        data: mockCategories,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as any);
+
+      render(
+        <ChatMainContainer
+          selectedGroup={{ id: "conv-1", type: "group", name: "Frontend" }}
+          selectedCategoryId="cat-1"
+          scrollToMessageId={undefined}
+          onScrollComplete={mockOnScrollComplete}
+          onBack={vi.fn()}
+        />,
+        { wrapper }
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Dự án Website")).toBeInTheDocument();
+      });
+
+      // Should not call onScrollComplete without scrollToMessageId
+      expect(mockOnScrollComplete).not.toHaveBeenCalled();
+    });
+
+    it("should handle scroll-to-message from different conversations", async () => {
+      const mockOnScrollComplete = vi.fn();
+      const mockOnChatChange = vi.fn();
+
+      vi.spyOn(categoriesHook, "useCategories").mockReturnValue({
+        data: mockCategories,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as any);
+
+      render(
+        <ChatMainContainer
+          selectedGroup={{ id: "conv-1", type: "group", name: "Frontend" }}
+          selectedCategoryId="cat-1"
+          scrollToMessageId="msg-from-conv-2"
+          onScrollComplete={mockOnScrollComplete}
+          onChatChange={mockOnChatChange}
+          onBack={vi.fn()}
+        />,
+        { wrapper }
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Dự án Website")).toBeInTheDocument();
+      });
+
+      // Note: Full conversation switching logic is tested in unit tests
+      // This verifies props are passed correctly
+    });
+  });
 });

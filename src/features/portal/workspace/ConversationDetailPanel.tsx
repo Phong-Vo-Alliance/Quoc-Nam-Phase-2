@@ -32,6 +32,7 @@ import {
   useAddCheckItem,
   useToggleCheckItem,
   useUpdateCheckItem,
+  useDeleteCheckItem,
   useUpdateTaskStatus,
 } from "@/hooks/mutations";
 
@@ -53,6 +54,7 @@ import {
   SquarePen,
   ListTodo,
   UserIcon,
+  Loader2,
 } from "lucide-react";
 import {
   Popover,
@@ -184,6 +186,7 @@ const TaskCard: React.FC<{
   const addCheckItemMutation = useAddCheckItem();
   const toggleCheckItemMutation = useToggleCheckItem();
   const updateCheckItemMutation = useUpdateCheckItem();
+  const deleteCheckItemMutation = useDeleteCheckItem();
   const updateStatusMutation = useUpdateTaskStatus();
 
   const total = t.checklist?.length ?? 0;
@@ -420,6 +423,7 @@ const TaskCard: React.FC<{
               {hasLeaderPermissions() && (
                 <>
                   <span>•</span>
+                  {(t.status.code!=='need_to_verified')?
                   <span>
                     Giao cho:{" "}
                     <span className="font-medium text-gray-700">
@@ -435,7 +439,7 @@ const TaskCard: React.FC<{
                         ))}
                       </select>
                     </span>
-                  </span>
+                  </span>:"Giao cho:" + members.find(m=>m.id===t.assignTo)?.name}
                 </>
               )}
             </div>
@@ -522,7 +526,7 @@ const TaskCard: React.FC<{
                             transition flex items-center justify-center
                             ${
                               c.done
-                                ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer"
+                                ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer checklist-btn"
                                 : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
                             }
                           `}
@@ -569,15 +573,24 @@ const TaskCard: React.FC<{
                             />
 
                             {/* Delete */}
-                            <Trash2
-                              className="w-3.5 h-3.5 text-rose-500 cursor-pointer hover:text-rose-600"
-                              onClick={() => {
-                                const updated = (t.checklist ?? []).filter(
-                                  (i) => i.id !== c.id,
-                                );
-                                onUpdateTaskChecklist?.(t.id, updated);
-                              }}
-                            />
+                            {deleteCheckItemMutation.isPending ? (
+                              <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
+                            ) : (
+                              <Trash2
+                                className="w-3.5 h-3.5 text-rose-500 cursor-pointer hover:text-rose-600"
+                                onClick={async () => {
+                                  if (!confirm(`Xóa mục "${c.label}"?`)) return;
+                                  try {
+                                    await deleteCheckItemMutation.mutateAsync({
+                                      taskId: t.id,
+                                      itemId: c.id,
+                                    });
+                                  } catch (error) {
+                                    console.error("Failed to delete checklist item:", error);
+                                  }
+                                }}
+                              />
+                            )}
                           </div>
                         )}
                       </li>
@@ -664,9 +677,25 @@ const TaskCard: React.FC<{
                 (t.status.code === "doing" ||
                   t.status.code === "need_to_verified") && (
                   <button
-                    disabled={updateStatusMutation.isPending}
+                    disabled={updateStatusMutation.isPending || toggleCheckItemMutation.isPending}
                     onClick={async () => {
                       try {
+                        // First, check all unchecked checklist items
+                        const uncheckedItems = t.checklist?.filter((c) => !c.done) || [];
+                        
+                        if (uncheckedItems.length > 0) {
+                          // Toggle all unchecked items to checked
+                          await Promise.all(
+                            uncheckedItems.map((item) =>
+                              toggleCheckItemMutation.mutateAsync({
+                                taskId: t.id,
+                                itemId: item.id,
+                              })
+                            )
+                          );
+                        }
+                        
+                        // Then update status to finished
                         await updateStatusMutation.mutateAsync({
                           taskId: t.id,
                           status: "finished",
@@ -677,7 +706,7 @@ const TaskCard: React.FC<{
                     }}
                     className="rounded-md border px-2 py-0.5 text-[11px] hover:bg-emerald-50 disabled:opacity-50"
                   >
-                    {updateStatusMutation.isPending ? "..." : "Hoàn tất"}
+                    {(updateStatusMutation.isPending || toggleCheckItemMutation.isPending) ? "..." : "Hoàn tất"}
                   </button>
                 )}
             </div>
@@ -1846,14 +1875,7 @@ export const ConversationDetailPanel: React.FC<{
                     </div>
 
                     {/* Grouped tasks theo trạng thái */}
-                    {leadBuckets.todo.length +
-                      leadBuckets.inProgress.length +
-                      leadBuckets.awaiting.length ===
-                    0 ? (
-                      <div className="rounded-xl border border-dashed bg-white/60 p-4 text-xs text-gray-500 text-center">
-                        Không có công việc nào trong nhóm với bộ lọc hiện tại.
-                      </div>
-                    ) : (
+                    { (
                       <div className="space-y-6">
                         {/* AWAITING REVIEW - Always show */}
                         <section data-testid="leader-awaiting-section">

@@ -43,9 +43,10 @@ export const EmptyCategoryState: React.FC<EmptyCategoryStateProps> = ({
       {/* Description */}
       <p className="text-sm text-gray-500 max-w-md">
         {categoryName
-          ? `Category "${categoryName}" chưa có cuộc trò chuyện nào.`
-          : "Category này chưa có cuộc trò chuyện nào."}{" "}
-        Vui lòng tạo cuộc trò chuyện mới hoặc chọn category khác.
+          ? `Nhóm "${categoryName}" chưa có cuộc trò chuyện nào.`
+          : "Nhóm này chưa có cuộc trò chuyện nào."}{" "}
+        <br />
+        Vui lòng tạo cuộc trò chuyện mới hoặc chọn nhóm khác.
       </p>
     </div>
   );
