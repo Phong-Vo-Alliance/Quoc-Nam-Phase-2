@@ -151,4 +151,7 @@ button:focus-visible {
   }
 }
 
-
+/* Hide scrollbar for LinearTabs (Chrome, Safari, Edge) */
+.linear-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}

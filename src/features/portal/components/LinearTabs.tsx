@@ -2,6 +2,13 @@ import React from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+// CSS for hiding scrollbar
+const scrollContainerStyle: React.CSSProperties = {
+  scrollbarWidth: "none", // Firefox
+  msOverflowStyle: "none", // IE and Edge
+  WebkitOverflowScrolling: "touch", // iOS momentum scrolling
+};
+
 export const LinearTabs = ({
   tabs,
   active,
@@ -99,7 +106,8 @@ export const LinearTabs = ({
       {/* Tabs container */}
       <div
         ref={scrollContainerRef}
-        className="relative flex items-center gap-4 overflow-x-auto scrollbar-hide select-none"
+        className="relative flex items-center gap-4 overflow-x-auto overflow-y-hidden select-none linear-tabs-scroll"
+        style={scrollContainerStyle}
       >
         {tabs.map((tab) => {
           const isActive = tab.key === active;
