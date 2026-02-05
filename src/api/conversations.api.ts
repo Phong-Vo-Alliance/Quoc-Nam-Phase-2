@@ -28,6 +28,21 @@ export const getConversations = async (
 };
 
 /**
+ * POST /api/conversations
+ * Create a new direct message conversation
+ * 
+ * @param recipientId - User ID to create conversation with
+ * @returns Created conversation data
+ */
+export const createConversation = async (recipientId: string): Promise<ConversationDto> => {
+  const response = await apiClient.post<ConversationDto>("/api/conversations", {
+    recipientId: recipientId,
+    memberIds: [recipientId],
+  });
+  return response.data;
+};
+
+/**
  * GET /api/conversations/{id}/members
  * Fetch members of a conversation
  * Returns array of members directly

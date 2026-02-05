@@ -120,6 +120,22 @@ export interface ConversationDto {
   lastMessage: LastMessageDto | null;
   /** Associated categories or null */
   categories: ConversationCategoryDto[] | null;
+  /** Conversation members (optional, included in some endpoints) */
+  members?: Array<{
+    userId: string;
+    userName: string;
+    role: string;
+    joinedAt: string;
+    isMuted: boolean;
+    userInfo: {
+      id: string;
+      userName: string;
+      fullName: string;
+      identifier: string;
+      roles: string;
+      avatarUrl: string | null;
+    };
+  }> | null;
 }
 
 /**

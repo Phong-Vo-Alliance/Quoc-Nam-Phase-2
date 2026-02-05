@@ -4,13 +4,22 @@
  */
 
 import React from "react";
-import { Pin, Star, StarOff, RefreshCw, ClipboardPlus } from "lucide-react";
+import {
+  Pin,
+  Star,
+  StarOff,
+  RefreshCw,
+  ClipboardPlus,
+  Reply,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
 import MessageImage from "@/features/portal/workspace/MessageImage";
 import { MessageStatusIndicator } from "@/components/chat/MessageStatusIndicator";
+import QuotedMessagePreview from "./QuotedMessagePreview";
 import type { ChatMessage, AttachmentDto } from "@/types/messages";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { useReplyStore } from "@/stores/replyStore";
 
 /**
  * Format file size from bytes to human-readable format
@@ -63,6 +72,7 @@ export interface MessageBubbleSimpleProps {
   onTogglePin?: (messageId: string, isPinned: boolean) => void;
   onToggleStar?: (messageId: string, isStarred: boolean) => void;
   onRetry?: (messageId: string) => void; // NEW: Retry failed message
+  onScrollToQuoted?: (messageId: string) => void; // NEW: Scroll to quoted message
   // Phase 4: Grouping props
   isFirstInGroup?: boolean;
   isMiddleInGroup?: boolean;
@@ -79,11 +89,26 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   onFilePreviewClick,
   onImageClick,
   onRetry,
+  onScrollToQuoted,
   isFirstInGroup = true,
   isMiddleInGroup = false,
   isLastInGroup = true,
   onCreateTask,
 }) => {
+  // Quote Reply: Get setReplyTarget from store
+  const setReplyTarget = useReplyStore((state) => state.setReplyTarget);
+
+  // Handle Reply button click
+  const handleReplyClick = () => {
+    if (!message) return;
+    setReplyTarget({
+      id: message.id,
+      senderName: message.senderName,
+      content: message.content || "",
+      sentAt: message.sentAt,
+      attachments: message.attachments, // 🆕 v1.2.0 - Pass attachments for preview
+    });
+  };
   // Phase 4: Dynamic border-radius based on grouping position
   const radiusBySide = isOwn
     ? cn(
@@ -122,6 +147,21 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
         .hover-action-button:hover {
           opacity: 1;
           pointer-events: auto;
+        }
+
+        /* Highlight effect for parent message scroll */
+        .message-highlighted .message-bubble {
+          animation: highlight-pulse 2.5s ease-in-out;
+        }
+
+        @keyframes highlight-pulse {
+          0%, 100% {
+            background-color: inherit;
+          }
+          10%, 90% {
+            background-color: rgb(254 240 138); /* yellow-200 */
+            box-shadow: 0 0 0 4px rgb(254 240 138 / 0.5);
+          }
         }
       `}</style>
       <div
@@ -222,7 +262,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             {
               <div
                 className={cn(
-                  "hover-action-button absolute flex items-center gap-1 rounded-lg border border-gray-200 bg-white shadow-sm px-2 z-10",
+                  "hover-action-button absolute flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 z-10",
                   isOwn ? "right-0" : "left-0",
                 )}
                 style={{
@@ -233,7 +273,18 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                 }}
                 data-testid={`hover-actions-${message.id}`}
               >
-                <div className="rounded-lg border border-gray-200 shadow-sm px-2 py-1 bg-white hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
+                <div className="rounded-lg border border-gray-200 px-2 py-1 bg-white hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
+                  {/* Reply button - LEFTMOST (before other actions) */}
+                  {message.contentType !== "SYS" && (
+                    <button
+                      className="p-1.5 rounded transition text-gray-500 hover:text-brand-600"
+                      onClick={handleReplyClick}
+                      title="Trả lời tin nhắn"
+                      data-testid={`message-reply-button-${message.id}`}
+                    >
+                      <Reply size={14} />
+                    </button>
+                  )}
                   {onTogglePin && (
                     <button
                       className={cn(
@@ -340,6 +391,22 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
 
                 return (
                   <>
+                    {/* Quoted Message Preview - if this is a quote reply */}
+                    {message.quotedMessage && (
+                      <div className="px-4 pt-3">
+                        <QuotedMessagePreview
+                          quotedMessage={message.quotedMessage}
+                          variant="message"
+                          onClick={
+                            onScrollToQuoted
+                              ? () =>
+                                  onScrollToQuoted(message.quotedMessage!.id)
+                              : undefined
+                          }
+                        />
+                      </div>
+                    )}
+
                     {/* Text content */}
                     {hasText && (
                       <div
@@ -354,9 +421,9 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     )}
 
                     {/* Gap between text and attachments */}
-                    {hasText && (hasImages || hasFiles) && (
-                      <div className="h-3" />
-                    )}
+                    {/* {hasText && (hasImages || hasFiles) && (
+                      <div className="h-1" />
+                    )} */}
 
                     {/* Phase 2.1: Dynamic Image Grid based on count */}
                     {hasImages && (

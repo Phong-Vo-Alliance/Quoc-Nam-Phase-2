@@ -10,12 +10,14 @@ import type { LoginApiUser } from "@/types/auth";
 import { queryClient } from "@/lib/queryClient";
 import { clearSelectedConversation } from "@/utils/storage";
 import { useConversationStore } from "./conversationStore";
+import type { UserDepartmentDto } from "@/types/identity";
 
 // Auth user type (from login API)
 export interface AuthUser {
   id: string;
   identifier: string;
   roles: string[];
+  departments?: UserDepartmentDto[];
 }
 
 interface AuthState {
@@ -71,6 +73,7 @@ export const useAuthStore = create<AuthState>()(
           id: apiUser.id,
           identifier: apiUser.identifier,
           roles: apiUser.roles,
+          departments: apiUser.departments,
         };
 
         set({

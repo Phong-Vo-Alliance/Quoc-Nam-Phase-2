@@ -28,6 +28,11 @@ interface UseSendMessageOptions {
  * - Updates message to 'failed' with failReason when all retries exhausted
  * - Removes temp message on success (SignalR will add real message)
  *
+ * Phase 8 Updates (2026-02-04): Quote Reply Support
+ * - Supports quoteMessageId field in SendChatMessageRequest
+ * - Passes quoteMessageId to API via sendMessage(data, { signal })
+ * - Backend will return quotedMessage object in response
+ *
  * Why optimistic UI now?
  * - Previous version had NO optimistic UI to avoid duplicates
  * - Now we need optimistic UI to show retry status ("Thử lại 2/3...")
@@ -40,9 +45,17 @@ interface UseSendMessageOptions {
  *   onSuccess: (msg) => console.log('Sent:', msg.id)
  * });
  *
+ * // Send normal message
  * sendMsg.mutate({
  *   conversationId: 'conv-123',
  *   content: 'Hello',
+ * });
+ *
+ * // Send quote reply
+ * sendMsg.mutate({
+ *   conversationId: 'conv-123',
+ *   content: 'Replying to your message',
+ *   quoteMessageId: 'original-msg-uuid',
  * });
  */
 export function useSendMessage({
@@ -95,11 +108,11 @@ export function useSendMessage({
                           sendStatus: "retrying" as const,
                           retryCount,
                         }
-                      : msg
+                      : msg,
                   ),
                 })),
               };
-            }
+            },
           );
         },
       });
@@ -116,6 +129,7 @@ export function useSendMessage({
         senderFullName: null,
         senderRoles: null,
         parentMessageId: data.parentMessageId || null,
+        quoteMessageId: data.quoteMessageId || null, // Support quote reply
         content: data.content || null,
         contentType: "TXT",
         sentAt: new Date().toISOString(),
@@ -163,10 +177,10 @@ export function useSendMessage({
             pages: old.pages.map((page, index) =>
               index === 0
                 ? { ...page, data: [...page.data, tempMessage] }
-                : page
+                : page,
             ),
           };
-        }
+        },
       );
 
       return { tempMessageId: tempMessage.id };
@@ -197,11 +211,11 @@ export function useSendMessage({
                         sendStatus: "failed" as const,
                         failReason: classified.message,
                       }
-                    : msg
+                    : msg,
                 ),
               })),
             };
-          }
+          },
         );
       }
 
@@ -244,11 +258,11 @@ export function useSendMessage({
               pages: old.pages.map((page) => ({
                 ...page,
                 data: page.data.filter(
-                  (msg) => msg.id !== context.tempMessageId
+                  (msg) => msg.id !== context.tempMessageId,
                 ),
               })),
             };
-          }
+          },
         );
       }
 

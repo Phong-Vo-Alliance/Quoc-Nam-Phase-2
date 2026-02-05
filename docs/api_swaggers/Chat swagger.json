@@ -5198,6 +5198,13 @@
               "$ref": "#/components/schemas/ConversationCategoryDto"
             },
             "nullable": true
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5271,14 +5278,6 @@
           "recipientId": {
             "type": "string",
             "format": "uuid"
-          },
-          "memberIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5661,6 +5660,11 @@
             "format": "uuid",
             "nullable": true
           },
+          "quoteMessageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "content": {
             "type": "string",
             "nullable": true
@@ -5711,6 +5715,9 @@
           },
           "parentMessagePreview": {
             "$ref": "#/components/schemas/MessageParentPreviewDto"
+          },
+          "quotedMessage": {
+            "$ref": "#/components/schemas/QuotedMessageDto"
           },
           "mentions": {
             "type": "array",
@@ -5866,6 +5873,28 @@
         },
         "additionalProperties": { }
       },
+      "QuotedMessageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "content": {
+            "type": "string",
+            "nullable": true
+          },
+          "senderName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "ReactionDto": {
         "type": "object",
         "properties": {
@@ -5919,6 +5948,11 @@
             "nullable": true
           },
           "parentMessageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "quoteMessageId": {
             "type": "string",
             "format": "uuid",
             "nullable": true

@@ -11,12 +11,14 @@
 
 import type { AuthUser } from "@/stores/authStore";
 import { identityApiClient } from "@/api/identityClient";
+import type { UserDepartmentDto } from "@/types/identity";
 
 // Cache for API response to avoid repeated calls
 let cachedCurrentUser: {
   id: string;
   identifier: string;
   roles: string[];
+  departments?: UserDepartmentDto[];
 } | null = null;
 
 /**
@@ -36,6 +38,7 @@ export async function getCurrentUser(): Promise<{
   id: string;
   identifier: string;
   roles: string[];
+  departments?: UserDepartmentDto[];
 }> {
   // Try to get from localStorage if in browser environment
   if (typeof window !== "undefined" && localStorage) {
@@ -45,9 +48,19 @@ export async function getCurrentUser(): Promise<{
       if (currentUserJson) {
         const user = JSON.parse(currentUserJson);
         if (user?.id) {
+          // If departments are missing, we need to fetch from API
+          if (!user.departments || user.departments.length === 0) {
+            console.log("Departments missing in current_user, fetching from API...");
+            const apiUser = await getCurrentUserFromAPI();
+            if (apiUser) {
+              return apiUser;
+            }
+          }
+          
           return {
             id: user.id,
             identifier: user.identifier || user.email || "",
+            departments: user.departments || [],
             roles: user.roles || [],
           };
         }
@@ -62,9 +75,26 @@ export async function getCurrentUser(): Promise<{
       if (authStorage) {
         const parsed = JSON.parse(authStorage);
         if (parsed.state?.user?.id) {
+          // If departments are missing, we need to fetch from API
+          if (!parsed.state.user.departments || parsed.state.user.departments.length === 0) {
+            console.log("Departments missing in auth-storage, fetching from API...");
+            const apiUser = await getCurrentUserFromAPI();
+            if (apiUser) {
+              // Also update the auth-storage with departments
+              parsed.state.user.departments = apiUser.departments;
+              try {
+                localStorage.setItem("auth-storage", JSON.stringify(parsed));
+              } catch (e) {
+                console.warn("Failed to update auth-storage with departments:", e);
+              }
+              return apiUser;
+            }
+          }
+          
           return {
             id: parsed.state.user.id,
             identifier: parsed.state.user.identifier || "",
+            departments: parsed.state.user.departments || [],
             roles: parsed.state.user.roles || [],
           };
         }
@@ -80,10 +110,11 @@ export async function getCurrentUser(): Promise<{
   }
 
   // 4. Try to fetch from API (per Swagger: GET /api/auth/me)
-  // const apiUser = await getCurrentUserFromAPI();
-  // if (apiUser) {
-  //   return apiUser;
-  // }
+  // This will fetch departments if they're missing from localStorage
+  const apiUser = await getCurrentUserFromAPI();
+  if (apiUser) {
+    return apiUser;
+  }
 
   // 5. Fallback for development: return demo user
   // This is the last resort when API is unavailable or user is not authenticated
@@ -91,18 +122,17 @@ export async function getCurrentUser(): Promise<{
     id: "u_thanh_truc",
     identifier: "thanh.truc@example.com",
     roles: ["leader"],
+    departments: [],
   };
 
   console.warn("Could not fetch user from API, using demo user as fallback");
   return demoUser;
 }
 
-/**
- * Get current user from API (async version)
- * Implements Swagger spec: GET /api/auth/me returns UserInfo { id, identifier, roles }
+/**, departments }
  * 
  * HTTP Status Codes (per Swagger):
- * - 200: Success - returns { id, identifier?, roles? }
+ * - 200: Success - returns { id, identifier?, roles?, departments? }
  * - 401: Unauthorized - token missing, expired, or invalid
  * - 403: Forbidden - authenticated but access denied (rare for /me)
  * - 5xx: Server error - API unavailable
@@ -115,6 +145,7 @@ export async function getCurrentUserFromAPI(): Promise<{
   id: string;
   identifier: string;
   roles: string[];
+  departments?: UserDepartmentDto[];
 } | null> {
   try {
     const response = await identityApiClient.get<{
@@ -122,11 +153,13 @@ export async function getCurrentUserFromAPI(): Promise<{
       identifier?: string;
       email?: string;
       roles?: string[];
+      departments?: UserDepartmentDto[];
     }>("/api/auth/me");
 
     // 200 OK: Successfully retrieved user
     const userData = response.data;
     const user = {
+      departments: userData.departments || [],
       id: userData.id,
       identifier: userData.identifier || userData.email || "",
       roles: userData.roles || [],

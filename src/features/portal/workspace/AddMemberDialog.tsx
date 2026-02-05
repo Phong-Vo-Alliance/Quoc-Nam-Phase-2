@@ -32,7 +32,9 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
   // Fetch users
   const { data, isLoading, isError, error } = useUsers({ page, pageSize });
-
+console.log("Fetched users:", data);
+console.log("Existing member IDs:", existingMemberIds);
+console.log(isError, error);
   // Mutation for adding members
   const addMemberMutation = useAddGroupMember();
   const [addingProgress, setAddingProgress] = useState<{

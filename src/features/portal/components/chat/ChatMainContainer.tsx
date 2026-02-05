@@ -24,6 +24,7 @@ import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime"; // 🆕 N
 import { useSendTypingIndicator } from "@/hooks/useSendTypingIndicator";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useAuthStore } from "@/stores/authStore";
+import { useReplyStore } from "@/stores/replyStore"; // 🆕 NEW: Reply store
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW (CBN-002)
 import {
   saveSelectedConversation,
@@ -39,6 +40,7 @@ import { groupMessages } from "@/utils/messageGrouping";
 import { MessageBubbleSimple } from "./MessageBubbleSimple";
 import { SystemMessageBubble } from "./SystemMessageBubble";
 import { ChatHeader } from "./ChatHeader";
+import QuotedMessagePreview from "./QuotedMessagePreview"; // 🆕 NEW: Quoted message preview (Quote Reply feature)
 import { EmptyCategoryState } from "./EmptyCategoryState"; // 🆕 NEW (CBN-002)
 import MessageDateSeparator from "@/components/chat/MessageDateSeparator"; // 🆕 NEW: Date separators
 import { formatDateSeparator } from "@/utils/formatDateSeparator"; // 🆕 NEW: Date formatting
@@ -223,6 +225,22 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 }) => {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient(); // 🆕 NEW: For cache manipulation in jump-to-message
+
+  // 🆕 NEW: Quote Reply state management (2026-02-04)
+  const replyTarget = useReplyStore((state) => state.replyTarget);
+  const clearReply = useReplyStore((state) => state.clearReply);
+  const setFocusInputCallback = useReplyStore(
+    (state) => state.setFocusInputCallback,
+  );
+
+  // 🆕 NEW: Register input focus callback on mount
+  useEffect(() => {
+    setFocusInputCallback(() => {
+      inputRef.current?.focus();
+    });
+    // Cleanup on unmount
+    return () => setFocusInputCallback(() => {});
+  }, [setFocusInputCallback]);
 
   // 🆕 NEW: Category state with localStorage persistence
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] = useState<
@@ -750,7 +768,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           limit: 50,
         });
 
-
         // ✅ Merge messages into main cache (deduplicate by ID)
         queryClient.setQueryData(
           messageKeys.conversation(conversationId),
@@ -797,7 +814,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             // Find the oldest message ID in our merged cache
             const oldestCachedMessage = allMessages[allMessages.length - 1];
             const oldestCachedMessageId = oldestCachedMessage?.id;
-            
+
             // Check if the API's nextCursor points to an older message
             // If result.hasMore is true OR if we have a nextCursor, there are older messages
             const hasMoreOlderMessages = result.hasMore || !!result.nextCursor;
@@ -806,7 +823,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
               pages: [
                 {
                   items: allMessages,
-                  nextCursor: hasMoreOlderMessages ? (result.nextCursor || oldestCachedMessageId) : undefined,
+                  nextCursor: hasMoreOlderMessages
+                    ? result.nextCursor || oldestCachedMessageId
+                    : undefined,
                   hasMore: hasMoreOlderMessages,
                 },
               ],
@@ -1115,6 +1134,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         await sendMessageMutation.mutateAsync({
           conversationId,
           content: inputValue.trim(),
+          quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
         });
       } else if (selectedFiles.length === 1) {
         // Case 2: Single file upload (Phase 1 API)
@@ -1154,6 +1174,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           conversationId,
           content: inputValue.trim() || "", // Empty string instead of null for API
           attachments: [attachment], // Phase 2: Always use attachments[] array
+          quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
         });
       } else {
         // Case 3: Batch upload (Phase 2 API - 2+ files)
@@ -1184,6 +1205,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           conversationId,
           content: inputValue.trim() || "", // Empty string instead of null for API
           attachments, // Phase 2: Array of AttachmentInputDto
+          quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
         });
       }
 
@@ -1192,6 +1214,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       setSelectedFiles([]);
       setInputValue("");
       setIsUploading(false);
+      clearReply(); // 🆕 NEW: Clear reply state after sending message
 
       // Auto-scroll to bottom after sending message
       setTimeout(() => {
@@ -1212,6 +1235,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     uploadFilesMutation,
     uploadBatchMutation,
     isOnline,
+    clearReply,
   ]);
 
   // Handle key press (Enter to send)
@@ -1439,6 +1463,24 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       });
     },
     [conversationId, onCreateTaskFromMessage, groupedMessages],
+  );
+
+  // 🆕 NEW: Scroll to quoted message (Quote Reply feature - 2026-02-04)
+  const handleScrollToQuoted = useCallback(
+    (quotedMessageId: string) => {
+      const messageElement = document.querySelector(
+        `[data-testid="message-bubble-${quotedMessageId}"]`,
+      );
+
+      if (!messageElement) {
+        toast.warning("Tin nhắn gốc không còn trong lịch sử hiển thị");
+        return;
+      }
+
+      // 🎨 Use same highlight style as starred/pinned messages (border only, not background)
+      scrollToAndHighlight(messageElement);
+    },
+    [scrollToAndHighlight],
   );
 
   // Get display name from DM format
@@ -1764,6 +1806,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                     onToggleStar={onToggleStar}
                     onCreateTask={handleCreateTask}
                     onRetry={handleRetry}
+                    onScrollToQuoted={handleScrollToQuoted}
                     isFirstInGroup={groupedMsg.isFirstInGroup}
                     isMiddleInGroup={groupedMsg.isMiddleInGroup}
                     isLastInGroup={groupedMsg.isLastInGroup}
@@ -1848,6 +1891,17 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
               <ChevronDown className="h-5 w-5 text-brand-600 group-hover:text-brand-700 transition-colors duration-200 relative z-10" />
             </div>
           </button>
+        </div>
+      )}
+
+      {/* Quoted Message Preview (Reply Mode) */}
+      {replyTarget && (
+        <div className="border-t px-3 pt-3">
+          <QuotedMessagePreview
+            quotedMessage={replyTarget}
+            variant="input"
+            onClose={clearReply}
+          />
         </div>
       )}
 

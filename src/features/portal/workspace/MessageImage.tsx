@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getImageThumbnail } from "@/api/files.api";
+import { useImageCacheStore } from "@/stores/imageCacheStore";
 import { cn } from "@/lib/utils";
 
 export interface MessageImageProps {
@@ -25,7 +25,7 @@ export default function MessageImage({
 }: MessageImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(forceLoad);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
@@ -75,18 +75,35 @@ export default function MessageImage({
     };
   }, [forceLoad, fileId]);
 
-  // Fetch thumbnail when visible
-  useEffect(() => {
-    if (!isVisible || imageUrl) return;
+  // 🆕 v1.2.0 - Subscribe to cache changes for this fileId
+  const cachedUrl = useImageCacheStore((state) => state.cache.get(fileId));
 
+  // 🆕 v1.2.0 - Update imageUrl when cache has this image
+  useEffect(() => {
+    if (cachedUrl) {
+      setImageUrl(cachedUrl);
+      setIsLoading(false);
+      setError(null);
+    }
+  }, [cachedUrl]);
+
+  // 🆕 v1.2.0 - Fetch thumbnail when visible (if not in cache)
+  useEffect(() => {
+    if (!isVisible) return;
+    if (cachedUrl) return; // Already in cache, no need to fetch
+
+    // Fetch from cache store (will fetch API and cache)
     const fetchThumbnail = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const blob = await getImageThumbnail(fileId, "large");
-        const blobUrl = URL.createObjectURL(blob);
-        setImageUrl(blobUrl);
+        const blobUrl = await useImageCacheStore.getState().getImageUrl(fileId);
+        if (blobUrl) {
+          setImageUrl(blobUrl);
+        } else {
+          setError(new Error("Failed to load image"));
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err : new Error("Failed to load image"),
@@ -97,29 +114,42 @@ export default function MessageImage({
     };
 
     fetchThumbnail();
-  }, [isVisible, fileId]);
+  }, [isVisible, fileId, cachedUrl]);
 
-  // Cleanup: Revoke blob URL
-  useEffect(() => {
-    return () => {
-      if (imageUrl) {
-        URL.revokeObjectURL(imageUrl);
-      }
-    };
-  }, [imageUrl]);
-
-  // Reset state when fileId changes
-  useEffect(() => {
-    setImageUrl(null);
-    setIsLoading(false);
-    // DON'T clear error - let it persist until next fetch starts
-  }, [fileId, forceLoad]);
+  // ⚠️ NO cleanup - blob URLs managed by cache store
 
   const handleClick = () => {
     onPreviewClick(fileId);
   };
 
-  // Render: Error
+  // Render: Success (prioritize imageUrl if exists)
+  if (imageUrl) {
+    return (
+      <div
+        ref={containerRef}
+        data-testid="message-image-container"
+        className={cn(
+          "cursor-pointer group overflow-hidden rounded-lg",
+          isInGrid
+            ? "w-full aspect-square"
+            : "w-[320px] max-w-full max-h-[180px]",
+        )}
+        onClick={handleClick}
+      >
+        <img
+          data-testid="message-image"
+          src={imageUrl}
+          alt={fileName}
+          className={cn(
+            "w-full transition-all duration-200 group-hover:opacity-90",
+            isInGrid ? "h-full object-cover" : "max-h-[400px] object-contain",
+          )}
+        />
+      </div>
+    );
+  }
+
+  // Render: Error (only if no imageUrl and has error)
   if (error) {
     return (
       <div
@@ -154,42 +184,15 @@ export default function MessageImage({
     );
   }
 
-  // Render: Loading
-  if (!imageUrl) {
-    return (
-      <div
-        ref={containerRef}
-        data-testid="image-skeleton-loader"
-        className={cn(
-          "bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 animate-pulse rounded-lg",
-          isInGrid ? "w-full aspect-square" : "w-[320px] h-[180px] max-w-full",
-        )}
-      />
-    );
-  }
-
-  // Render: Success
+  // Render: Loading (default - no imageUrl, no error)
   return (
     <div
       ref={containerRef}
-      data-testid="message-image-container"
+      data-testid="image-skeleton-loader"
       className={cn(
-        "cursor-pointer group overflow-hidden rounded-lg",
-        isInGrid
-          ? "w-full aspect-square"
-          : "w-[320px] max-w-full max-h-[180px]",
+        "bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 animate-pulse rounded-lg",
+        isInGrid ? "w-full aspect-square" : "w-[320px] h-[180px] max-w-full",
       )}
-      onClick={handleClick}
-    >
-      <img
-        data-testid="message-image"
-        src={imageUrl!}
-        alt={fileName}
-        className={cn(
-          "w-full transition-all duration-200 group-hover:opacity-90",
-          isInGrid ? "h-full object-cover" : "max-h-[400px] object-contain",
-        )}
-      />
-    </div>
+    />
   );
 }

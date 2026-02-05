@@ -44,7 +44,7 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       className,
       disabled = false,
     },
-    forwardedRef
+    forwardedRef,
   ) => {
     const internalRef = useRef<HTMLTextAreaElement>(null);
 
@@ -91,6 +91,7 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         disabled={disabled}
         minRows={1}
         maxRows={5}
+        data-testid="chat-input-field"
         className={cn(
           "w-full resize-none overflow-y-auto",
           "rounded-lg border border-brand-200 px-3 py-2 text-sm",
@@ -98,12 +99,12 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           "focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300",
           "disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400",
           "transition-colors",
-          className
+          className,
         )}
         data-testid="chat-input"
       />
     );
-  }
+  },
 );
 
 ChatInput.displayName = "ChatInput";

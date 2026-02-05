@@ -16,6 +16,29 @@ export interface UserProfileResponse {
   isActive: boolean;
   createdAt: string;
   updatedAt: string | null;
+  departments?: UserDepartmentDto[] | null;
+}
+
+// ==========================================
+// Department
+// ==========================================
+
+export interface UserDepartmentDto {
+  id: string; // uuid
+  departmentId: string; // uuid
+  departmentName: string | null;
+  departmentCode: string | null;
+  isLeader: boolean;
+  joinedAt: string; // date-time
+}
+
+export interface DepartmentMemberDto {
+  id: string; // uuid
+  userId: string; // uuid
+  userFullName: string | null;
+  userEmail: string | null;
+  isLeader: boolean;
+  joinedAt: string; // date-time
 }
 
 export interface PagedUserProfileResponse {
@@ -68,5 +91,13 @@ export interface RegisterCommand {
 export interface RegisterResponse {
   message: string;
   userId: string;
+}
+
+export interface AuthMeResponse {
+  id: string;
+  identifier?: string;
+  email?: string;
+  roles?: string[];
+  departments?: UserDepartmentDto[];
 }
 

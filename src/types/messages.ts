@@ -141,11 +141,29 @@ export interface ChatMessageAttachment {
   size: number;
 }
 
-// Message Reaction from API
+// Chat Message Reaction from API
 export interface ChatMessageReaction {
   emoji: string;
   userId: string;
   userName: string;
+}
+
+// Parent Message Preview for Reply Feature (LEGACY - Thread system)
+export interface ParentMessagePreviewDto {
+  id: string;
+  senderName: string;
+  content: string;
+  sentAt: string; // ISO datetime
+  contentPreview: string; // Truncated content (max 3 lines)
+}
+
+// Quoted Message Preview for Quote Reply Feature (NEW - from API 2026-02-04)
+export interface QuotedMessageDto {
+  id: string;
+  content: string;
+  senderName: string;
+  sentAt: string; // ISO datetime
+  attachments?: AttachmentDto[]; // 🆕 v1.2.0 - Attachment preview in quote
 }
 
 // Chat Message from API (matches API contract from Swagger)
@@ -157,7 +175,10 @@ export interface ChatMessage {
   senderIdentifier: string | null;
   senderFullName: string | null;
   senderRoles: string | null;
-  parentMessageId: string | null;
+  parentMessageId: string | null; // Thread system (nested replies)
+  parentMessagePreview?: ParentMessagePreviewDto | null; // Thread preview (nested)
+  quoteMessageId: string | null; // Quote Reply system (simple quote)
+  quotedMessage?: QuotedMessageDto | null; // Quote preview (simple quote)
   content: string | null;
   contentType: ChatMessageContentType;
   sentAt: string; // ISO datetime
@@ -186,11 +207,13 @@ export interface GetMessagesResponse {
 
 // API Request for POST message (Updated to match Swagger SendMessageRequest v2.0)
 // Phase 2 Breaking Change: attachment → attachments[] to support batch upload
+// Phase 4 Update (2026-02-04): Added quoteMessageId for Quote Reply feature
 export interface SendChatMessageRequest {
   conversationId: string; // Required - in request body
   content: string | null; // Nullable - optional if attachments exist
   messageType?: ChatMessageContentType; // Optional - defaults to TXT if not specified
-  parentMessageId?: string | null;
+  parentMessageId?: string | null; // Thread system (nested replies)
+  quoteMessageId?: string | null; // Quote Reply system (simple quote) - ADDED 2026-02-04
   mentions?: MentionInputDto[] | null;
   attachments?: AttachmentInputDto[] | null; // PLURAL - array of files (Phase 2)
 }
@@ -253,7 +276,7 @@ export interface LinkTaskToMessageResponse {
 
 // Map API content type to legacy content type (for UI compatibility)
 export function mapContentTypeToLegacy(
-  contentType: ChatMessageContentType
+  contentType: ChatMessageContentType,
 ): MessageContentType {
   switch (contentType) {
     case "TXT":
@@ -271,7 +294,7 @@ export function mapContentTypeToLegacy(
 
 // Map legacy content type to API content type
 export function mapContentTypeToAPI(
-  contentType: MessageContentType
+  contentType: MessageContentType,
 ): ChatMessageContentType {
   switch (contentType) {
     case "text":

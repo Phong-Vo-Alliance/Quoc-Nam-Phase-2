@@ -4,8 +4,9 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createGroup } from "@/api/conversations.api";
+import { createGroup, createConversation } from "@/api/conversations.api";
 import { categoriesKeys } from "@/hooks/queries/useCategories";
+import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import type { ConversationDto } from "@/types/categories";
 
 /**
@@ -39,8 +40,33 @@ export function useCreateGroup() {
       
       // Invalidate specific category conversations
       queryClient.invalidateQueries({ 
-        queryKey: categoriesKeys.conversations(variables.categoryId) 
+        queryKey: categoriesKeys.conversation(variables.categoryId) 
       });
+    },
+  });
+}
+
+/**
+ * Hook to create a new direct message conversation
+ * 
+ * @example
+ * ```tsx
+ * const createDMutation = useCreateDirectMessage();
+ * 
+ * const conversation = await createDMutation.mutateAsync({
+ *   recipientId: "user-uuid",
+ * });
+ * ```
+ */
+export function useCreateDirectMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { recipientId: string }) => 
+      createConversation(payload.recipientId),
+    onSuccess: () => {
+      // Invalidate direct messages to refetch with new conversation
+      queryClient.invalidateQueries({ queryKey: conversationKeys.directs() });
     },
   });
 }

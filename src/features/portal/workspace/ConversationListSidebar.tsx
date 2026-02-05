@@ -6,7 +6,7 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Zap, Star, ListTodo, RefreshCw } from "lucide-react";
+import { Zap, Star, ListTodo, RefreshCw, MessageCircle } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime";
@@ -14,6 +14,7 @@ import {
   useDirectMessages,
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages";
+import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import { useConversationRealtime } from "@/hooks/useConversationRealtime";
 import { ConversationSkeleton } from "../components/ConversationSkeleton";
 import type {
@@ -21,6 +22,7 @@ import type {
   DirectConversation,
   Conversation,
 } from "@/types/conversations";
+import { getDMDisplayName } from "@/types/conversations";
 import ConversationItem from "../components/ConversationItem";
 import { sortConversationsByLatest } from "@/utils/sortConversationsByLatest";
 import { formatRelativeTime } from "@/utils/formatRelativeTime";
@@ -32,7 +34,13 @@ import {
   getSelectedCategory,
 } from "@/utils/storage"; // Phase 6: Conversation persistence
 import { useConversationStore } from "@/stores/conversationStore"; // 🆕 Import store
-import { group } from "console";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getDepartmentMembers } from "@/api/departments.api";
+import { getCurrentUser } from "@/utils/getCurrentUser";
+import { getSelectedCategory as getStoredCategory } from "@/utils/storage";
+import type { DepartmentMemberDto } from "@/types/identity";
+import { useCreateDirectMessage } from "@/hooks/mutations/useConversationMutations";
+import type { ConversationDto } from "@/types/categories";
 
 /* ===================== Types (props mới) ===================== */
 type ChatTarget = {
@@ -174,12 +182,50 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   const prevSelectedConversationIdRef = React.useRef<string | undefined>(
     undefined,
   ); // Track previous conversation
+  const contactsListRef = React.useRef<HTMLUListElement>(null); // Ref for scrolling contacts list
 
   // 🆕 Get setActiveTabType from store
   const setActiveTabType = useConversationStore((s) => s.setActiveTabType);
 
+  const queryClient = useQueryClient();
   const categoriesQuery = useCategories();
   const directsQuery = useDirectMessages({ enabled: useApiData });
+  const createDMMutation = useCreateDirectMessage();
+
+  // 🆕 Fetch department members for contacts tab
+  const departmentMembersQuery = useQuery({
+    queryKey: ["departmentMembers", selectedCategoryId],
+    queryFn: async () => {
+      const currentUser = await getCurrentUser();
+      
+      if (!currentUser.departments || currentUser.departments.length === 0) {
+        return [];
+      }
+
+      // Get current category to filter departments
+      const currentCategoryId = getStoredCategory();
+      
+      // Find the department that matches the current category
+      let targetDepartment = currentUser.departments[0];
+      
+      if (currentCategoryId) {
+        const matchingDept = currentUser.departments.find(
+          dept => dept.departmentCode === currentCategoryId || dept.departmentId === currentCategoryId
+        );
+        if (matchingDept) {
+          targetDepartment = matchingDept;
+        }
+      }
+
+      // Fetch members from the selected department
+      const members = await getDepartmentMembers(targetDepartment.departmentId);
+      
+      // Filter out current user
+      return members.filter(member => member.userId !== currentUser.id);
+    },
+    enabled: useApiData && tab === "contacts",
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
 
   // ✅ Real-time updates for categories
   // useCategoriesRealtime(categoriesQuery.data);
@@ -236,6 +282,71 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   const apiDirects = React.useMemo(() => {
     return flattenDirectMessages(directsQuery.data);
   }, [directsQuery.data]);
+
+  // 🆕 Merged contacts list: existing conversations + department members without conversations
+  type ContactItem = {
+    id: string;
+    userId: string;
+    name: string;
+    email: string | null;
+    hasConversation: boolean;
+    conversation?: DirectConversation;
+    departmentMember?: DepartmentMemberDto;
+  };
+
+  const mergedContacts = React.useMemo((): ContactItem[] => {
+    const departmentMembers = departmentMembersQuery.data || [];
+    const conversations = apiDirects;
+
+    // Extract all participant user IDs from DM conversations using members array
+    const conversationParticipantIds = new Set<string>();
+    conversations.forEach(conv => {
+      if (conv.members) {
+        conv.members.forEach(member => {
+          if (member.userId !== currentUserId) {
+            conversationParticipantIds.add(member.userId);
+          }
+        });
+      }
+    });
+
+    // Create merged list
+    const merged: ContactItem[] = [];
+
+    // Add all existing conversations first
+    conversations.forEach(conv => {
+      // Get the other person's name from members array or fallback to name parsing
+      const otherPersonName = getDMDisplayName(conv, currentUserId);
+      
+      merged.push({
+        id: conv.id,
+        userId: conv.id, // Use conversation ID as userId for conversations
+        name: otherPersonName,
+        email: null,
+        hasConversation: true,
+        conversation: conv,
+      });
+    });
+
+    // Add department members that don't have conversations
+    // Check if their user ID appears in any conversation participants
+    departmentMembers.forEach(member => {
+      const hasConversation = conversationParticipantIds.has(member.userId);
+
+      if (!hasConversation) {
+        merged.push({
+          id: member.userId,
+          userId: member.userId,
+          name: member.userFullName || "Unknown",
+          email: member.userEmail,
+          hasConversation: false,
+          departmentMember: member,
+        });
+      }
+    });
+
+    return merged;
+  }, [apiDirects, departmentMembersQuery.data, currentUserId]);
 
   // Determine if loading
   const isLoading =
@@ -318,10 +429,32 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
   // Filter & Sort contacts/directs (API or props) - Memoized để re-render khi data thay đổi
   const filteredApiDirects = React.useMemo(() => {
-    return sortConversationsByLatest(
-      apiDirects.filter((c) => match(c.name) || match(c.lastMessage?.content)),
-    );
-  }, [apiDirects, q]); // Re-compute khi apiDirects hoặc search query thay đổi
+    const filtered = mergedContacts.filter((c) => {
+      if (c.hasConversation && c.conversation) {
+        return match(c.name) || match(c.conversation.lastMessage?.content);
+      }
+      return match(c.name) || match(c.email);
+    });
+
+    // Sort: conversations with messages first, then by name
+    return filtered.sort((a, b) => {
+      // Prioritize items with conversations
+      if (a.hasConversation && !b.hasConversation) return -1;
+      if (!a.hasConversation && b.hasConversation) return 1;
+
+      // For items with conversations, sort by last message time
+      if (a.hasConversation && b.hasConversation && a.conversation && b.conversation) {
+        const timeA = a.conversation.lastMessage?.sentAt || "";
+        const timeB = b.conversation.lastMessage?.sentAt || "";
+        if (timeA && timeB) {
+          return new Date(timeB).getTime() - new Date(timeA).getTime();
+        }
+      }
+
+      // Fallback to alphabetical by name
+      return a.name.localeCompare(b.name);
+    });
+  }, [mergedContacts, q]); // Re-compute khi mergedContacts hoặc search query thay đổi
 
   const filteredPropContacts = (propContacts || []).filter(
     (c) => match(c.name) || match(c.lastMessage),
@@ -384,6 +517,73 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
     // Clear category since DMs don't have categories
     saveSelectedCategory("");
+  };
+
+  // Helper: handle creating new DM conversation with department member
+  const handleCreateConversation = async (contact: ContactItem) => {
+    try {
+      console.log("[CreateConversation] Creating conversation with:", contact.userId);
+      
+      // Create the conversation
+      const newConversation = await createDMMutation.mutateAsync({
+        recipientId: contact.userId,
+      });
+
+      console.log("[CreateConversation] Conversation created:", newConversation);
+
+      // Convert ConversationDto to DirectConversation format
+      const directConversation: DirectConversation = {
+        id: newConversation.id,
+        name: contact.name,
+        type: "DM",
+        description: "",
+        avatarFileId: null,
+        createdBy: "",
+        createdByName: "",
+        memberCount: 2,
+        members: newConversation.members ? newConversation.members as any : undefined,
+        unreadCount: 0,
+        lastMessage: null,
+        createdAt: newConversation.createdAt || new Date().toISOString(),
+        updatedAt: newConversation.updatedAt || new Date().toISOString(),
+      };
+
+      // Manually prepend the new conversation to the cache (at the top)
+      queryClient.setQueryData(
+        conversationKeys.directs(),
+        (oldData: any) => {
+          if (!oldData) return oldData;
+          
+          return {
+            ...oldData,
+            pages: oldData.pages.map((page: any, index: number) => {
+              // Add to the first page
+              if (index === 0) {
+                return {
+                  ...page,
+                  items: [directConversation, ...page.items],
+                };
+              }
+              return page;
+            }),
+          };
+        }
+      );
+
+      // Scroll to top of contacts list
+      if (contactsListRef.current) {
+        contactsListRef.current.scrollTop = 0;
+      }
+
+      // Select the newly created conversation
+      handleDirectSelect(directConversation);
+    } catch (error) {
+      console.error("[CreateConversation] Failed to create conversation:", error);
+      alert(
+        "Không thể tạo cuộc trò chuyện. Vui lòng thử lại sau.\n\n" +
+        "Lỗi: " + (error instanceof Error ? error.message : "Unknown error")
+      );
+    }
   };
 
   // 🔧 Sync parent tab on mount based on initial tab
@@ -943,27 +1143,72 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
           !isError &&
           tab === "contacts" &&
           (useApiData ? (
-            // API Data - Using ConversationItem component
-            <ul className="divide-y" data-testid="directs-list">
+            // API Data - Using merged contacts (conversations + department members)
+            <ul ref={contactsListRef} className="divide-y" data-testid="directs-list">
               {filteredApiDirects.length === 0 && (
                 <div className="p-3 text-xs text-gray-500">
                   {q
                     ? "Không tìm thấy kết quả."
-                    : "Chưa có cuộc trò chuyện nào."}
+                    : departmentMembersQuery.isLoading
+                    ? "Đang tải danh sách..."
+                    : "Chưa có người liên hệ nào."}
                 </div>
               )}
 
-              {filteredApiDirects.map((c) => (
-                <li key={c.id}>
-                  <ConversationItem
-                    conversation={c}
-                    isActive={selectedConversationId === c.id}
-                    onClick={() => handleDirectSelect(c as DirectConversation)}
-                  />
+              {filteredApiDirects.map((contact) => (
+                <li key={contact.id}>
+                  {contact.hasConversation && contact.conversation ? (
+                    // Existing conversation - use ConversationItem with transformed name
+                    <ConversationItem
+                      conversation={{
+                        ...contact.conversation,
+                        name: getDMDisplayName(contact.conversation, currentUserId)
+                      }}
+                      isActive={selectedConversationId === contact.id}
+                      onClick={() => handleDirectSelect(contact.conversation as DirectConversation)}
+                    />
+                  ) : (
+                    // Department member without conversation - custom UI
+                    <button
+                      className="w-full flex items-center gap-3 p-3 hover:bg-brand-50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handleCreateConversation(contact)}
+                      disabled={createDMMutation.isPending}
+                      data-testid={`contact-member-${contact.id}`}
+                    >
+                      {/* Avatar */}
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600 flex-shrink-0">
+                        <span className="text-xs font-semibold">
+                          {contact.name
+                            .split(" ")
+                            .map((w) => w[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </span>
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium truncate" data-testid="contact-name">
+                            {contact.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <MessageCircle className="h-3 w-3 text-gray-400" />
+                          <p className="text-xs text-gray-400 italic">
+                            {createDMMutation.isPending && createDMMutation.variables?.recipientId === contact.userId
+                              ? "Đang tạo cuộc trò chuyện..."
+                              : "Nhấn để bắt đầu trò chuyện"}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  )}
                 </li>
               ))}
 
-              {/* Load more button */}
+              {/* Load more button for existing conversations */}
               {directsQuery.hasNextPage && (
                 <button
                   onClick={() => directsQuery.fetchNextPage()}

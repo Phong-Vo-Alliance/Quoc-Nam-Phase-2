@@ -84,6 +84,7 @@ export interface GroupConversation extends BaseConversation {
 export interface DirectConversation extends BaseConversation {
   type: "DM";
   memberCount: 2; // Always 2 for DM
+  members?: ConversationMember[]; // Members from API (optional for backward compatibility)
 }
 
 // Union type for any conversation
@@ -122,18 +123,25 @@ export function isDirectConversation(
 }
 
 // =============================================================
-// Helper to extract display name from DM name
-// Format: "DM: user1 <> user2"
+// Helper to extract display name from DM
+// Prefers using members array, falls back to parsing name format "DM: user1 <> user2"
 // =============================================================
 
 export function getDMDisplayName(
-  dmName: string,
-  currentUserIdentifier?: string,
+  conversation: { name: string; members?: ConversationMember[] },
+  currentUserId?: string,
 ): string {
-  // Remove "DM: " prefix
-  const cleaned = dmName.replace(/^DM:\s*/, "");
+  // Priority 1: Use members array if available
+  if (conversation.members && conversation.members.length === 2 && currentUserId) {
+    const otherMember = conversation.members.find(m => m.userId !== currentUserId);
+    if (otherMember?.userInfo?.fullName) {
+      return otherMember.userInfo.fullName;
+    }
+  }
 
-  // Split by " <> "
+  // Priority 2: Parse from name format "DM: user1 <> user2"
+  const dmName = conversation.name;
+  const cleaned = dmName.replace(/^DM:\s*/, "");
   const parts = cleaned.split(" <> ");
 
   if (parts.length !== 2) {
@@ -141,8 +149,8 @@ export function getDMDisplayName(
   }
 
   // Return the other user's name (not current user)
-  if (currentUserIdentifier) {
-    return parts[0] === currentUserIdentifier ? parts[1] : parts[0];
+  if (currentUserId) {
+    return parts[0] === currentUserId ? parts[1] : parts[0];
   }
 
   // If no current user provided, return first part

@@ -1,6 +1,7 @@
 // Authentication related types
 
 import type { ID, Timestamps } from './common';
+import type { UserDepartmentDto } from './identity';
 
 export interface User extends Timestamps {
   id: ID;
@@ -53,6 +54,7 @@ export interface LoginApiUser {
   id: string;
   identifier: string;
   roles: string[];
+  departments?: UserDepartmentDto[];
 }
 
 /**
