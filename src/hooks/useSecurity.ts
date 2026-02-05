@@ -20,17 +20,17 @@ export function useSecurity() {
   const user = useAuthStore((state) => state.user);
   const isWhitelisted = isUserWhitelisted(
     user?.identifier || null,
-    securityConfig.whitelist.emails
+    securityConfig.whitelist.emails,
   );
 
   // Skip all protections if user is whitelisted
   const shouldApplyProtection = !isWhitelisted;
 
   useDevToolsProtection(
-    shouldApplyProtection && securityConfig.devToolsProtection.enabled
+    shouldApplyProtection && securityConfig.devToolsProtection.enabled,
   );
   useContextMenuProtection(
-    shouldApplyProtection && securityConfig.contextMenuProtection.enabled
+    shouldApplyProtection && securityConfig.contextMenuProtection.enabled,
   );
 
   useEffect(() => {

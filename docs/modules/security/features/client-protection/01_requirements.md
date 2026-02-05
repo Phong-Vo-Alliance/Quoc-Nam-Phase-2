@@ -49,11 +49,21 @@
 
 ### 1.4 Configuration Management
 
-| ID     | Requirement                  | Priority | Acceptance Criteria                        |
-| ------ | ---------------------------- | -------- | ------------------------------------------ |
-| FR-4.1 | Environment variables config | High     | Có thể enable/disable từng feature qua ENV |
-| FR-4.2 | Runtime toggle (admin)       | Low      | Admin có thể toggle protection runtime     |
-| FR-4.3 | Whitelist users/roles        | Low      | Một số users được phép bypass (admin, dev) |
+| ID     | Requirement                  | Priority | Acceptance Criteria                                 |
+| ------ | ---------------------------- | -------- | --------------------------------------------------- |
+| FR-4.1 | Environment variables config | High     | Có thể disable từng feature qua ENV (opt-out model) |
+| FR-4.2 | Runtime toggle (admin)       | Low      | Admin có thể toggle protection runtime              |
+| FR-4.3 | Whitelist users/roles        | Low      | Một số users được phép bypass (admin, dev)          |
+
+**⚠️ UPDATE (2026-02-05): Default Behavior Changed**
+
+Security protections now use **opt-out model** (enabled by default):
+
+- **Production:** All protections ENABLED automatically
+- **Development:** Explicitly set `VITE_ENABLE_*_PROTECTION=false` to disable
+- **Opt-out logic:** `enabled: env !== "false"` instead of `env === "true"`
+
+See: [devtools-protection-default-on](../devtools-protection-default-on/) for migration details.
 
 ---
 
@@ -206,18 +216,15 @@ VITE_SECURITY_WHITELIST_EMAILS=admin@example.com,dev@example.com
 ## 📌 Notes for Implementation
 
 1. **DevTools Protection:**
-
    - Combine multiple detection methods cho accuracy cao hơn
    - Consider performance impact của interval checks
    - Test trên nhiều browsers
 
 2. **Context Menu:**
-
    - Allow right-click cho input/textarea elements
    - Preserve accessibility features (keyboard navigation)
 
 3. **Content Protection:**
-
    - Chỉ apply cho elements cụ thể, không toàn page
    - CSS `user-select: none` + JS event prevention
    - Test với screen readers để đảm bảo accessibility

@@ -77,6 +77,7 @@ import FileIcon from "@/components/FileIcon";
 import { cn } from "@/lib/utils";
 import FilePreview from "@/components/FilePreview";
 import { useFileValidation } from "@/hooks/useFileValidation";
+import { chatHub } from "@/lib/signalr"; // 🆕 NEW: Track conversation for auto-refetch
 import {
   revokeFilePreview,
   validateBatchFileSelection,
@@ -265,6 +266,15 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // Use internal state or prop
   const activeCategoryId = selectedCategoryId ?? internalSelectedCategoryId;
+
+  // 🆕 NEW: Track current conversation for SignalR auto-refetch on reconnection
+  useEffect(() => {
+    chatHub.setCurrentConversation(conversationId);
+
+    return () => {
+      chatHub.setCurrentConversation(null);
+    };
+  }, [conversationId]);
 
   // 🐛 FIX: Save to localStorage when internal state changes (user action)
   const isFirstCategoryMountRef = useRef(true);
@@ -759,7 +769,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       }
 
       // Step 3: ✅ NEW - Fetch messages around target (single API call)
-      toast.info("Đang tải tin nhắn...");
+      // toast.info("Đang tải tin nhắn..."); // ❌ REMOVED: Duplicate toast (Decision 5 - keep only loading indicator)
+      setIsLoadingNewer(true); // ✅ Show loading indicator instead
 
       try {
         const result = await getMessagesAround({
@@ -860,6 +871,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         } else {
           toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
         }
+      } finally {
+        // ✅ Always hide loading indicator (Decision 5)
+        setIsLoadingNewer(false);
       }
     },
     [
@@ -1566,7 +1580,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           conversationId={conversationId}
           conversationName={displayName}
           conversationType={conversationType}
-          conversationCategory={conversationCategory}
+          conversationCategory={
+            categoriesQuery.isLoading ? undefined : conversationCategory
+          }
           onlineCount={onlineCount}
           status={status}
           avatarUrl={avatarUrl}
@@ -1738,7 +1754,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       {/* Message list */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-0.5 min-h-0 bg-gray-50"
+        className={`flex-1 p-4 space-y-0.5 min-h-0 bg-gray-50 ${
+          messages.length > 0 ? "overflow-y-auto" : "overflow-y-hidden"
+        }`}
         data-testid="message-list"
       >
         {/* Load more button */}
@@ -2096,8 +2114,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   key={starred.messageId}
                   className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition"
                   onClick={() => {
+                    // 🐛 FIX (ui-improvements-20260205): Keep modal open
+                    // Messages in this modal are always from current conversation
                     handleScrollToMessage(starred);
-                    setShowConversationStarredModal(false);
+                    // setShowConversationStarredModal(false); // ❌ Removed
                   }}
                 >
                   <div className="flex items-start gap-3">
@@ -2153,9 +2173,17 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition"
                   onClick={() => {
                     console.log("Scrolling to starred message:", starred);
-                    // handleScrollToMessage will check if it's in correct conversation
+                    // 🐛 FIX (ui-improvements-20260205): Conditional close
+                    const needsSwitchConversation =
+                      starred.message.conversationId !== conversationId;
+
                     handleScrollToMessage(starred);
-                    setShowAllStarredModal(false);
+
+                    // Only close modal if switching to different conversation
+                    if (needsSwitchConversation) {
+                      setShowAllStarredModal(false);
+                    }
+                    // Otherwise, keep modal open (user can see highlighted message and modal simultaneously)
                   }}
                 >
                   <div className="flex items-start gap-3">

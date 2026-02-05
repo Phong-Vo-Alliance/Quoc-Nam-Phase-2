@@ -1,4 +1,5 @@
 import * as signalR from "@microsoft/signalr";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ChatMessage } from "@/types/messages";
 
 // Get SignalR Hub URL based on environment
@@ -89,6 +90,8 @@ class ChatHubConnection {
   private isConnecting = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private queryClient: QueryClient | null = null;
+  private currentConversationId: string | null = null;
 
   get state(): SignalRConnectionState {
     if (!this.connection) return "Disconnected";
@@ -107,6 +110,16 @@ class ChatHubConnection {
       default:
         return "Disconnected";
     }
+  }
+
+  // Set QueryClient for auto-refetch on reconnection
+  setQueryClient(client: QueryClient): void {
+    this.queryClient = client;
+  }
+
+  // Track current conversation for auto-refetch
+  setCurrentConversation(conversationId: string | null): void {
+    this.currentConversationId = conversationId;
   }
 
   async start(accessToken?: string): Promise<void> {
@@ -143,7 +156,20 @@ class ChatHubConnection {
       });
 
       this.connection.onreconnected((connectionId) => {
+        console.log("SignalR: Reconnected", connectionId);
         this.reconnectAttempts = 0;
+
+        // AUTO REFETCH: Invalidate messages to sync after reconnection
+        if (this.queryClient && this.currentConversationId) {
+          console.log(
+            "SignalR: Auto-refetching messages after reconnect for conversation:",
+            this.currentConversationId,
+          );
+          this.queryClient.invalidateQueries({
+            queryKey: ["messages", this.currentConversationId],
+            refetchType: "active", // Only refetch if query is active
+          });
+        }
       });
 
       this.connection.onclose((error) => {
@@ -332,6 +358,12 @@ class ChatHubConnection {
 
 // Singleton instance
 export const chatHub = new ChatHubConnection();
+
+// Initialize SignalR with QueryClient (call from App.tsx)
+export function initializeSignalR(queryClient: QueryClient): void {
+  chatHub.setQueryClient(queryClient);
+  console.log("SignalR: QueryClient initialized for auto-refetch");
+}
 
 // Expose to window for debugging
 if (typeof window !== "undefined") {

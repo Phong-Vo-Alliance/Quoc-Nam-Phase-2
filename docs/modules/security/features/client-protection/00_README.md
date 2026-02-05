@@ -23,7 +23,52 @@ Tính năng bảo mật client-side để bảo vệ ứng dụng khỏi các h�
 - Bảo vệ source code khỏi bị inspect dễ dàng
 - Ngăn chặn user copy nội dung nhạy cảm từ file preview
 - Tăng độ bảo mật cho portal nội bộ
-- Có thể enable/disable linh hoạt qua environment variables
+- Có thể disable linh hoạt qua environment variables
+
+## 🔐 Default Behavior (Updated 2026-02-05)
+
+**Security protections are ENABLED by default** (secure by default):
+
+- **Production Environment:** All protections active automatically (no config needed)
+- **Development Environment:** Explicitly set `=false` in `.env.development` to disable
+
+**Opt-Out Logic:**
+
+```typescript
+enabled: import.meta.env.VITE_ENABLE_ * _PROTECTION !== "false";
+```
+
+**Behavior Table:**
+
+| Environment Variable Value | Protection Status |
+| -------------------------- | ----------------- |
+| Not set (undefined)        | **ENABLED** ✅    |
+| `=false`                   | **DISABLED** ❌   |
+| `=true`                    | **ENABLED** ✅    |
+| Any other value            | **ENABLED** ✅    |
+
+**Environment Configuration:**
+
+### Production (No Config Needed)
+
+```dotenv
+# .env.production
+# No need to set anything - protections enabled by default
+
+# Optional: Whitelist for dev/admin debugging
+VITE_SECURITY_WHITELIST_EMAILS=admin@company.com,dev@company.com
+```
+
+### Development (Explicit Disable)
+
+```dotenv
+# .env.development
+VITE_ENABLE_DEVTOOLS_PROTECTION=false
+VITE_ENABLE_CONTEXT_MENU_PROTECTION=false
+VITE_ENABLE_CONTENT_PROTECTION=false
+```
+
+**Migration Details:** See [devtools-protection-default-on](../devtools-protection-default-on/)
 
 ---
 

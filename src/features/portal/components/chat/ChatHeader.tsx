@@ -89,7 +89,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   avatarUrl,
   isMobile = false,
   onBack,
- onOpenPinnedModal,
+  onOpenPinnedModal,
   onOpenConversationStarredModal,
   onOpenAllStarredModal,
 
@@ -157,28 +157,47 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             icon={<ChevronLeft className="h-5 w-5 text-brand-600" />}
           />
         )}
-        <Avatar name={headerDisplayName} avatarUrl={avatarUrl} />
+        {conversationCategory === undefined ? (
+          // 🐛 FIX (ui-improvements-20260205): Loading skeleton for avatar
+          <div className="h-10 w-10 rounded-full bg-gray-200 animate-pulse shrink-0" />
+        ) : (
+          <Avatar name={headerDisplayName} avatarUrl={avatarUrl} />
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold text-gray-800 truncate">
-              {headerDisplayName}
-            </div>
+            {conversationCategory === undefined ? (
+              // 🐛 FIX (ui-improvements-20260205): Loading skeleton for name
+              <div className="h-5 w-40 bg-gray-200 rounded animate-pulse" />
+            ) : (
+              <div className="text-sm font-semibold text-gray-800 truncate">
+                {headerDisplayName}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 mt-1 mb-1">
-            {!isDirect && memberCount > 0 && (
-              <span className="text-xs text-gray-600">
-                {membersLoading ? "..." : memberCount} thành viên
-              </span>
-            )}
-            {onlineCount !== undefined && onlineCount > 0 && (
+            {conversationCategory === undefined ? (
+              // 🐛 FIX (ui-improvements-20260205): Loading skeleton for status line
+              <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+            ) : (
               <>
-                <span className="text-gray-400">•</span>
-                <span className="text-xs text-gray-600">
-                  {onlineCount} người đang xem
-                </span>
+                {!isDirect && memberCount > 0 && (
+                  <span className="text-xs text-gray-600">
+                    {membersLoading ? "..." : memberCount} thành viên
+                  </span>
+                )}
+                {onlineCount !== undefined && onlineCount > 0 && (
+                  <>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-xs text-gray-600">
+                      {onlineCount} người đang xem
+                    </span>
+                  </>
+                )}
+                <Badge type={statusConfig.badgeType}>
+                  {statusConfig.label}
+                </Badge>
               </>
             )}
-            <Badge type={statusConfig.badgeType}>{statusConfig.label}</Badge>
           </div>
           {categoryConversations &&
             categoryConversations.length > 0 &&
@@ -237,7 +256,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
               <MoreVertical className="h-5 w-5 text-gray-600" />
             </Button>
           </PopoverTrigger> */}
-          {/* <PopoverContent className="w-64 p-2" align="end">
+        {/* <PopoverContent className="w-64 p-2" align="end">
             <div className="flex flex-col gap-1">
               {/* [PHASE2-REMOVED] Desktop pin feature removed */}
         {/* {onOpenPinnedModal && (
@@ -262,7 +281,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                   Tin nhắn đã đánh dấu
                 </Button>
               )} */}
-              {/* {onOpenAllStarredModal && (
+        {/* {onOpenAllStarredModal && (
                 <Button
                   variant="ghost"
                   className="justify-start gap-2 text-sm"

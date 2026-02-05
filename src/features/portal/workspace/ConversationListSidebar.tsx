@@ -197,20 +197,22 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     queryKey: ["departmentMembers", selectedCategoryId],
     queryFn: async () => {
       const currentUser = await getCurrentUser();
-      
+
       if (!currentUser.departments || currentUser.departments.length === 0) {
         return [];
       }
 
       // Get current category to filter departments
       const currentCategoryId = getStoredCategory();
-      
+
       // Find the department that matches the current category
       let targetDepartment = currentUser.departments[0];
-      
+
       if (currentCategoryId) {
         const matchingDept = currentUser.departments.find(
-          dept => dept.departmentCode === currentCategoryId || dept.departmentId === currentCategoryId
+          (dept) =>
+            dept.departmentCode === currentCategoryId ||
+            dept.departmentId === currentCategoryId,
         );
         if (matchingDept) {
           targetDepartment = matchingDept;
@@ -219,9 +221,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
       // Fetch members from the selected department
       const members = await getDepartmentMembers(targetDepartment.departmentId);
-      
+
       // Filter out current user
-      return members.filter(member => member.userId !== currentUser.id);
+      return members.filter((member) => member.userId !== currentUser.id);
     },
     enabled: useApiData && tab === "contacts",
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
@@ -300,9 +302,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
     // Extract all participant user IDs from DM conversations using members array
     const conversationParticipantIds = new Set<string>();
-    conversations.forEach(conv => {
+    conversations.forEach((conv) => {
       if (conv.members) {
-        conv.members.forEach(member => {
+        conv.members.forEach((member) => {
           if (member.userId !== currentUserId) {
             conversationParticipantIds.add(member.userId);
           }
@@ -314,10 +316,10 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     const merged: ContactItem[] = [];
 
     // Add all existing conversations first
-    conversations.forEach(conv => {
+    conversations.forEach((conv) => {
       // Get the other person's name from members array or fallback to name parsing
       const otherPersonName = getDMDisplayName(conv, currentUserId);
-      
+
       merged.push({
         id: conv.id,
         userId: conv.id, // Use conversation ID as userId for conversations
@@ -330,7 +332,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
     // Add department members that don't have conversations
     // Check if their user ID appears in any conversation participants
-    departmentMembers.forEach(member => {
+    departmentMembers.forEach((member) => {
       const hasConversation = conversationParticipantIds.has(member.userId);
 
       if (!hasConversation) {
@@ -443,7 +445,12 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       if (!a.hasConversation && b.hasConversation) return 1;
 
       // For items with conversations, sort by last message time
-      if (a.hasConversation && b.hasConversation && a.conversation && b.conversation) {
+      if (
+        a.hasConversation &&
+        b.hasConversation &&
+        a.conversation &&
+        b.conversation
+      ) {
         const timeA = a.conversation.lastMessage?.sentAt || "";
         const timeB = b.conversation.lastMessage?.sentAt || "";
         if (timeA && timeB) {
@@ -522,14 +529,20 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   // Helper: handle creating new DM conversation with department member
   const handleCreateConversation = async (contact: ContactItem) => {
     try {
-      console.log("[CreateConversation] Creating conversation with:", contact.userId);
-      
+      console.log(
+        "[CreateConversation] Creating conversation with:",
+        contact.userId,
+      );
+
       // Create the conversation
       const newConversation = await createDMMutation.mutateAsync({
         recipientId: contact.userId,
       });
 
-      console.log("[CreateConversation] Conversation created:", newConversation);
+      console.log(
+        "[CreateConversation] Conversation created:",
+        newConversation,
+      );
 
       // Convert ConversationDto to DirectConversation format
       const directConversation: DirectConversation = {
@@ -541,7 +554,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         createdBy: "",
         createdByName: "",
         memberCount: 2,
-        members: newConversation.members ? newConversation.members as any : undefined,
+        members: newConversation.members
+          ? (newConversation.members as any)
+          : undefined,
         unreadCount: 0,
         lastMessage: null,
         createdAt: newConversation.createdAt || new Date().toISOString(),
@@ -549,26 +564,23 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       };
 
       // Manually prepend the new conversation to the cache (at the top)
-      queryClient.setQueryData(
-        conversationKeys.directs(),
-        (oldData: any) => {
-          if (!oldData) return oldData;
-          
-          return {
-            ...oldData,
-            pages: oldData.pages.map((page: any, index: number) => {
-              // Add to the first page
-              if (index === 0) {
-                return {
-                  ...page,
-                  items: [directConversation, ...page.items],
-                };
-              }
-              return page;
-            }),
-          };
-        }
-      );
+      queryClient.setQueryData(conversationKeys.directs(), (oldData: any) => {
+        if (!oldData) return oldData;
+
+        return {
+          ...oldData,
+          pages: oldData.pages.map((page: any, index: number) => {
+            // Add to the first page
+            if (index === 0) {
+              return {
+                ...page,
+                items: [directConversation, ...page.items],
+              };
+            }
+            return page;
+          }),
+        };
+      });
 
       // Scroll to top of contacts list
       if (contactsListRef.current) {
@@ -578,10 +590,14 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       // Select the newly created conversation
       handleDirectSelect(directConversation);
     } catch (error) {
-      console.error("[CreateConversation] Failed to create conversation:", error);
+      console.error(
+        "[CreateConversation] Failed to create conversation:",
+        error,
+      );
       alert(
         "Không thể tạo cuộc trò chuyện. Vui lòng thử lại sau.\n\n" +
-        "Lỗi: " + (error instanceof Error ? error.message : "Unknown error")
+          "Lỗi: " +
+          (error instanceof Error ? error.message : "Unknown error"),
       );
     }
   };
@@ -768,12 +784,12 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
   return (
     <aside
-      className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-y-auto min-h-0"
+      className="rounded-2xl border border-gray-200 bg-white shadow-sm flex flex-col overflow-hidden h-full"
       data-testid="left-sidebar"
     >
       {/* Header: Tabs + Search */}
       {isMobile ? (
-        <div className="border-b p-3 space-y-3">
+        <div className="border-b p-3 space-y-3 shrink-0">
           {/* Search box với icon */}
           <div className="relative">
             <input
@@ -904,7 +920,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
           </div>
         </div>
       ) : (
-        <div className="border-b p-3">
+        <div className="border-b p-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="font-medium">Tin nhắn</div>
             <div className="text-xs">
@@ -931,7 +947,10 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       )}
 
       {/* Content */}
-      <div className="" data-testid="conversation-content">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto"
+        data-testid="conversation-content"
+      >
         {/* Loading State */}
         {isLoading && <ConversationSkeleton count={5} />}
 
@@ -958,7 +977,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
           tab === "categories" &&
           (useApiData ? (
             // API Data - Show categories (same as workTypes logic)
-            <div className="" data-testid="categories-list">
+            <div data-testid="categories-list">
               {filteredApiCategories.length === 0 ? (
                 <div className="p-3 text-xs text-gray-500">
                   {q ? "Không tìm thấy kết quả." : "Chưa có nhóm nào."}
@@ -1144,14 +1163,18 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
           tab === "contacts" &&
           (useApiData ? (
             // API Data - Using merged contacts (conversations + department members)
-            <ul ref={contactsListRef} className="divide-y" data-testid="directs-list">
+            <ul
+              ref={contactsListRef}
+              className="divide-y"
+              data-testid="directs-list"
+            >
               {filteredApiDirects.length === 0 && (
                 <div className="p-3 text-xs text-gray-500">
                   {q
                     ? "Không tìm thấy kết quả."
                     : departmentMembersQuery.isLoading
-                    ? "Đang tải danh sách..."
-                    : "Chưa có người liên hệ nào."}
+                      ? "Đang tải danh sách..."
+                      : "Chưa có người liên hệ nào."}
                 </div>
               )}
 
@@ -1162,10 +1185,17 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                     <ConversationItem
                       conversation={{
                         ...contact.conversation,
-                        name: getDMDisplayName(contact.conversation, currentUserId)
+                        name: getDMDisplayName(
+                          contact.conversation,
+                          currentUserId,
+                        ),
                       }}
                       isActive={selectedConversationId === contact.id}
-                      onClick={() => handleDirectSelect(contact.conversation as DirectConversation)}
+                      onClick={() =>
+                        handleDirectSelect(
+                          contact.conversation as DirectConversation,
+                        )
+                      }
                     />
                   ) : (
                     // Department member without conversation - custom UI
@@ -1190,14 +1220,19 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                       {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium truncate" data-testid="contact-name">
+                          <span
+                            className="text-sm font-medium truncate"
+                            data-testid="contact-name"
+                          >
                             {contact.name}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <MessageCircle className="h-3 w-3 text-gray-400" />
                           <p className="text-xs text-gray-400 italic">
-                            {createDMMutation.isPending && createDMMutation.variables?.recipientId === contact.userId
+                            {createDMMutation.isPending &&
+                            createDMMutation.variables?.recipientId ===
+                              contact.userId
                               ? "Đang tạo cuộc trò chuyện..."
                               : "Nhấn để bắt đầu trò chuyện"}
                           </p>
