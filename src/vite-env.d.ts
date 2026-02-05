@@ -23,6 +23,23 @@ interface ImportMetaEnv {
   readonly VITE_PROD_ENABLE_SIGNALR: string;
   readonly VITE_PROD_ENABLE_DEBUG_LOGS: string;
   readonly VITE_PROD_ENABLE_REACT_QUERY_DEVTOOLS: string;
+
+  // Security - Development
+  readonly VITE_DEV_ENABLE_DEVTOOLS_PROTECTION: string;
+  readonly VITE_DEV_ENABLE_CONTEXT_MENU_PROTECTION: string;
+  readonly VITE_DEV_ENABLE_CONTENT_PROTECTION: string;
+
+  // Security - Production
+  readonly VITE_PROD_ENABLE_DEVTOOLS_PROTECTION: string;
+  readonly VITE_PROD_ENABLE_CONTEXT_MENU_PROTECTION: string;
+  readonly VITE_PROD_ENABLE_CONTENT_PROTECTION: string;
+
+  // Security - Whitelist (shared)
+  readonly VITE_SECURITY_WHITELIST_EMAILS: string;
+
+  // Security - Other configs
+  readonly VITE_DEVTOOLS_ACTION: "toast" | "modal" | "redirect";
+  readonly VITE_CONTENT_PROTECTION_FILE_TYPES: string;
 }
 
 interface ImportMeta {

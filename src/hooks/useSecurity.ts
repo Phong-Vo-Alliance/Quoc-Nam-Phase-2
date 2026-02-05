@@ -33,10 +33,6 @@ export function useSecurity() {
     shouldApplyProtection && securityConfig.contextMenuProtection.enabled,
   );
 
-  useEffect(() => {
-    // User is whitelisted - protections bypassed
-  }, [isWhitelisted]);
-
   return {
     /** Whether protections are currently active */
     isProtected: shouldApplyProtection,
