@@ -276,8 +276,9 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                             );
                           }
 
-                          // Close panel after navigation
-                          onClose();
+                          // 🐛 FIX (ui-improvements-20260205): Keep panel open
+                          // User wants to be able to click multiple messages without panel closing
+                          // onClose();
                         }}
                         className="group relative cursor-pointer border-b border-brand-200 hover:bg-brand-50 transition-all p-3 pr-8" // pr-8 để tránh icon tràn
                       >

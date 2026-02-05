@@ -3,7 +3,7 @@
  * Supports message grouping with dynamic border-radius
  */
 
-import React from "react";
+import React, { useRef } from "react";
 import {
   Pin,
   Star,
@@ -20,6 +20,7 @@ import QuotedMessagePreview from "./QuotedMessagePreview";
 import type { ChatMessage, AttachmentDto } from "@/types/messages";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
 import { useReplyStore } from "@/stores/replyStore";
+import { useContentProtection } from "@/hooks/useContentProtection";
 
 /**
  * Format file size from bytes to human-readable format
@@ -97,6 +98,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
 }) => {
   // Quote Reply: Get setReplyTarget from store
   const setReplyTarget = useReplyStore((state) => state.setReplyTarget);
+
+  // Content Protection: Prevent copy/select for message content
+  const messageContentRef = useRef<HTMLDivElement>(null);
+  useContentProtection(messageContentRef as React.RefObject<HTMLElement>, {
+    enabled: true, // Always protect message content when global protection is enabled
+  });
 
   // Handle Reply button click
   const handleReplyClick = () => {
@@ -345,6 +352,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
 
             {/* Message bubble */}
             <div
+              ref={messageContentRef}
               className={cn(
                 "message-bubble overflow-hidden w-fit max-w-full",
                 radiusBySide,
@@ -446,7 +454,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                               return (
                                 <div
                                   key={image.fileId}
-                                  className="relative aspect-square overflow-hidden rounded"
+                                  className="relative w-[100px] max-w-full aspect-square overflow-hidden rounded"
                                 >
                                   <MessageImage
                                     key={image.fileId}
@@ -539,7 +547,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             {images.map((image, index) => (
                               <div
                                 key={image.fileId}
-                                className="overflow-hidden rounded"
+                                className="w-[100px] max-w-full aspect-square overflow-hidden rounded"
                               >
                                 <MessageImage
                                   key={image.fileId}
@@ -576,7 +584,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             {images.map((image, index) => (
                               <div
                                 key={image.fileId}
-                                className="aspect-square overflow-hidden rounded"
+                                className="w-[100px] max-w-full aspect-square overflow-hidden rounded"
                               >
                                 <MessageImage
                                   key={image.fileId}
@@ -617,7 +625,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                               return (
                                 <div
                                   key={image.fileId}
-                                  className="relative aspect-square overflow-hidden rounded"
+                                  className="relative w-[100px] max-w-full aspect-square overflow-hidden rounded"
                                 >
                                   <MessageImage
                                     key={image.fileId}

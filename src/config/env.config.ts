@@ -97,6 +97,45 @@ export const FEATURE_FLAGS: FeatureFlags = isProduction
   : DEV_FEATURE_FLAGS;
 
 // ==========================================
+// Security Configuration
+// ==========================================
+
+interface SecurityFlags {
+  enableDevToolsProtection: boolean;
+  enableContextMenuProtection: boolean;
+  enableContentProtection: boolean;
+  whitelistEmails: string[];
+}
+
+const DEV_SECURITY_FLAGS: SecurityFlags = {
+  // Development: Disable protections to allow debugging (opt-out)
+  enableDevToolsProtection:
+    import.meta.env.VITE_DEV_ENABLE_DEVTOOLS_PROTECTION !== "false",
+  enableContextMenuProtection:
+    import.meta.env.VITE_DEV_ENABLE_CONTEXT_MENU_PROTECTION !== "false",
+  enableContentProtection:
+    import.meta.env.VITE_DEV_ENABLE_CONTENT_PROTECTION !== "false",
+  whitelistEmails:
+    import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",") || [],
+};
+
+const PROD_SECURITY_FLAGS: SecurityFlags = {
+  // Production: Enable all protections by default (secure by default)
+  enableDevToolsProtection:
+    import.meta.env.VITE_PROD_ENABLE_DEVTOOLS_PROTECTION !== "false",
+  enableContextMenuProtection:
+    import.meta.env.VITE_PROD_ENABLE_CONTEXT_MENU_PROTECTION !== "false",
+  enableContentProtection:
+    import.meta.env.VITE_PROD_ENABLE_CONTENT_PROTECTION !== "false",
+  whitelistEmails:
+    import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",") || [],
+};
+
+export const SECURITY_FLAGS: SecurityFlags = isProduction
+  ? PROD_SECURITY_FLAGS
+  : DEV_SECURITY_FLAGS;
+
+// ==========================================
 // Environment Info
 // ==========================================
 
@@ -127,6 +166,7 @@ if (isDevelopment && FEATURE_FLAGS.enableDebugLogs) {
   console.log("Environment:", APP_ENV);
   console.log("API Endpoints:", API_ENDPOINTS);
   console.log("Feature Flags:", FEATURE_FLAGS);
+  console.log("Security Flags:", SECURITY_FLAGS);
   console.log("SignalR:", SIGNALR_CONFIG);
   console.groupEnd();
 }
@@ -169,6 +209,7 @@ export const ENV_CONFIG = {
   ...ENV_INFO,
   api: API_ENDPOINTS,
   features: FEATURE_FLAGS,
+  security: SECURITY_FLAGS,
   signalr: SIGNALR_CONFIG,
 } as const;
 

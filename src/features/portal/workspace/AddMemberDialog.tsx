@@ -7,7 +7,7 @@ import React, { useState, useMemo } from "react";
 import { X, Search, UserPlus, Loader2, AlertCircle } from "lucide-react";
 import { useUsers } from "@/hooks/queries/useUsers";
 import { useAddGroupMember } from "@/hooks/mutations/useGroupMutations";
-import { hasLeaderPermissions } from '@/utils/roleUtils';
+import { hasLeaderPermissions } from "@/utils/roleUtils";
 import type { UserProfileResponse } from "@/types/users";
 
 interface AddMemberDialogProps {
@@ -32,9 +32,9 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
   // Fetch users
   const { data, isLoading, isError, error } = useUsers({ page, pageSize });
-console.log("Fetched users:", data);
-console.log("Existing member IDs:", existingMemberIds);
-console.log(isError, error);
+  // console.log("Fetched users:", data);
+  // console.log("Existing member IDs:", existingMemberIds);
+  console.log(isError, error);
   // Mutation for adding members
   const addMemberMutation = useAddGroupMember();
   const [addingProgress, setAddingProgress] = useState<{
@@ -47,23 +47,23 @@ console.log(isError, error);
   const filteredUsers = useMemo(() => {
     if (!data?.items) return [];
 
-    return data.items
-      .filter((user) => {
-        // Exclude existing members
-        if (existingMemberIds.includes(user.id)) return false;
+    return data.items.filter((user) => {
+      // Exclude existing members
+      if (existingMemberIds.includes(user.id)) return false;
 
-        // Only show active users
-        if (!user.isActive) return false;
+      // Only show active users
+      if (!user.isActive) return false;
 
-        // Search filter
-        if (!searchQuery.trim()) return true;
+      // Search filter
+      if (!searchQuery.trim()) return true;
 
-        const query = searchQuery.toLowerCase();
-        const fullName = `${user.firstName || ""} ${user.lastName || ""}`.toLowerCase();
-        const email = (user.email || "").toLowerCase();
+      const query = searchQuery.toLowerCase();
+      const fullName =
+        `${user.firstName || ""} ${user.lastName || ""}`.toLowerCase();
+      const email = (user.email || "").toLowerCase();
 
-        return fullName.includes(query) || email.includes(query);
-      });
+      return fullName.includes(query) || email.includes(query);
+    });
   }, [data?.items, searchQuery, existingMemberIds]);
 
   // Toggle user selection
@@ -71,7 +71,7 @@ console.log(isError, error);
     setSelectedUserIds((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
+        : [...prev, userId],
     );
   };
 
@@ -93,13 +93,13 @@ console.log(isError, error);
       try {
         await addMemberMutation.mutateAsync({ groupId, userId });
         setAddingProgress((prev) =>
-          prev ? { ...prev, completed: prev.completed + 1 } : null
+          prev ? { ...prev, completed: prev.completed + 1 } : null,
         );
       } catch (err) {
         console.error(`Failed to add user ${userId}:`, err);
         failed.push(userId);
         setAddingProgress((prev) =>
-          prev ? { ...prev, completed: prev.completed + 1, failed } : null
+          prev ? { ...prev, completed: prev.completed + 1, failed } : null,
         );
       }
     }
@@ -110,9 +110,7 @@ console.log(isError, error);
       handleClose();
     } else {
       // Some failed - keep dialog open to show errors
-      setAddingProgress((prev) =>
-        prev ? { ...prev, failed } : null
-      );
+      setAddingProgress((prev) => (prev ? { ...prev, failed } : null));
     }
   };
 
@@ -133,7 +131,9 @@ console.log(isError, error);
         <div className="flex items-center justify-between border-b bg-gradient-to-r from-brand-50 to-emerald-50 px-6 py-4">
           <div className="flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-brand-600" />
-            <h3 className="text-sm font-semibold text-gray-900">Thêm Thành Viên</h3>
+            <h3 className="text-sm font-semibold text-gray-900">
+              Thêm Thành Viên
+            </h3>
           </div>
           <button
             onClick={handleClose}
@@ -179,9 +179,13 @@ console.log(isError, error);
           {groupId && isError && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
-              <p className="text-sm text-red-600">Không thể tải danh sách người dùng</p>
+              <p className="text-sm text-red-600">
+                Không thể tải danh sách người dùng
+              </p>
               <p className="text-xs text-gray-500 mt-1">
-                {error instanceof Error ? error.message : "Vui lòng thử lại sau"}
+                {error instanceof Error
+                  ? error.message
+                  : "Vui lòng thử lại sau"}
               </p>
             </div>
           )}
@@ -207,7 +211,7 @@ console.log(isError, error);
                     onChange={() => toggleUser(user.id)}
                     className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   />
-                  
+
                   {/* Avatar */}
                   <div className="flex-shrink-0">
                     {user.avatarUrl ? (
@@ -233,10 +237,14 @@ console.log(isError, error);
                         : user.email}
                     </div>
                     {user.email && (user.firstName || user.lastName) && (
-                      <div className="text-xs text-gray-500 truncate">{user.email}</div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {user.email}
+                      </div>
                     )}
                     {user.phoneNumber && (
-                      <div className="text-xs text-gray-400">{user.phoneNumber}</div>
+                      <div className="text-xs text-gray-400">
+                        {user.phoneNumber}
+                      </div>
                     )}
                   </div>
                 </label>
@@ -276,7 +284,8 @@ console.log(isError, error);
             {addingProgress ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Đang thêm {addingProgress.completed}/{addingProgress.total} thành viên...
+                Đang thêm {addingProgress.completed}/{addingProgress.total}{" "}
+                thành viên...
                 {addingProgress.failed.length > 0 && (
                   <span className="text-red-600">
                     ({addingProgress.failed.length} thất bại)
@@ -297,11 +306,15 @@ console.log(isError, error);
             </button>
             <button
               onClick={handleAddMembers}
-              disabled={selectedUserIds.length === 0 || !!addingProgress || !groupId}
+              disabled={
+                selectedUserIds.length === 0 || !!addingProgress || !groupId
+              }
               className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               title={!groupId ? "Vui lòng chọn nhóm trước" : undefined}
             >
-              {addingProgress ? "Đang thêm..." : `Thêm (${selectedUserIds.length})`}
+              {addingProgress
+                ? "Đang thêm..."
+                : `Thêm (${selectedUserIds.length})`}
             </button>
           </div>
         </div>

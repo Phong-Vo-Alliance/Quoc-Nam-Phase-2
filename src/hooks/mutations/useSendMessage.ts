@@ -269,6 +269,35 @@ export function useSendMessage({
       // Clear draft on successful send
       deleteDraft(conversationId);
 
+      // TIMEOUT CHECK: Verify message appears in cache within 3s
+      // This handles cases where SignalR is delayed or disconnected
+      setTimeout(() => {
+        const currentCache = queryClient.getQueryData<{
+          pages: Array<{ data: ChatMessage[] }>;
+        }>(["messages", conversationId]);
+
+        // Check if message exists in cache (by ID or content+time match)
+        const messageExists = currentCache?.pages.some((page) =>
+          page.data.some(
+            (msg) =>
+              msg.id === data.id ||
+              (msg.content === data.content &&
+                msg.sentAt === data.sentAt &&
+                msg.senderId === data.senderId),
+          ),
+        );
+
+        if (!messageExists) {
+          console.warn("Message not in cache after 3s, refetching...", {
+            messageId: data.id,
+            conversationId,
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["messages", conversationId],
+          });
+        }
+      }, 3000); // 3s timeout (Decision 2)
+
       // Message will be added by SignalR listener in useMessageRealtime
       // Just call the success callback if provided
       onSuccess?.(data);

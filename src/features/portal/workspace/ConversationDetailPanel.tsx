@@ -235,7 +235,11 @@ const TaskCard: React.FC<{
               </button>
               <button
                 className="text-xs px-3 py-1 rounded bg-emerald-600 text-white"
-                disabled={addCheckItemMutation.isPending || updateCheckItemMutation.isPending || !newLabel.trim()}
+                disabled={
+                  addCheckItemMutation.isPending ||
+                  updateCheckItemMutation.isPending ||
+                  !newLabel.trim()
+                }
                 onClick={async () => {
                   if (!newLabel.trim()) return;
 
@@ -271,7 +275,10 @@ const TaskCard: React.FC<{
                   }
                 }}
               >
-                {(addCheckItemMutation.isPending || updateCheckItemMutation.isPending) ? "Đang lưu..." : "Lưu"}
+                {addCheckItemMutation.isPending ||
+                updateCheckItemMutation.isPending
+                  ? "Đang lưu..."
+                  : "Lưu"}
               </button>
             </div>
           </div>
@@ -324,6 +331,7 @@ const TaskCard: React.FC<{
                       senderFullName: t.assignFrom || null,
                       senderRoles: null,
                       parentMessageId: null,
+                      quoteMessageId: null,
                       content: t.title || t.description || "", // MessageLike doesn't store content separately
                       contentType: "TXT",
                       sentAt: t.createdAt || new Date().toISOString(),
@@ -332,7 +340,7 @@ const TaskCard: React.FC<{
                       reactions: [],
                       attachments: (t.attachments || []).map((att) => ({
                         id: att.id || "",
-                        fileId: att.id|| "",
+                        fileId: att.id || "",
                         fileName: att.fileName || null,
                         fileSize: att.fileSize || 0,
                         contentType: att.contentType || null,
@@ -345,7 +353,7 @@ const TaskCard: React.FC<{
                       mentions: [],
                     },
                   };
-                  
+
                   // Switch to chat tab and scroll to message
                   onClickTitle?.(messageDto);
                 }}
@@ -423,23 +431,26 @@ const TaskCard: React.FC<{
               {hasLeaderPermissions() && (
                 <>
                   <span>•</span>
-                  {(t.status.code!=='need_to_verified')?
-                  <span>
-                    Giao cho:{" "}
-                    <span className="font-medium text-gray-700">
-                      <select
-                        className="mt-1 rounded-md border px-2 py-0.5 text-[11px] bg-white"
-                        value={t.assignTo}
-                        onChange={(e) => onReassign?.(t.id, e.target.value)}
-                      >
-                        {members.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
+                  {t.status.code !== "need_to_verified" ? (
+                    <span>
+                      Giao cho:{" "}
+                      <span className="font-medium text-gray-700">
+                        <select
+                          className="mt-1 rounded-md border px-2 py-0.5 text-[11px] bg-white"
+                          value={t.assignTo}
+                          onChange={(e) => onReassign?.(t.id, e.target.value)}
+                        >
+                          {members.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
                     </span>
-                  </span>:"Giao cho:" + members.find(m=>m.id===t.assignTo)?.name}
+                  ) : (
+                    "Giao cho:" + members.find((m) => m.id === t.assignTo)?.name
+                  )}
                 </>
               )}
             </div>
@@ -544,7 +555,9 @@ const TaskCard: React.FC<{
                               );
                             }
                           }}
-                          title={c.done ? "Nhấn để bỏ chọn" : "Nhấn để hoàn thành"}
+                          title={
+                            c.done ? "Nhấn để bỏ chọn" : "Nhấn để hoàn thành"
+                          }
                         >
                           {c.done && <Check className="w-3 h-3" />}
                         </button>
@@ -586,7 +599,10 @@ const TaskCard: React.FC<{
                                       itemId: c.id,
                                     });
                                   } catch (error) {
-                                    console.error("Failed to delete checklist item:", error);
+                                    console.error(
+                                      "Failed to delete checklist item:",
+                                      error,
+                                    );
                                   }
                                 }}
                               />
@@ -677,12 +693,16 @@ const TaskCard: React.FC<{
                 (t.status.code === "doing" ||
                   t.status.code === "need_to_verified") && (
                   <button
-                    disabled={updateStatusMutation.isPending || toggleCheckItemMutation.isPending}
+                    disabled={
+                      updateStatusMutation.isPending ||
+                      toggleCheckItemMutation.isPending
+                    }
                     onClick={async () => {
                       try {
                         // First, check all unchecked checklist items
-                        const uncheckedItems = t.checklist?.filter((c) => !c.done) || [];
-                        
+                        const uncheckedItems =
+                          t.checklist?.filter((c) => !c.done) || [];
+
                         if (uncheckedItems.length > 0) {
                           // Toggle all unchecked items to checked
                           await Promise.all(
@@ -690,11 +710,11 @@ const TaskCard: React.FC<{
                               toggleCheckItemMutation.mutateAsync({
                                 taskId: t.id,
                                 itemId: item.id,
-                              })
-                            )
+                              }),
+                            ),
                           );
                         }
-                        
+
                         // Then update status to finished
                         await updateStatusMutation.mutateAsync({
                           taskId: t.id,
@@ -706,7 +726,10 @@ const TaskCard: React.FC<{
                     }}
                     className="rounded-md border px-2 py-0.5 text-[11px] hover:bg-emerald-50 disabled:opacity-50"
                   >
-                    {(updateStatusMutation.isPending || toggleCheckItemMutation.isPending) ? "..." : "Hoàn tất"}
+                    {updateStatusMutation.isPending ||
+                    toggleCheckItemMutation.isPending
+                      ? "..."
+                      : "Hoàn tất"}
                   </button>
                 )}
             </div>
@@ -951,28 +974,41 @@ export const ConversationDetailPanel: React.FC<{
     (messageId: string) => {
       // Find the message from messages array
       const sourceMessage = messages.find((m) => m.id === messageId);
-      
+
       if (!sourceMessage) {
         console.warn("Source message not found:", messageId);
         return;
       }
-      
+
       // Build StarredMessageDto object
       const messageDto: StarredMessageDto = {
         messageId: sourceMessage.id,
-        starredAt: sourceMessage.createdAt || sourceMessage.time || new Date().toISOString(),
+        starredAt:
+          sourceMessage.createdAt ||
+          sourceMessage.time ||
+          new Date().toISOString(),
         message: {
           id: sourceMessage.id,
           conversationId: sourceMessage.groupId || "",
           senderId: "",
-          senderName: sourceMessage.senderName || sourceMessage.sender || "Unknown",
+          senderName:
+            sourceMessage.senderName || sourceMessage.sender || "Unknown",
           senderIdentifier: null,
           senderFullName: sourceMessage.senderName || null,
           senderRoles: null,
           parentMessageId: null,
+          quoteMessageId: null,
           content: "",
-          contentType: sourceMessage.type === "image" ? "IMG" : sourceMessage.type === "file" ? "FILE" : "TXT",
-          sentAt: sourceMessage.createdAt || sourceMessage.time || new Date().toISOString(),
+          contentType:
+            sourceMessage.type === "image"
+              ? "IMG"
+              : sourceMessage.type === "file"
+                ? "FILE"
+                : "TXT",
+          sentAt:
+            sourceMessage.createdAt ||
+            sourceMessage.time ||
+            new Date().toISOString(),
           editedAt: null,
           linkedTaskId: null,
           reactions: [],
@@ -991,13 +1027,14 @@ export const ConversationDetailPanel: React.FC<{
           mentions: [],
         },
       };
-      
-      // Switch to chat tab
-      setTab("chat");
+
+      // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+      // User can see highlighted message in current tab
+      // setTab("chat");
       // Trigger scroll to message
       onOpenSourceMessage?.(messageDto);
     },
-    [messages, onOpenSourceMessage, setTab]
+    [messages, onOpenSourceMessage, setTab],
   );
 
   // Fetch all tasks for conversation (no user task filter)
@@ -1303,7 +1340,11 @@ export const ConversationDetailPanel: React.FC<{
                   groupId={groupId}
                   selectedWorkTypeId={selectedWorkTypeId}
                   onOpenSourceMessage={handleOpenSourceMessageById}
-                  onNavigateToChat={() => setTab("chat")}
+                  onNavigateToChat={() => {
+                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                    // User can see highlighted message in current tab
+                    // setTab("chat");
+                  }}
                   messages={messages}
                   messagesQuery={messagesQuery}
                 />
@@ -1322,7 +1363,11 @@ export const ConversationDetailPanel: React.FC<{
                   groupId={groupId}
                   selectedWorkTypeId={selectedWorkTypeId}
                   onOpenSourceMessage={handleOpenSourceMessageById}
-                  onNavigateToChat={() => setTab("chat")}
+                  onNavigateToChat={() => {
+                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                    // User can see highlighted message in current tab
+                    // setTab("chat");
+                  }}
                   messages={messages}
                   messagesQuery={messagesQuery}
                 />
@@ -1437,8 +1482,8 @@ export const ConversationDetailPanel: React.FC<{
                           }}
                           taskLogs={taskLogs}
                           onClickTitle={(messageDto) => {
-                            // Switch to chat tab
-                            setTab("chat");
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
                             // Trigger scroll to message
                             onOpenSourceMessage?.(messageDto);
                           }}
@@ -1462,8 +1507,8 @@ export const ConversationDetailPanel: React.FC<{
                           }}
                           taskLogs={taskLogs}
                           onClickTitle={(messageDto) => {
-                            // Switch to chat tab
-                            setTab("chat");
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
                             // Trigger scroll to message
                             onOpenSourceMessage?.(messageDto);
                           }}
@@ -1503,8 +1548,8 @@ export const ConversationDetailPanel: React.FC<{
                           onToggleChecklist={onToggleChecklist}
                           taskLogs={taskLogs}
                           onClickTitle={(messageDto) => {
-                            // Switch to chat tab
-                            setTab("chat");
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
                             // Trigger scroll to message
                             onOpenSourceMessage?.(messageDto);
                           }}
@@ -1875,170 +1920,177 @@ export const ConversationDetailPanel: React.FC<{
                     </div>
 
                     {/* Grouped tasks theo trạng thái */}
-                    { (
+                    {
                       <div className="space-y-6">
                         {/* AWAITING REVIEW - Always show */}
                         <section data-testid="leader-awaiting-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => {
+                              setShowLeadAwaiting((prev) => {
+                                const next = !prev;
+                                if (next && !awaitingOpenedRef.current) {
+                                  awaitingOpenedRef.current = true;
+                                  setHighlightAwaiting(true);
+                                  setTimeout(
+                                    () => setHighlightAwaiting(false),
+                                    700,
+                                  );
+                                }
+                                return next;
+                              });
+                            }}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                            <span>
+                              Chờ duyệt ({leadBuckets.awaiting.length}){" "}
+                              {showLeadAwaiting ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+                          {showLeadAwaiting && (
                             <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => {
-                                setShowLeadAwaiting((prev) => {
-                                  const next = !prev;
-                                  if (next && !awaitingOpenedRef.current) {
-                                    awaitingOpenedRef.current = true;
-                                    setHighlightAwaiting(true);
-                                    setTimeout(
-                                      () => setHighlightAwaiting(false),
-                                      700,
-                                    );
-                                  }
-                                  return next;
-                                });
-                              }}
+                              className={`space-y-3 transition-colors duration-300 ${
+                                highlightAwaiting
+                                  ? "bg-amber-50/80 rounded-lg -mx-2 px-2 py-1"
+                                  : ""
+                              }`}
                             >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
-                              <span>
-                                Chờ duyệt ({leadBuckets.awaiting.length}){" "}
-                                {showLeadAwaiting ? " ▲" : " ▼"}
-                              </span>
+                              {leadBuckets.awaiting.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // ✅ Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
                             </div>
-                            {showLeadAwaiting && (
-                              <div
-                                className={`space-y-3 transition-colors duration-300 ${
-                                  highlightAwaiting
-                                    ? "bg-amber-50/80 rounded-lg -mx-2 px-2 py-1"
-                                    : ""
-                                }`}
-                              >
-                                {leadBuckets.awaiting.map((t) => (
-                                  <TaskCard
-                                    key={t.id}
-                                    t={t}
-                                    members={members}
-                                    viewMode="lead"
-                                    isLeaderOwnTask={false} // ✅ Team task
-                                    groupName={groupName}
-                                    checklistVariants={checklistVariants}
-                                    onChangeStatus={onChangeTaskStatus}
-                                    onReassign={onReassignTask}
-                                    onToggleChecklist={onToggleChecklist}
-                                    taskLogs={taskLogs}
-                                    onClickTitle={(messageDto) => {
-                                      // Switch to chat tab
-                                      setTab("chat");
-                                      // Trigger scroll to message
-                                      onOpenSourceMessage?.(messageDto);
-                                    }}
-                                    onOpenTaskLog={onOpenTaskLog}
-                                    messages={messages}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </section>
+                          )}
+                        </section>
 
                         {/* TODO - Always show */}
                         <section data-testid="leader-todo-section">
-                            <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => setShowLeadTodo((v) => !v)}
-                            >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                              <span>
-                                Chưa xử lý ({leadBuckets.todo.length}){" "}
-                                {showLeadTodo ? " ▲" : " ▼"}
-                              </span>
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadTodo((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                            <span>
+                              Chưa xử lý ({leadBuckets.todo.length}){" "}
+                              {showLeadTodo ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+                          {showLeadTodo && (
+                            <div className="space-y-3">
+                              {leadBuckets.todo.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // ✅ Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  onUpdateTaskChecklist={onUpdateTaskChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
                             </div>
-                            {showLeadTodo && (
-                              <div className="space-y-3">
-                                {leadBuckets.todo.map((t) => (
-                                  <TaskCard
-                                    key={t.id}
-                                    t={t}
-                                    members={members}
-                                    viewMode="lead"
-                                    isLeaderOwnTask={false} // ✅ Team task
-                                    groupName={groupName}
-                                    checklistVariants={checklistVariants}
-                                    onChangeStatus={onChangeTaskStatus}
-                                    onReassign={onReassignTask}
-                                    onToggleChecklist={onToggleChecklist}
-                                    onUpdateTaskChecklist={
-                                      onUpdateTaskChecklist
-                                    }
-                                    taskLogs={taskLogs}
-                                    onClickTitle={(messageDto) => {
-                                      // Switch to chat tab
-                                      setTab("chat");
-                                      // Trigger scroll to message
-                                      onOpenSourceMessage?.(messageDto);
-                                    }}
-                                    onOpenTaskLog={onOpenTaskLog}
-                                    messages={messages}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </section>
+                          )}
+                        </section>
 
                         {/* IN PROGRESS - Always show */}
                         <section data-testid="leader-inprogress-section">
-                            <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => setShowLeadInProgress((v) => !v)}
-                            >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
-                              <span>
-                                Đang xử lý ({leadBuckets.inProgress.length})
-                                {showLeadInProgress ? " ▲" : " ▼"}
-                              </span>
-                            </div>
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadInProgress((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
+                            <span>
+                              Đang xử lý ({leadBuckets.inProgress.length})
+                              {showLeadInProgress ? " ▲" : " ▼"}
+                            </span>
+                          </div>
 
-                            {showLeadInProgress && (
-                              <div className="space-y-3">
-                                {leadBuckets.inProgress.map((t) => (
-                                  <TaskCard
-                                    key={t.id}
-                                    t={t}
-                                    members={members}
-                                    viewMode="lead"
-                                    isLeaderOwnTask={false} // Team task
-                                    groupName={groupName}
-                                    checklistVariants={checklistVariants}
-                                    onChangeStatus={onChangeTaskStatus}
-                                    onReassign={onReassignTask}
-                                    onToggleChecklist={onToggleChecklist}
-                                    taskLogs={taskLogs}
-                                    onClickTitle={(messageDto) => {
-                                      // Switch to chat tab
-                                      setTab("chat");
-                                      // Trigger scroll to message
-                                      onOpenSourceMessage?.(messageDto);
-                                    }}
-                                    onOpenTaskLog={onOpenTaskLog}
-                                    messages={messages}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </section>
+                          {showLeadInProgress && (
+                            <div className="space-y-3">
+                              {leadBuckets.inProgress.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </section>
 
                         {/* DONE TODAY - Always show, filter only today */}
                         <section data-testid="leader-done-section">
-                            <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => setShowLeadDone((v) => !v)}
-                            >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                              <span>
-                                Hoàn thành ({leadBuckets.done.filter((t) => isToday(t.updatedAt || t.createdAt)).length}){" "}
-                                {showLeadDone ? " ▲" : " ▼"}
-                              </span>
-                            </div>
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadDone((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                            <span>
+                              Hoàn thành (
+                              {
+                                leadBuckets.done.filter((t) =>
+                                  isToday(t.updatedAt || t.createdAt),
+                                ).length
+                              }
+                              ) {showLeadDone ? " ▲" : " ▼"}
+                            </span>
+                          </div>
 
-                            {showLeadDone && (
-                              <div className="space-y-3">
-                                {leadBuckets.done.filter((t) => isToday(t.updatedAt || t.createdAt)).map((t) => (
+                          {showLeadDone && (
+                            <div className="space-y-3">
+                              {leadBuckets.done
+                                .filter((t) =>
+                                  isToday(t.updatedAt || t.createdAt),
+                                )
+                                .map((t) => (
                                   <TaskCard
                                     key={t.id}
                                     t={t}
@@ -2052,8 +2104,8 @@ export const ConversationDetailPanel: React.FC<{
                                     onToggleChecklist={onToggleChecklist}
                                     taskLogs={taskLogs}
                                     onClickTitle={(messageDto) => {
-                                      // Switch to chat tab
-                                      setTab("chat");
+                                      // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                      // setTab("chat");
                                       // Trigger scroll to message
                                       onOpenSourceMessage?.(messageDto);
                                     }}
@@ -2061,21 +2113,21 @@ export const ConversationDetailPanel: React.FC<{
                                     messages={messages}
                                   />
                                 ))}
-                              </div>
-                            )}
-
-                            <div className="mt-2 text-right">
-                              <button
-                                className="text-xs text-brand-700 hover:underline"
-                                onClick={() => setShowLeadCompletedAll(true)}
-                                data-testid="leader-view-all-completed-button"
-                              >
-                                Xem tất cả công việc đã hoàn thành
-                              </button>
                             </div>
-                          </section>
+                          )}
+
+                          <div className="mt-2 text-right">
+                            <button
+                              className="text-xs text-brand-700 hover:underline"
+                              onClick={() => setShowLeadCompletedAll(true)}
+                              data-testid="leader-view-all-completed-button"
+                            >
+                              Xem tất cả công việc đã hoàn thành
+                            </button>
+                          </div>
+                        </section>
                       </div>
-                    )}
+                    }
 
                     {/* Modal:  All completed tasks */}
                     {showLeadCompletedAll && (
@@ -2387,8 +2439,8 @@ export const ConversationDetailPanel: React.FC<{
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
                                 onClickTitle={(messageDto) => {
-                                  // Switch to chat tab
-                                  setTab("chat");
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
                                   // Trigger scroll to message
                                   onOpenSourceMessage?.(messageDto);
                                 }}
@@ -2436,8 +2488,8 @@ export const ConversationDetailPanel: React.FC<{
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
                                 onClickTitle={(messageDto) => {
-                                  // Switch to chat tab
-                                  setTab("chat");
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
                                   // Trigger scroll to message
                                   onOpenSourceMessage?.(messageDto);
                                 }}
@@ -2486,8 +2538,8 @@ export const ConversationDetailPanel: React.FC<{
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
                                 onClickTitle={(messageDto) => {
-                                  // Switch to chat tab
-                                  setTab("chat");
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
                                   // Trigger scroll to message
                                   onOpenSourceMessage?.(messageDto);
                                 }}

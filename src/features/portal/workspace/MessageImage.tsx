@@ -158,7 +158,9 @@ export default function MessageImage({
         onClick={handleClick}
         className={cn(
           "@container bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors",
-          isInGrid ? "w-full aspect-square" : "w-[320px] h-[180px] max-w-full",
+          isInGrid
+            ? "w-[100px] max-w-full aspect-square"
+            : "w-[320px] h-[180px] max-w-full",
         )}
       >
         <svg

@@ -18,6 +18,26 @@ export function useDevToolsProtection(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
 
+    /**
+     * IMPORTANT: Screenshot blocking limitations
+     *
+     * Browser CANNOT block system-level screenshot tools like:
+     * - Win+Shift+S (Windows Snipping Tool) - OS handles this before browser
+     * - Win+PrintScreen - OS level
+     * - Third-party tools (Snagit, Greenshot, etc.)
+     * - Physical cameras/phones
+     *
+     * What we CAN block:
+     * - PrintScreen key alone (may work in some browsers)
+     * - Browser DevTools shortcuts (F12, Ctrl+Shift+I, etc.)
+     *
+     * For real screenshot protection, consider:
+     * - Watermarks on sensitive content
+     * - Server-side rendering of sensitive data
+     * - DRM solutions (video streaming)
+     * - Session recording/monitoring
+     */
+
     // Block keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       // F12
@@ -54,6 +74,15 @@ export function useDevToolsProtection(enabled: boolean) {
         e.stopPropagation();
         return false;
       }
+
+      // PrintScreen (Screenshot) - Limited effectiveness
+      // Note: This may not work in all browsers and scenarios
+      if (e.key === "PrintScreen") {
+        e.preventDefault();
+        e.stopPropagation();
+        toast.warning("Chụp màn hình không được phép");
+        return false;
+      }
     };
 
     // Detection loop
@@ -79,7 +108,9 @@ export function useDevToolsProtection(enabled: boolean) {
       }, securityConfig.devToolsProtection.detectionInterval);
     };
 
+    // Add keyboard event listener
     document.addEventListener("keydown", handleKeyDown, true);
+
     startDetection();
 
     return () => {
