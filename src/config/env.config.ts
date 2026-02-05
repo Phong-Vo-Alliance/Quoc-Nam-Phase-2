@@ -116,7 +116,9 @@ const DEV_SECURITY_FLAGS: SecurityFlags = {
   enableContentProtection:
     import.meta.env.VITE_DEV_ENABLE_CONTENT_PROTECTION !== "false",
   whitelistEmails:
-    import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",") || [],
+    import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",")
+      .map((e: string) => e.trim())
+      .filter((e: string) => e) || [],
 };
 
 const PROD_SECURITY_FLAGS: SecurityFlags = {
@@ -128,32 +130,10 @@ const PROD_SECURITY_FLAGS: SecurityFlags = {
   enableContentProtection:
     import.meta.env.VITE_PROD_ENABLE_CONTENT_PROTECTION !== "false",
   whitelistEmails:
-    import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",") || [],
+    import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",")
+      .map((e: string) => e.trim())
+      .filter((e: string) => e) || [],
 };
-
-console.group("🔍 [env.config] DEBUG - Environment Variables");
-console.log("Environment (MODE):", import.meta.env.MODE);
-console.log("Environment (VITE_APP_ENV):", import.meta.env.VITE_APP_ENV);
-console.log("Computed APP_ENV:", APP_ENV);
-console.log("---");
-console.log(
-  "VITE_SECURITY_WHITELIST_EMAILS:",
-  import.meta.env.VITE_SECURITY_WHITELIST_EMAILS,
-);
-console.log("Type:", typeof import.meta.env.VITE_SECURITY_WHITELIST_EMAILS);
-console.log("---");
-console.log(
-  "All VITE_ env vars:",
-  Object.keys(import.meta.env).filter((k) => k.startsWith("VITE_")),
-);
-console.log("---");
-console.log(
-  "Parsed whitelist:",
-  isProduction
-    ? PROD_SECURITY_FLAGS.whitelistEmails
-    : DEV_SECURITY_FLAGS.whitelistEmails,
-);
-console.groupEnd();
 
 export const SECURITY_FLAGS: SecurityFlags = isProduction
   ? PROD_SECURITY_FLAGS
