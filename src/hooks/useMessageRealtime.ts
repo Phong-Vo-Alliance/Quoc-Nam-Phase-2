@@ -164,6 +164,7 @@ export function useMessageRealtime({
                   senderName: message.senderName,
                   content: message.content,
                   sentAt: message.sentAt,
+                  attachments: message.attachments, // 🐛 FIX: Add missing attachments for formatMessagePreview
                 },
                 unreadCount: newUnreadCount,
               };
