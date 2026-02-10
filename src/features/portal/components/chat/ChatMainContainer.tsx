@@ -88,7 +88,7 @@ import { useUploadFilesBatch } from "@/hooks/mutations/useUploadFilesBatch";
 import { formatAttachment } from "@/utils/formatAttachment";
 import { getFileUrl } from "@/utils/fileUrl";
 import { toast } from "sonner";
-import ChatInput from "@/features/portal/components/ChatInput";
+import { MentionInputInline } from "./MentionInputInline";
 import MessageImage from "@/features/portal/workspace/MessageImage";
 import FilePreviewModal from "@/components/FilePreviewModal";
 import type { ChatMessage } from "@/types/messages";
@@ -292,6 +292,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   }, [internalSelectedCategoryId]);
 
   const [inputValue, setInputValue] = useState("");
+  const [currentMentions, setCurrentMentions] = useState<import("@/types/messages").MentionInputDto[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<
     Map<string, FileUploadProgressState>
@@ -315,7 +316,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const [unreadCount, setUnreadCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
@@ -1130,14 +1131,16 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   }, [conversationId]);
 
   // Handle send message with file upload (Phase 2 - Batch Upload)
-  const handleSend = useCallback(async () => {
+  // Updated to support mentions
+  const handleSend = useCallback(async (content: string, mentions?: import("@/types/messages").MentionInputDto[]) => {
     // Phase 7: Check network status before sending
     if (!isOnline) {
       toast.error("Không có kết nối mạng. Vui lòng kiểm tra kết nối của bạn.");
       return;
     }
 
-    if (!inputValue.trim() && selectedFiles.length === 0) return;
+    const messageContent = content.trim();
+    if (!messageContent && selectedFiles.length === 0) return;
 
     stopTyping();
     setIsUploading(true);
@@ -1147,7 +1150,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         // Case 1: Text-only message (no files)
         await sendMessageMutation.mutateAsync({
           conversationId,
-          content: inputValue.trim(),
+          content: messageContent,
+          mentions: mentions || null, // 🆕 NEW: Mentions support
           quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
         });
       } else if (selectedFiles.length === 1) {
@@ -1186,7 +1190,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
         await sendMessageMutation.mutateAsync({
           conversationId,
-          content: inputValue.trim() || "", // Empty string instead of null for API
+          content: messageContent || "", // Empty string instead of null for API
+          mentions: mentions || null, // 🆕 NEW: Mentions support
           attachments: [attachment], // Phase 2: Always use attachments[] array
           quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
         });
@@ -1217,7 +1222,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         // Send 1 message with multiple attachments (Phase 2 API v2.0)
         await sendMessageMutation.mutateAsync({
           conversationId,
-          content: inputValue.trim() || "", // Empty string instead of null for API
+          content: messageContent || "", // Empty string instead of null for API
+          mentions: mentions || null, // 🆕 NEW: Mentions support
           attachments, // Phase 2: Array of AttachmentInputDto
           quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
         });
@@ -1227,6 +1233,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       selectedFiles.forEach((sf) => revokeFilePreview(sf.preview));
       setSelectedFiles([]);
       setInputValue("");
+      setCurrentMentions([]); // 🆕 NEW: Clear mentions after sending
       setIsUploading(false);
       clearReply(); // 🆕 NEW: Clear reply state after sending message
 
@@ -1252,13 +1259,13 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     clearReply,
   ]);
 
-  // Handle key press (Enter to send)
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  // Handle key press (Enter to send) - REMOVED: MentionInput now handles Enter key
+  // const handleKeyDown = (e: React.KeyboardEvent) => {
+  //   if (e.key === "Enter" && !e.shiftKey) {
+  //     e.preventDefault();
+  //     handleSend(inputValue, currentMentions);
+  //   }
+  // };
 
   // Handle input change with typing indicator
   const handleInputChange = (value: string) => {
@@ -1984,12 +1991,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             data-testid="image-input"
           />
 
-          {/* Text input - Multi-line with Shift+Enter support */}
-          <ChatInput
+          {/* Text input - Multi-line with Shift+Enter and @mentions support (inline) */}
+          <MentionInputInline
             ref={inputRef}
             value={inputValue}
             onChange={handleInputChange}
             onSend={handleSend}
+            onMentionsChange={setCurrentMentions}
+            conversationId={conversationId}
             autoFocus
             disabled={sendMessageMutation.isPending || isUploading}
             className="flex-1"
@@ -1997,7 +2006,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
           {/* Send button - Decision #9: Disable during upload */}
           <button
-            onClick={handleSend}
+            onClick={() => handleSend(inputValue, currentMentions)}
             disabled={
               (!inputValue.trim() && selectedFiles.length === 0) ||
               sendMessageMutation.isPending ||

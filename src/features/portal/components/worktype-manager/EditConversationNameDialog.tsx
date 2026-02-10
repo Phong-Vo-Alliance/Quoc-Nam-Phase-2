@@ -43,11 +43,11 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
     const trimmed = value.trim();
 
     if (!trimmed) {
-      return "Tên conversation không được để trống";
+      return "Tên loại việc không được để trống";
     }
 
     if (trimmed.length > 100) {
-      return "Tên conversation không được vượt quá 100 ký tự";
+      return "Tên loại việc không được vượt quá 100 ký tự";
     }
 
     // Check duplicate (excluding current name)
@@ -56,7 +56,7 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
         (n) => n.toLowerCase() === trimmed.toLowerCase() && n !== conversationName
       )
     ) {
-      return "Tên conversation đã tồn tại";
+      return "Tên loại việc đã tồn tại";
     }
 
     return null;
@@ -102,7 +102,7 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
         <div className="py-4 space-y-4">
           <div>
             <label className="text-sm font-medium text-gray-700 mb-2 block">
-              Tên conversation <span className="text-rose-500">*</span>
+              Tên loại việc <span className="text-rose-500">*</span>
             </label>
             <Input
               value={name}

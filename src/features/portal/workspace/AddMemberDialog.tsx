@@ -3,17 +3,24 @@
  * Fetches users from Identity API and allows selection
  */
 
-import React, { useState, useMemo } from "react";
-import { X, Search, UserPlus, Loader2, AlertCircle } from "lucide-react";
-import { useUsers } from "@/hooks/queries/useUsers";
+import React, { useState, useMemo, useEffect } from "react";
+import { X, Search, UserPlus, Loader2, AlertCircle, Check } from "lucide-react";
+import { useDepartmentMembers } from "@/hooks/queries/useDepartmentMembers";
 import { useAddGroupMember } from "@/hooks/mutations/useGroupMutations";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
-import type { UserProfileResponse } from "@/types/users";
+import { useCategories } from "@/hooks/queries/useCategories";
+import { getSelectedCategory } from "@/utils/storage";
+import useAuthStore from "@/stores/authStore";
+import { getCurrentUser } from "@/utils/getCurrentUser";
+import { toast } from "sonner";
+import { sendMessage } from "@/api/messages.api";
+import type { SendChatMessageRequest } from "@/types/messages";
 
 interface AddMemberDialogProps {
   open: boolean;
   onClose: () => void;
   groupId?: string; // The group ID to add members to
+  conversationId?: string; // The conversation ID for sending system messages
   existingMemberIds?: string[]; // To exclude already added members
 }
 
@@ -21,18 +28,65 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   open,
   onClose,
   groupId,
+  conversationId,
   existingMemberIds = [],
 }) => {
   // Hide dialog for non-leader users
   if (!hasLeaderPermissions()) return null;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
 
-  // Fetch users
-  const { data, isLoading, isError, error } = useUsers({ page, pageSize });
-  // console.log("Fetched users:", data);
+  // Get current user from localStorage
+  const currentUserData = useAuthStore();
+  useEffect(() => {
+    (async () => {
+      return await getCurrentUser();
+    })().then((r) => {
+      console.log("AddMemberDialog - Current User:", r);
+      currentUserData.setUser(r);
+    });
+  }, []);
+  const user = currentUserData.user || null;
+
+  // Get selected category from localStorage
+  const selectedCategoryId = getSelectedCategory();
+
+  // Fetch all categories to get departmentIds for the selected category
+  const { data: categories } = useCategories();
+
+  // Find the selected category and match with user's leader department
+  const departmentId = useMemo(() => {
+    if (!selectedCategoryId || !categories || !user?.departments)
+      return undefined;
+
+    // Find the selected category
+    const selectedCategory = categories.find(
+      (cat) => cat.id === selectedCategoryId,
+    );
+    if (!selectedCategory?.departmentIds) return undefined;
+
+    // Find user's department where isLeader=true AND departmentId is in category.departmentIds
+    const matchingDepartment = user.departments.find(
+      (dept: any) =>
+        dept.isLeader &&
+        selectedCategory.departmentIds?.includes(dept.departmentId),
+    );
+
+    console.log("AddMemberDialog - Department matching:", {
+      selectedCategoryId,
+      categoryDepartmentIds: selectedCategory.departmentIds,
+      userDepartments: user.departments,
+      matchedDepartmentId: matchingDepartment?.departmentId,
+    });
+
+    return matchingDepartment?.departmentId;
+  }, [selectedCategoryId, categories, user]);
+
+  // Fetch department members
+  const { data, isLoading, isError, error } = useDepartmentMembers({
+    departmentId,
+  });
+  // console.log("Department members:", data);
   // console.log("Existing member IDs:", existingMemberIds);
   console.log(isError, error);
   // Mutation for adding members
@@ -43,29 +97,24 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
     failed: string[];
   } | null>(null);
 
-  // Filter users based on search query and exclude existing members
+  // Filter members based on search query and exclude existing members
   const filteredUsers = useMemo(() => {
-    if (!data?.items) return [];
+    if (!data) return [];
 
-    return data.items.filter((user) => {
-      // Exclude existing members
-      if (existingMemberIds.includes(user.id)) return false;
-
-      // Only show active users
-      if (!user.isActive) return false;
+    return data.filter((member) => {
+      // Exclude existing members (compare userId, not member.id)
+      if (existingMemberIds.includes(member.userId)) return false;
 
       // Search filter
       if (!searchQuery.trim()) return true;
 
       const query = searchQuery.toLowerCase();
-      const fullName =
-        `${user.firstName || ""} ${user.lastName || ""}`.toLowerCase();
-      const email = (user.email || "").toLowerCase();
+      const fullName = (member.userFullName || "").toLowerCase();
+      const email = (member.userEmail || "").toLowerCase();
 
       return fullName.includes(query) || email.includes(query);
     });
-  }, [data?.items, searchQuery, existingMemberIds]);
-
+  }, [data, searchQuery, existingMemberIds]);
   // Toggle user selection
   const toggleUser = (userId: string) => {
     setSelectedUserIds((prev) =>
@@ -88,10 +137,27 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
     // Call API for each user (since endpoint doesn't accept list)
     const failed: string[] = [];
+    const successfullyAdded: Array<{
+      userId: string;
+      userName: string;
+      userEmail: string;
+    }> = [];
+
     for (let i = 0; i < selectedUserIds.length; i++) {
       const userId = selectedUserIds[i];
       try {
         await addMemberMutation.mutateAsync({ groupId, userId });
+
+        // Find added member details
+        const addedMember = data?.find((m) => m.userId === userId);
+        if (addedMember) {
+          successfullyAdded.push({
+            userId,
+            userName: addedMember.userFullName || "Unknown",
+            userEmail: addedMember.userEmail || "",
+          });
+        }
+
         setAddingProgress((prev) =>
           prev ? { ...prev, completed: prev.completed + 1 } : null,
         );
@@ -101,6 +167,28 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
         setAddingProgress((prev) =>
           prev ? { ...prev, completed: prev.completed + 1, failed } : null,
         );
+      }
+    }
+
+    // Show toast and send system messages for successfully added members
+    for (const member of successfullyAdded) {
+      // Toast notification
+      const displayInfo = member.userEmail || member.userId;
+      toast.success(`Đã thêm ${member.userName} (${displayInfo})`);
+
+      // Send system message
+      if (conversationId) {
+        try {
+          const systemMessageData: SendChatMessageRequest = {
+            conversationId,
+            content: `${member.userName} (${displayInfo}) đã được thêm vào nhóm`,
+            messageType: "SYS",
+          };
+          await sendMessage(systemMessageData);
+        } catch (error) {
+          console.error("Failed to send system message:", error);
+          // Don't fail the whole operation if system message fails
+        }
       }
     }
 
@@ -200,83 +288,68 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
           {!isLoading && !isError && filteredUsers.length > 0 && (
             <div className="space-y-2">
-              {filteredUsers.map((user) => (
-                <label
-                  key={user.id}
+              {filteredUsers.map((member) => (
+                <div
+                  key={member.userId}
+                  data-testid={`member-item-${member.userId}`}
                   className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 cursor-pointer transition"
+                  onClick={() => toggleUser(member.userId)}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedUserIds.includes(user.id)}
-                    onChange={() => toggleUser(user.id)}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  />
+                  {/* Custom Checkbox */}
+                  <div
+                    data-testid={`member-checkbox-${member.userId}`}
+                    className={`
+                      flex-shrink-0 h-5 w-5 rounded border-2 flex items-center justify-center transition-all duration-200
+                      ${
+                        selectedUserIds.includes(member.userId)
+                          ? "bg-brand-600 border-brand-600 shadow-sm"
+                          : "border-gray-300 hover:border-brand-400 bg-white"
+                      }
+                    `}
+                  >
+                    {selectedUserIds.includes(member.userId) && (
+                      <Check className="h-3 w-3 text-white stroke-2" />
+                    )}
+                  </div>
 
                   {/* Avatar */}
                   <div className="flex-shrink-0">
-                    {user.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt={`${user.firstName} ${user.lastName}`}
-                        className="h-10 w-10 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-10 w-10 rounded-full bg-brand-100 flex items-center justify-center">
-                        <span className="text-sm font-medium text-brand-600">
-                          {user.firstName?.[0] || user.email?.[0] || "?"}
-                        </span>
-                      </div>
-                    )}
+                    <div
+                      data-testid={`member-avatar-${member.userId}`}
+                      className="h-10 w-10 rounded-full bg-brand-100 flex items-center justify-center"
+                    >
+                      <span className="text-sm font-medium text-brand-600">
+                        {member.userFullName?.[0] ||
+                          member.userEmail?.[0] ||
+                          "?"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* User Info */}
-                  <div className="flex-1 min-w-0">
+                  <div
+                    data-testid={`member-info-${member.userId}`}
+                    className="flex-1 min-w-0"
+                  >
                     <div className="text-sm font-medium text-gray-900 truncate">
-                      {user.firstName && user.lastName
-                        ? `${user.firstName} ${user.lastName}`
-                        : user.email}
+                      {member.userFullName}
+                      {/* {member.isLeader && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-brand-100 text-brand-700">
+                          Leader
+                        </span>
+                      )} */}
                     </div>
-                    {user.email && (user.firstName || user.lastName) && (
+                    {member.userEmail && (
                       <div className="text-xs text-gray-500 truncate">
-                        {user.email}
-                      </div>
-                    )}
-                    {user.phoneNumber && (
-                      <div className="text-xs text-gray-400">
-                        {user.phoneNumber}
+                        {member.userEmail}
                       </div>
                     )}
                   </div>
-                </label>
+                </div>
               ))}
             </div>
           )}
         </div>
-
-        {/* Pagination (if needed) */}
-        {data && data.totalPages > 1 && (
-          <div className="px-6 py-3 border-t bg-gray-50 flex items-center justify-between">
-            <div className="text-xs text-gray-500">
-              Trang {page} / {data.totalPages} ({data.totalCount} người dùng)
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1 text-xs rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-              >
-                Trước
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-                disabled={page === data.totalPages}
-                className="px-3 py-1 text-xs rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-              >
-                Sau
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Footer */}
         <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between">

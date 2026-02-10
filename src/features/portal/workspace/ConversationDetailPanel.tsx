@@ -2851,6 +2851,7 @@ export const ConversationDetailPanel: React.FC<{
         open={showAddMemberDialog}
         onClose={() => setShowAddMemberDialog(false)}
         groupId={groupId}
+        conversationId={groupId}
         existingMemberIds={members.map((m) => m.id)}
       />
     </aside>

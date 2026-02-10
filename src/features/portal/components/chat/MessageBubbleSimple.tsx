@@ -21,6 +21,7 @@ import type { ChatMessage, AttachmentDto } from "@/types/messages";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
 import { useReplyStore } from "@/stores/replyStore";
 import { useContentProtection } from "@/hooks/useContentProtection";
+import { renderMessageWithMentions } from "@/utils/mentionHighlight";
 
 /**
  * Format file size from bytes to human-readable format
@@ -415,7 +416,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       </div>
                     )}
 
-                    {/* Text content */}
+                    {/* Text content with mention highlighting */}
                     {hasText && (
                       <div
                         className={
@@ -423,7 +424,13 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         }
                       >
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                          {message.content}
+                          {renderMessageWithMentions(
+                            message.content,
+                            message.mentions,
+                            isOwn
+                              ? "bg-white/20 text-white font-semibold px-1 rounded"
+                              : "bg-brand-100 text-brand-800 font-semibold px-1 rounded"
+                          )}
                         </p>
                       </div>
                     )}

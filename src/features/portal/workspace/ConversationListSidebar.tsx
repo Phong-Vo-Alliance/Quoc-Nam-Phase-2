@@ -136,20 +136,23 @@ const initials = (name: string) =>
 /* ===================== Component ===================== */
 
 // 🔧 Helper: Get initial tab based on persisted conversation type
-const getInitialTab = (): "categories" | "contacts" => {
+const getInitialTab = (): "group" | "dm" => {
   try {
     const stored = localStorage.getItem("conversation-storage");
     if (stored) {
       const data = JSON.parse(stored);
       const conversationType = data?.state?.selectedConversation?.type;
       if (conversationType === "dm") {
-        return "contacts";
+        return "dm";
+      }
+      if (conversationType === "group") {
+        return "group";
       }
     }
   } catch (error) {
     // Ignore parse errors, fallback to default
   }
-  return "categories";
+  return "group";
 };
 
 export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
@@ -169,15 +172,13 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   onOpenPinned,
   onOpenTodoList,
 }) => {
-  const [tab, setTab] = React.useState<"categories" | "contacts">(
-    getInitialTab(),
-  ); // 🔧 Initialize based on persisted conversation
+  const [tab, setTab] = React.useState<"group" | "dm">(getInitialTab()); // 🔧 Initialize based on persisted conversation
   const [q, setQ] = React.useState("");
   const [openTools, setOpenTools] = React.useState(false);
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] =
     React.useState<string | null>(null); // 🔧 Track selected category internally
-  const prevTabRef = React.useRef<"categories" | "contacts">(getInitialTab()); // 🐛 FIX: Initialize with same value as tab state
+  const prevTabRef = React.useRef<"group" | "dm">(getInitialTab()); // 🐛 FIX: Initialize with same value as tab state
   const isAutoSwitchingTabRef = React.useRef(false); // Flag to prevent clearing selection during auto-switch
   const prevSelectedConversationIdRef = React.useRef<string | undefined>(
     undefined,
@@ -225,7 +226,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       // Filter out current user
       return members.filter((member) => member.userId !== currentUser.id);
     },
-    enabled: useApiData && tab === "contacts",
+    enabled: useApiData && tab === "dm",
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
@@ -333,6 +334,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     // Add department members that don't have conversations
     // Check if their user ID appears in any conversation participants
     departmentMembers.forEach((member) => {
+      // Exclude current user from the list
+      if (member.userId === currentUserId) return;
+
       const hasConversation = conversationParticipantIds.has(member.userId);
 
       if (!hasConversation) {
@@ -353,20 +357,20 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   // Determine if loading
   const isLoading =
     useApiData &&
-    ((tab === "categories" && categoriesQuery.isLoading) ||
-      (tab === "contacts" && directsQuery.isLoading));
+    ((tab === "group" && categoriesQuery.isLoading) ||
+      (tab === "dm" && directsQuery.isLoading));
 
   // Determine if error
   const isError =
     useApiData &&
-    ((tab === "categories" && categoriesQuery.isError) ||
-      (tab === "contacts" && directsQuery.isError));
+    ((tab === "group" && categoriesQuery.isError) ||
+      (tab === "dm" && directsQuery.isError));
 
   // Retry function
   const handleRetry = () => {
-    if (tab === "categories") {
+    if (tab === "group") {
       categoriesQuery.refetch();
-    } else if (tab === "contacts") {
+    } else if (tab === "dm") {
       directsQuery.refetch();
     }
   };
@@ -438,27 +442,37 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       return match(c.name) || match(c.email);
     });
 
-    // Sort: conversations with messages first, then by name
+    // Sort: conversations with messages first (by time DESC), then conversations without messages, then members without conversations
     return filtered.sort((a, b) => {
-      // Prioritize items with conversations
-      if (a.hasConversation && !b.hasConversation) return -1;
-      if (!a.hasConversation && b.hasConversation) return 1;
+      const hasConvA = a.hasConversation && a.conversation;
+      const hasConvB = b.hasConversation && b.conversation;
 
-      // For items with conversations, sort by last message time
-      if (
-        a.hasConversation &&
-        b.hasConversation &&
-        a.conversation &&
-        b.conversation
-      ) {
-        const timeA = a.conversation.lastMessage?.sentAt || "";
-        const timeB = b.conversation.lastMessage?.sentAt || "";
-        if (timeA && timeB) {
-          return new Date(timeB).getTime() - new Date(timeA).getTime();
-        }
+      // If both don't have conversations, sort alphabetically
+      if (!hasConvA && !hasConvB) {
+        return a.name.localeCompare(b.name);
       }
 
-      // Fallback to alphabetical by name
+      // Prioritize items with conversations
+      if (hasConvA && !hasConvB) return -1;
+      if (!hasConvA && hasConvB) return 1;
+
+      // Both have conversations - sort by last message time
+      const lastMessageA = a.conversation?.lastMessage;
+      const lastMessageB = b.conversation?.lastMessage;
+
+      // If both have last messages, sort by time (newest first)
+      if (lastMessageA?.sentAt && lastMessageB?.sentAt) {
+        return (
+          new Date(lastMessageB.sentAt).getTime() -
+          new Date(lastMessageA.sentAt).getTime()
+        );
+      }
+
+      // Prioritize conversations with messages over those without
+      if (lastMessageA && !lastMessageB) return -1;
+      if (!lastMessageA && lastMessageB) return 1;
+
+      // Both have no messages - fallback to alphabetical by name
       return a.name.localeCompare(b.name);
     });
   }, [mergedContacts, q]); // Re-compute khi mergedContacts hoặc search query thay đổi
@@ -605,7 +619,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   // 🔧 Sync parent tab on mount based on initial tab
   React.useEffect(() => {
     // Map internal tab to parent tab type
-    const parentTab = tab === "categories" ? "messages" : "contacts";
+    const parentTab = tab === "group" ? "messages" : "contacts";
     onTabChange?.(parentTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
@@ -679,7 +693,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         );
 
         if (savedDirect) {
-          setTab("contacts");
+          setTab("dm");
           onTabChange?.("contacts");
           handleDirectSelect(savedDirect);
           setHasAutoSelected(true);
@@ -724,35 +738,35 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
   // Separate effect: Auto-switch tab based on selected conversation type
   // This runs AFTER selectedConversationId is updated from parent
-  React.useEffect(() => {
-    // Only auto-switch when a NEW conversation is selected (not when cleared or same conversation)
-    const hasNewConversation =
-      selectedConversationId &&
-      selectedConversationId !== prevSelectedConversationIdRef.current;
+  // React.useEffect(() => {
+  //   // Only auto-switch when a NEW conversation is selected (not when cleared or same conversation)
+  //   const hasNewConversation =
+  //     selectedConversationId &&
+  //     selectedConversationId !== prevSelectedConversationIdRef.current;
 
-    if (!hasNewConversation || !useApiData) {
-      prevSelectedConversationIdRef.current = selectedConversationId;
-      return;
-    }
+  //   if (!hasNewConversation || !useApiData) {
+  //     prevSelectedConversationIdRef.current = selectedConversationId;
+  //     return;
+  //   }
 
-    // Check if selected conversation is a direct message
-    const isDirect = apiDirects.some((d) => d.id === selectedConversationId);
-    if (isDirect && tab !== "contacts") {
-      isAutoSwitchingTabRef.current = true; // Set flag before switching
-      setTab("contacts");
-      prevSelectedConversationIdRef.current = selectedConversationId;
-      return;
-    }
+  //   // Check if selected conversation is a direct message
+  //   const isDirect = apiDirects.some((d) => d.id === selectedConversationId);
+  //   if (isDirect && tab !== "dm") {
+  //     isAutoSwitchingTabRef.current = true; // Set flag before switching
+  //     setTab("dm");
+  //     prevSelectedConversationIdRef.current = selectedConversationId;
+  //     return;
+  //   }
 
-    // Check if selected conversation is a group
-    const isGroup = apiGroups.some((g) => g.id === selectedConversationId);
-    if (isGroup && tab !== "categories") {
-      isAutoSwitchingTabRef.current = true; // Set flag before switching
-      setTab("categories");
-    }
+  //   // Check if selected conversation is a group
+  //   const isGroup = apiGroups.some((g) => g.id === selectedConversationId);
+  //   if (isGroup && tab !== "group") {
+  //     isAutoSwitchingTabRef.current = true; // Set flag before switching
+  //     setTab("group");
+  //   }
 
-    prevSelectedConversationIdRef.current = selectedConversationId;
-  }, [selectedConversationId, apiDirects, apiGroups, useApiData, tab]);
+  //   prevSelectedConversationIdRef.current = selectedConversationId;
+  // }, [selectedConversationId, apiDirects, apiGroups, useApiData, tab]);
 
   // Auto-select first group when API data loads (only once) - REMOVED (merged into restore logic above)
 
@@ -761,7 +775,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     // Only clear if tab actually changed (not on initial mount or re-render)
     if (prevTabRef.current !== tab) {
       // 🆕 Update active tab type in store FIRST
-      setActiveTabType(tab === "categories" ? "group" : "dm");
+      setActiveTabType(tab === "group" ? "group" : "dm");
 
       // Don't clear if this is an auto-switch triggered by conversation selection
       if (isAutoSwitchingTabRef.current) {
@@ -890,13 +904,13 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
               <ToggleGroup
                 type="single"
                 value={tab}
-                onValueChange={(v) =>
-                  v && setTab(v as "categories" | "contacts")
-                }
+                onValueChange={(v) => {
+                  v && setTab(v as "group" | "dm");
+                }}
                 className="flex w-full gap-1"
               >
                 <ToggleGroupItem
-                  value="categories"
+                  value="group"
                   className={`flex-1 rounded-full px-3 py-1 text-sm transition
                   data-[state=on]:bg-white data-[state=on]:text-gray-900 data-[state=on]:shadow
                   data-[state=on]:ring-1 data-[state=on]:ring-emerald-300
@@ -906,7 +920,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                   Nhóm
                 </ToggleGroupItem>
                 <ToggleGroupItem
-                  value="contacts"
+                  value="dm"
                   className={`flex-1 rounded-full px-3 py-1 text-sm transition
                   data-[state=on]:bg-white data-[state=on]:text-gray-900 data-[state=on]:shadow
                   data-[state=on]:ring-1 data-[state=on]:ring-emerald-300
@@ -926,8 +940,8 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
             <div className="text-xs">
               <SegmentedTabs
                 tabs={[
-                  { key: "categories", label: "Nhóm" },
-                  { key: "contacts", label: "Cá nhân" },
+                  { key: "group", label: "Nhóm" },
+                  { key: "dm", label: "Cá nhân" },
                 ]}
                 active={tab}
                 onChange={(v) => setTab(v as any)}
@@ -971,10 +985,10 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
           </div>
         )}
 
-        {/* Categories Tab - Shows work type categories */}
+        {/* Group Tab - Shows work type categories */}
         {!isLoading &&
           !isError &&
-          tab === "categories" &&
+          tab === "group" &&
           (useApiData ? (
             // API Data - Show categories (same as workTypes logic)
             <div data-testid="categories-list">
@@ -1160,7 +1174,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         {/* Contacts/DMs Tab */}
         {!isLoading &&
           !isError &&
-          tab === "contacts" &&
+          tab === "dm" &&
           (useApiData ? (
             // API Data - Using merged contacts (conversations + department members)
             <ul
@@ -1219,22 +1233,21 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-1">
                           <span
-                            className="text-sm font-medium truncate"
+                            className="text-sm font-medium text-gray-700 truncate"
                             data-testid="contact-name"
                           >
                             {contact.name}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <MessageCircle className="h-3 w-3 text-gray-400" />
-                          <p className="text-xs text-gray-400 italic">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-gray-500">
                             {createDMMutation.isPending &&
                             createDMMutation.variables?.recipientId ===
                               contact.userId
                               ? "Đang tạo cuộc trò chuyện..."
-                              : "Nhấn để bắt đầu trò chuyện"}
+                              : "chưa có tin nhắn"}
                           </p>
                         </div>
                       </div>

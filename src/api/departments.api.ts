@@ -27,3 +27,20 @@ export async function getDepartmentMembers(
   
   return response.data;
 }
+
+/**
+ * Get members of a specific department (Admin endpoint)
+ * GET /api/admin/identity/departments/{departmentId}/members
+ * 
+ * @param departmentId - The department ID
+ * @returns Array of department members
+ */
+export async function getAdminDepartmentMembers(
+  departmentId: string
+): Promise<DepartmentMemberDto[]> {
+  const response = await identityApiClient.get<DepartmentMemberDto[]>(
+    `/api/admin/identity/departments/${departmentId}/members`
+  );
+  
+  return response.data;
+}

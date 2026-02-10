@@ -92,8 +92,6 @@ const mockTaskLogMessages: TaskLogMessage[] = [
 
 const mockMembers = [
   { id: CURRENT_USER_ID, name: CURRENT_USER_NAME },
-  { id: "u_thu_an", name: "Thu An" },
-  { id: "u_diem_chi", name: "Diễm Chi" },
 ];
 
 export const MobileTaskLogScreenDemo: React.FC = () => {
@@ -114,7 +112,7 @@ export const MobileTaskLogScreenDemo: React.FC = () => {
         task={mockTask}
         sourceMessage={mockSourceMessage}
         messages={mockTaskLogMessages}
-        currentUserId="u_diem_chi"
+        currentUserId={CURRENT_USER_ID}
         members={mockMembers}
         onSend={(payload) => {
           // In a real app, this would add the message to the task log

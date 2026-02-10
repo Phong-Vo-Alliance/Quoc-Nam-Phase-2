@@ -53,6 +53,7 @@ export function clearAuthStorage(): void {
     // Clear auth tokens
     localStorage.removeItem(AUTH_CONFIG.storageKeys.accessToken);
     localStorage.removeItem(AUTH_CONFIG.storageKeys.user);
+    localStorage.removeItem("current_user");
 
     // ✅ Clear chat state to prevent data leakage between users
     clearSelectedConversation();

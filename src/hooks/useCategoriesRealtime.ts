@@ -122,7 +122,7 @@ export function useCategoriesRealtime(
     const handleMessageSent = (data: any) => {
       const { message } = data;
       if (!message) {
-        console.error(`[CategoryRealtime] ❌ No message in event data`);
+        console.error(`[CategoryRealtime] No message in event data`);
         return;
       }
 

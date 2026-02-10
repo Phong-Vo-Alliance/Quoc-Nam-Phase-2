@@ -1,6 +1,3 @@
-// SignalR Provider - Manages SignalR connection lifecycle
-// Automatically connects when user is authenticated
-
 import React, {
   createContext,
   useContext,
@@ -9,8 +6,9 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { chatHub, type SignalRConnectionState } from "@/lib/signalr";
+import { chatHub, type SignalRConnectionState, SIGNALR_EVENTS } from "@/lib/signalr";
 import { useAuthStore } from "@/stores/authStore";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface SignalRContextValue {
   connectionState: SignalRConnectionState;
@@ -33,6 +31,69 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   const connectionAttemptRef = useRef(false);
   const shouldConnectRef = useRef(false);
   const mountedRef = useRef(true);
+  const handlersRegisteredRef = useRef(false);
+  const queryClient = useQueryClient();
+
+  // Register global event handlers immediately after connection
+  const registerGlobalHandlers = useCallback(() => {
+    if (handlersRegisteredRef.current) {
+      console.log("[SignalRProvider] Handlers already registered, skipping");
+      return;
+    }
+
+    console.log("[SignalRProvider] Registering global event handlers...");
+
+    // ConversationCreated - Most important for the broadcast issue
+    chatHub.on(SIGNALR_EVENTS.CONVERSATION_CREATED, (event: any) => {
+      console.log("[SignalRProvider] CONVERSATION_CREATED event received:", event);
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    });
+
+    // MessageSent
+    chatHub.on(SIGNALR_EVENTS.MESSAGE_SENT, (event: any) => {
+      console.log("[SignalRProvider] MESSAGE_SENT event received:", event);
+      const conversationId = event?.conversationId || event?.message?.conversationId;
+      if (conversationId) {
+        queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }
+    });
+
+    // MessageRead
+    chatHub.on(SIGNALR_EVENTS.MESSAGE_READ, (event: any) => {
+      console.log("[SignalRProvider] MESSAGE_READ event received:", event);
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    });
+
+    // ConversationUpdated
+    chatHub.on(SIGNALR_EVENTS.CONVERSATION_UPDATED, (event: any) => {
+      console.log("[SignalRProvider] CONVERSATION_UPDATED event received:", event);
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    });
+
+    handlersRegisteredRef.current = true;
+    console.log("[SignalRProvider] Global event handlers registered successfully");
+  }, [queryClient]);
+
+  // Unregister global event handlers
+  const unregisterGlobalHandlers = useCallback(() => {
+    if (!handlersRegisteredRef.current) {
+      return;
+    }
+
+    console.log("[SignalRProvider] Unregistering global event handlers...");
+    chatHub.off(SIGNALR_EVENTS.CONVERSATION_CREATED);
+    chatHub.off(SIGNALR_EVENTS.MESSAGE_SENT);
+    chatHub.off(SIGNALR_EVENTS.MESSAGE_READ);
+    chatHub.off(SIGNALR_EVENTS.CONVERSATION_UPDATED);
+
+    handlersRegisteredRef.current = false;
+    console.log("[SignalRProvider] Global event handlers unregistered");
+  }, []);
 
   // Connect to SignalR
   const connect = useCallback(async () => {
@@ -52,6 +113,9 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
 
       if (mountedRef.current && shouldConnectRef.current) {
         setConnectionState("Connected");
+        
+        // Register event handlers IMMEDIATELY after connection succeeds
+        registerGlobalHandlers();
       }
     } catch (error) {
       if (mountedRef.current) {
@@ -61,11 +125,14 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     } finally {
       connectionAttemptRef.current = false;
     }
-  }, [accessToken]);
+  }, [accessToken, registerGlobalHandlers]);
 
   // Disconnect from SignalR
   const disconnect = useCallback(async () => {
     try {
+      // Unregister handlers before disconnecting
+      unregisterGlobalHandlers();
+      
       await chatHub.stop();
       if (mountedRef.current) {
         setConnectionState("Disconnected");
@@ -73,7 +140,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     } catch (error) {
       // Silent fail on disconnect
     }
-  }, []);
+  }, [unregisterGlobalHandlers]);
 
   // Track mount state
   useEffect(() => {
@@ -104,13 +171,15 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   useEffect(() => {
     return () => {
       shouldConnectRef.current = false;
+      // Unregister handlers on unmount
+      unregisterGlobalHandlers();
       // Don't call stop() during unmount if connection is in progress
       // The connection will be stopped when component re-mounts with new state
       if (!connectionAttemptRef.current) {
         chatHub.stop();
       }
     };
-  }, []);
+  }, [unregisterGlobalHandlers]);
 
   // Poll connection state
   useEffect(() => {

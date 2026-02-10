@@ -45,6 +45,7 @@ import {
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { WorkTypeManagerDialog } from "./components/WorkTypeManagerDialog";
 import { useConversationStore } from "@/stores/conversationStore";
+import { useTabTitle } from "@/hooks/useTabTitle"; // 🆕 For tab title with unread count
 
 // ⚠️ TODO (2026-02-03): This file is a wireframe/demo page
 // Should migrate to use useCategories instead of useGroups, or deprecate if not needed
@@ -58,6 +59,9 @@ interface PortalWireframesProps {
 export default function PortalWireframes({
   portalMode = "desktop",
 }: PortalWireframesProps) {
+  // 🆕 NEW: Tab title management with unread DM count
+  useTabTitle({ baseTitle: "Quoc Nam Portal" });
+
   // ---------- auth & navigation ----------
   const navigate = useNavigate();
   const logout = useAuthStore((state) => state.logout);
@@ -251,12 +255,7 @@ export default function PortalWireframes({
 
   // Dynamic user based on role permissions
   const currentUser = getCurrentUserName();
-  const currentUserId = hasLeaderPermissions()
-    ? getCurrentUserIdSync()
-    : "u_diem_chi";
-  const currentUserDepartment = hasLeaderPermissions()
-    ? "Quản lý vận hành"
-    : "Nhân viên kho";
+  const currentUserId = getCurrentUserIdSync();
 
   //const now = new Date().toISOString();
 
@@ -1190,7 +1189,7 @@ export default function PortalWireframes({
 
   //DEBUG:
   // const leaderGroups = React.useMemo(() => {
-  //   console.log("🔍 DEBUG leaderGroups:", {
+  //   console.log("DEBUG leaderGroups:", {
   //     currentUserId,
   //     totalGroups: groups.length,
   //     groupsWithMembers: groups.filter(g => g.members && g.members.length > 0).length,
@@ -1207,7 +1206,7 @@ export default function PortalWireframes({
   //     return hasLeader;
   //   });
 
-  //   console.log("✅ Filtered leaderGroups:", filtered.length, filtered);
+  //   console.log("Filtered leaderGroups:", filtered.length, filtered);
   //   return filtered;
   // }, [groups, currentUserId]);
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { ConversationListSidebar } from "./ConversationListSidebar";
 import { ChatMessagePanel } from "./ChatMessagePanel";
 import { ConversationDetailPanel } from "./ConversationDetailPanel";
@@ -275,6 +275,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   const selectedConversation = useConversationStore(
     (state) => state.selectedConversation,
   );
+  useEffect(() => {
+    if (selectedConversation) {
+      onSelectChat(selectedConversation);
+    }
+  }, []);
   const setSelectedConversation = useConversationStore(
     (state) => state.setSelectedConversation,
   );
@@ -599,7 +604,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           data: {
             title: task.title,
             description: task.description || null,
-            priority: task.priority,
+            priority: task.priority?.code || "MEDIUM",
             dueDate: task.dueDate || null,
             conversationId: task.workTypeId || null,
             messageId: task.messageId || null,
@@ -719,7 +724,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                       return;
                     }
 
-                    console.log("🎯 Navigating to starred message:", {
+                    console.log("Navigating to starred message:", {
                       conversationId,
                       categoryId: category.id,
                       currentConversationId: selectedConversation?.id,
@@ -797,7 +802,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                       conversationCategory={
                         selectedConversation.type === "group"
                           ? selectedConversation.category
-                          : undefined
+                          : selectedConversation.name
                       }
                       selectedCategoryId={
                         selectedConversation.type === "group"
@@ -1016,7 +1021,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 return;
               }
 
-              console.log("🎯 Navigating to starred message:", {
+              console.log("Navigating to starred message:", {
                 conversationId,
                 categoryId: category.id,
                 currentConversationId: selectedConversation?.id,
@@ -1026,12 +1031,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
               if (selectedConversation?.id === conversationId) {
                 // Same conversation - scroll immediately
                 console.log(
-                  "🎯 Already in correct conversation, scrolling immediately",
+                  "Already in correct conversation, scrolling immediately",
                 );
                 setScrollToMessage(messageDto);
               } else {
                 // Different conversation - navigate first, then scroll after load
-                console.log("🎯 Different conversation, navigating first...");
+                console.log("Different conversation, navigating first...");
 
                 // Set pending scroll
                 setPendingScrollMessage(messageDto);
@@ -1097,7 +1102,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             conversationCategory={
               selectedConversation.type === "group"
                 ? selectedConversation.category
-                : undefined
+                : selectedConversation.name
             }
             selectedCategoryId={
               selectedConversation.type === "group"

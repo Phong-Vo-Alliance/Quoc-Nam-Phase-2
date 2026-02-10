@@ -132,6 +132,16 @@ export interface MentionInputDto {
   mentionText: string | null;
 }
 
+// MentionDto - Used in RESPONSE (from API)
+// Matches MessageMentionSummaryDto from Swagger
+export interface MentionDto {
+  id?: string; // UUID of the mention entity (from API)
+  mentionedUserId: string; // UUID of mentioned user
+  startIndex: number; // Start position in message content
+  length: number; // Length of mention text
+  mentionText: string | null; // The mention text (e.g., "@John Doe"), nullable from API
+}
+
 // Message Attachment from API (Legacy - kept for compatibility)
 export interface ChatMessageAttachment {
   id: string;
@@ -190,7 +200,7 @@ export interface ChatMessage {
   isStarred: boolean;
   isPinned: boolean;
   threadPreview: unknown | null;
-  mentions: string[];
+  mentions: MentionDto[]; // Array of mention metadata (updated from string[])
 
   // Client-side fields for send status tracking (optional)
   sendStatus?: "sending" | "retrying" | "failed" | "sent";

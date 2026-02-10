@@ -12,3 +12,5 @@ export { MessageBubbleSimple } from "./MessageBubbleSimple";
 export type { MessageBubbleSimpleProps } from "./MessageBubbleSimple";
 export { SystemMessageBubble } from "./SystemMessageBubble";
 export type { SystemMessageBubbleProps } from "./SystemMessageBubble";
+export { MentionInputInline } from "./MentionInputInline";
+export type { MentionInputProps } from "./MentionInputInline";

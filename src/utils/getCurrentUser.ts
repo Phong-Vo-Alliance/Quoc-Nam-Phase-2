@@ -160,7 +160,7 @@ export async function getCurrentUserFromAPI(): Promise<{
     const userData = response.data;
     const user = {
       departments: userData.departments || [],
-      id: userData.id,
+      id: userData.userId || userData.id,
       identifier: userData.identifier || userData.email || "",
       roles: userData.roles || [],
     };

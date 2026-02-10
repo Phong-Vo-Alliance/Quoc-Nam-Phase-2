@@ -194,7 +194,7 @@ function validateConfig() {
   });
 
   if (errors.length > 0) {
-    console.error("❌ Environment Configuration Errors:");
+    console.error("Environment Configuration Errors:");
     errors.forEach((err) => console.error(`  - ${err}`));
 
     if (isProduction) {
