@@ -76,6 +76,9 @@ export default function ImagePreviewModal({
   const [hasError, setHasError] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
+  // ✅ Local Gallery Cache - Cache blob URLs for this modal session
+  const [imageCache, setImageCache] = useState<Map<string, string>>(new Map());
+
   // Determine current image to display
   const isGalleryMode = images && images.length > 0;
   const currentFileId = isGalleryMode ? images[currentIndex]?.fileId : fileId;
@@ -91,7 +94,18 @@ export default function ImagePreviewModal({
     }
   }, [open, initialIndex]);
 
-  // Load image when fileId changes
+  // Navigation handlers
+  const handlePrev = () => {
+    if (!isGalleryMode) return;
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
+  };
+
+  const handleNext = () => {
+    if (!isGalleryMode) return;
+    setCurrentIndex((prev) => (prev < images!.length - 1 ? prev + 1 : prev));
+  };
+
+  // Load image when fileId changes - with local cache
   useEffect(() => {
     if (!open || !currentFileId) {
       setImageUrl(null);
@@ -100,7 +114,14 @@ export default function ImagePreviewModal({
       return;
     }
 
-    let blobUrl: string | null = null;
+    // ✅ Check local cache first
+    const cachedUrl = imageCache.get(currentFileId);
+    if (cachedUrl) {
+      setImageUrl(cachedUrl);
+      setIsLoading(false);
+      setHasError(false);
+      return;
+    }
 
     async function loadPreview() {
       if (!currentFileId) return;
@@ -110,7 +131,10 @@ export default function ImagePreviewModal({
         setHasError(false);
 
         const blob = await getImagePreview(currentFileId);
-        blobUrl = createBlobUrl(blob);
+        const blobUrl = createBlobUrl(blob);
+
+        // ✅ Cache the blob URL for this modal session
+        setImageCache((prev) => new Map(prev).set(currentFileId, blobUrl));
         setImageUrl(blobUrl);
       } catch (error) {
         console.error("Failed to load image preview:", error);
@@ -121,14 +145,7 @@ export default function ImagePreviewModal({
     }
 
     loadPreview();
-
-    // Cleanup blob URL when modal closes or image changes
-    return () => {
-      if (blobUrl) {
-        revokeBlobUrl(blobUrl);
-      }
-    };
-  }, [open, currentFileId]);
+  }, [open, currentFileId, imageCache]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -148,15 +165,19 @@ export default function ImagePreviewModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, currentIndex, hasMultipleImages, images]);
 
-  const handlePrev = () => {
-    if (!isGalleryMode) return;
-    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
-  };
+  // ✅ Cleanup all cached blob URLs when modal closes
+  useEffect(() => {
+    if (!open && imageCache.size > 0) {
+      // Revoke all cached blob URLs
+      imageCache.forEach((blobUrl) => {
+        revokeBlobUrl(blobUrl);
+      });
 
-  const handleNext = () => {
-    if (!isGalleryMode) return;
-    setCurrentIndex((prev) => (prev < images.length - 1 ? prev + 1 : prev));
-  };
+      // Clear the cache map
+      setImageCache(new Map());
+      setImageUrl(null);
+    }
+  }, [open, imageCache]);
 
   const shouldShowFooter = hasMultipleImages;
 

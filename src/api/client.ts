@@ -1,7 +1,7 @@
-import axios from 'axios';
-import { getAccessToken, removeAccessToken } from '@/lib/auth/tokenStorage';
-import { AUTH_CONFIG } from '@/lib/auth/config';
-import { API_ENDPOINTS } from '@/config/env.config';
+import axios from "axios";
+import { getAccessToken, removeAccessToken } from "@/lib/auth/tokenStorage";
+import { AUTH_CONFIG } from "@/lib/auth/config";
+import { API_ENDPOINTS } from "@/config/env.config";
 
 // Use the chat API endpoint from env config
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_ENDPOINTS.chat;
@@ -9,7 +9,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_ENDPOINTS.chat;
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   timeout: 30000,
 });
@@ -21,11 +21,23 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // ✅ Add cache-busting headers for sensitive endpoints to ensure fresh data
+    if (
+      config.url?.includes("/Files/") ||
+      config.url?.includes("/preview") ||
+      config.url?.includes("/watermarked-thumbnail")
+    ) {
+      config.headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+      config.headers["Pragma"] = "no-cache";
+      config.headers["Expires"] = "0";
+    }
+
     return config;
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // Response interceptor - handle errors
@@ -43,7 +55,7 @@ apiClient.interceptors.response.use(
 
       // Redirect to login page
       if (
-        typeof window !== 'undefined' &&
+        typeof window !== "undefined" &&
         !window.location.pathname.includes(AUTH_CONFIG.routes.login)
       ) {
         window.location.href = AUTH_CONFIG.routes.login;
@@ -51,7 +63,7 @@ apiClient.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default apiClient;

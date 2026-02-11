@@ -144,14 +144,19 @@ const BlobImage: React.FC<{
       setError(false);
 
       try {
+        // Add timestamp to force fresh request and avoid cache
+        const timestamp = Date.now();
         const apiEndpoint =
           endpoint === "thumbnail"
-            ? `${API_ENDPOINTS.file}/api/Files/${fileId}/watermarked-thumbnail?size=medium`
-            : `${API_ENDPOINTS.file}/api/Files/${fileId}/preview`;
+            ? `${API_ENDPOINTS.file}/api/Files/${fileId}/watermarked-thumbnail?size=medium&t=${timestamp}`
+            : `${API_ENDPOINTS.file}/api/Files/${fileId}/preview?t=${timestamp}`;
 
         const response = await fetch(apiEndpoint, {
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
           },
         });
 

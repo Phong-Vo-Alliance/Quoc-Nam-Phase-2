@@ -6,7 +6,11 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { chatHub, type SignalRConnectionState, SIGNALR_EVENTS } from "@/lib/signalr";
+import {
+  chatHub,
+  type SignalRConnectionState,
+  SIGNALR_EVENTS,
+} from "@/lib/signalr";
 import { useAuthStore } from "@/stores/authStore";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -45,38 +49,52 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
 
     // ConversationCreated - Most important for the broadcast issue
     chatHub.on(SIGNALR_EVENTS.CONVERSATION_CREATED, (event: any) => {
-      console.log("[SignalRProvider] CONVERSATION_CREATED event received:", event);
+      console.log(
+        "[SignalRProvider] CONVERSATION_CREATED event received:",
+        event,
+      );
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     });
 
     // MessageSent
+    // NOTE: Do NOT invalidate categories/conversations here!
+    // useCategoriesRealtime and useMessageRealtime handle updates via setQueryData
+    // invalidateQueries would cause refetch → reset unreadCount → flash bug
     chatHub.on(SIGNALR_EVENTS.MESSAGE_SENT, (event: any) => {
       console.log("[SignalRProvider] MESSAGE_SENT event received:", event);
-      const conversationId = event?.conversationId || event?.message?.conversationId;
+      const conversationId =
+        event?.conversationId || event?.message?.conversationId;
       if (conversationId) {
-        queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
-        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        queryClient.invalidateQueries({
+          queryKey: ["messages", conversationId],
+        });
+        // Removed: invalidateQueries for categories/conversations (causes unread count flash)
       }
     });
 
     // MessageRead
+    // NOTE: Do NOT invalidate categories/conversations here!
+    // useCategoriesRealtime handles unread reset via setQueryData
     chatHub.on(SIGNALR_EVENTS.MESSAGE_READ, (event: any) => {
       console.log("[SignalRProvider] MESSAGE_READ event received:", event);
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Removed: invalidateQueries for categories/conversations (causes unread count flash)
     });
 
     // ConversationUpdated
     chatHub.on(SIGNALR_EVENTS.CONVERSATION_UPDATED, (event: any) => {
-      console.log("[SignalRProvider] CONVERSATION_UPDATED event received:", event);
+      console.log(
+        "[SignalRProvider] CONVERSATION_UPDATED event received:",
+        event,
+      );
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     });
 
     handlersRegisteredRef.current = true;
-    console.log("[SignalRProvider] Global event handlers registered successfully");
+    console.log(
+      "[SignalRProvider] Global event handlers registered successfully",
+    );
   }, [queryClient]);
 
   // Unregister global event handlers
@@ -113,7 +131,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
 
       if (mountedRef.current && shouldConnectRef.current) {
         setConnectionState("Connected");
-        
+
         // Register event handlers IMMEDIATELY after connection succeeds
         registerGlobalHandlers();
       }
@@ -132,7 +150,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     try {
       // Unregister handlers before disconnecting
       unregisterGlobalHandlers();
-      
+
       await chatHub.stop();
       if (mountedRef.current) {
         setConnectionState("Disconnected");

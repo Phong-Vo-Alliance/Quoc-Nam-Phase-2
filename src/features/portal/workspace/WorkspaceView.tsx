@@ -32,6 +32,8 @@ import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW: Fetch categories first before messages
 import { useUpdateTask } from "@/hooks/mutations";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
+import { useMessageRealtime } from "@/hooks/useMessageRealtime"; // 🆕 MOVED from ChatMainContainer
+import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime"; // 🆕 MOVED from ChatMainContainer
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { tasksKeys } from "@/hooks/queries/useTasks";
@@ -455,6 +457,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   // This ensures categories are available for ChatMainContainer and maintains proper hook order
   const categoriesQuery = useCategories();
 
+  // 🆕 MOVED: Real-time message updates - moved here from ChatMainContainer to avoid re-renders
+  // Only subscribe when a conversation is selected
+  useMessageRealtime({
+    conversationId: selectedConversation?.id || "",
+    onNewMessage: undefined,
+    onUserTyping: undefined,
+  });
+
+  // 🆕 MOVED: Real-time category updates - moved here from ChatMainContainer to avoid re-renders
+  // Handles MemberAdded, CategoryDepartmentLinked events
+  useCategoriesRealtime(categoriesQuery.data, selectedConversation?.id || "");
+
   // Fetch conversation members from Chat API
   // This will re-fetch whenever selectedConversation changes (conversation switch)
   const {
@@ -604,7 +618,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           data: {
             title: task.title,
             description: task.description || null,
-            priority: task.priority?.code || "MEDIUM",
+            priority: task.priority?.id || "Medium", // ✅ Extract id from TaskPriorityDto
             dueDate: task.dueDate || null,
             conversationId: task.workTypeId || null,
             messageId: task.messageId || null,

@@ -150,7 +150,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
       };
     });
   }, [starredData, categoriesData]);
-  console.log(messages);
+  // console.log(messages);
   const grouped = React.useMemo(() => {
     const groups: Record<string, PinnedMessage[]> = {};
     messages.forEach((m: PinnedMessage) => {

@@ -1,6 +1,6 @@
 /**
  * Real-time hook for category list updates via SignalR
- * Handles MessageSent and MessageRead events to update lastMessage and unreadCount
+ * Handles MessageSent, MessageRead, MemberAdded, and CategoryDepartmentLinked events
  */
 
 import { useEffect, useRef } from "react";
@@ -9,6 +9,9 @@ import { chatHub } from "@/lib/signalr";
 import { categoriesKeys } from "@/hooks/queries/useCategories";
 import { useAuthStore } from "@/stores/authStore";
 import { useSignalRConnection } from "@/providers/SignalRProvider";
+import { toast } from "sonner";
+import { getConversationMembers } from "@/api/conversations.api";
+import { getCurrentUser } from "@/utils/getCurrentUser";
 import type {
   CategoryWithUnread,
   ConversationWithUnread,
@@ -21,6 +24,8 @@ import type {
  * - Auto-join all conversations on mount
  * - Listen MessageSent event → update lastMessage + unreadCount
  * - Listen MessageRead event → reset unreadCount
+ * - Listen MemberAdded event → reload categories and show toast
+ * - Listen CategoryDepartmentLinked event → reload categories and show toast
  * - Auto-cleanup on unmount
  *
  * @param categories - Current categories with conversations
@@ -234,4 +239,157 @@ export function useCategoriesRealtime(
       chatHub.offMessageRead();
     };
   }, [queryClient, currentUserId, isConnected]);
+
+  // ────────────────────────────────────────────────────────
+  // EVENT: MemberAdded
+  // ────────────────────────────────────────────────────────
+  useEffect(() => {
+    // Wait for SignalR to connect
+    if (!isConnected) {
+      return;
+    }
+
+    const handleMemberAdded = async (data: any) => {
+      const { conversationId, userId } = data;
+      
+      console.log("[CategoryRealtime] MemberAdded received:", {
+        conversationId,
+        userId,
+      });
+
+      try {
+        // Reload categories to get fresh data
+        await queryClient.invalidateQueries({
+          queryKey: categoriesKeys.list(),
+        });
+
+        // Wait a bit for the query to refetch
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Get updated categories from cache
+        const updatedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+          categoriesKeys.list(),
+        );
+
+        if (!updatedCategories) {
+          console.error("[CategoryRealtime] No updated categories found");
+          return;
+        }
+
+        // Find the conversation
+        let conversationName: string | null = null;
+        for (const category of updatedCategories) {
+          const conversation = category.conversations.find(
+            (conv) => conv.conversationId === conversationId,
+          );
+          if (conversation) {
+            conversationName = conversation.conversationName;
+            break;
+          }
+        }
+
+        if (!conversationName) {
+          console.error(
+            "[CategoryRealtime] Conversation not found in categories:",
+            conversationId,
+          );
+          return;
+        }
+
+        // Fetch members to get the userName
+        const members = await getConversationMembers(conversationId);
+        const addedMember = members.find((member) => member.userId === userId);
+
+        if (!addedMember) {
+          console.error(
+            "[CategoryRealtime] Added member not found in members list:",
+            userId,
+          );
+          return;
+        }
+
+        // Show toast notification
+        toast.info(
+          `${addedMember.userInfo.fullName || addedMember.userName} đã được add vào ${conversationName}`,
+        );
+      } catch (error) {
+        console.error("[CategoryRealtime] Error handling MemberAdded:", error);
+      }
+    };
+
+    // Register event listener
+    chatHub.onMemberAdded(handleMemberAdded);
+
+    return () => {
+      chatHub.offMemberAdded();
+    };
+  }, [queryClient, isConnected]);
+
+  // ────────────────────────────────────────────────────────
+  // EVENT: CategoryDepartmentLinked
+  // ────────────────────────────────────────────────────────
+  useEffect(() => {
+    // Wait for SignalR to connect
+    if (!isConnected) {
+      return;
+    }
+
+    const handleCategoryDepartmentLinked = async (data: any) => {
+      const { categoryId, categoryName, departmentId } = data;
+      
+      console.log("[CategoryRealtime] CategoryDepartmentLinked received:", {
+        categoryId,
+        categoryName,
+        departmentId,
+      });
+
+      try {
+        // Reload categories to get fresh data
+        await queryClient.invalidateQueries({
+          queryKey: categoriesKeys.list(),
+        });
+
+        // Wait a bit for the query to refetch
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Fetch fresh user data from API to get updated departments with names
+        const freshUser = await getCurrentUser();
+        const userDepartments = freshUser?.departments || [];
+
+        // Update auth store with fresh departments
+        if (freshUser) {
+          const currentAuthUser = useAuthStore.getState().user;
+          if (currentAuthUser) {
+            useAuthStore.getState().setUser({
+              ...currentAuthUser,
+              departments: userDepartments,
+            });
+          }
+        }
+
+        // Find the department name from fresh API data
+        const department = userDepartments.find(
+          (dept) => dept.departmentId === departmentId,
+        );
+
+        const departmentName = categoryName.replace(department?.departmentName || departmentId,"").trim().replace(/^-/, "").trim();
+
+        // Show toast notification
+        toast.info(
+          `Nhóm của bạn đã được kết nối với ${departmentName}`,
+        );
+      } catch (error) {
+        console.error(
+          "[CategoryRealtime] Error handling CategoryDepartmentLinked:",
+          error,
+        );
+      }
+    };
+
+    // Register event listener
+    chatHub.onCategoryDepartmentLinked(handleCategoryDepartmentLinked);
+
+    return () => {
+      chatHub.offCategoryDepartmentLinked();
+    };
+  }, [queryClient, isConnected]);
 }

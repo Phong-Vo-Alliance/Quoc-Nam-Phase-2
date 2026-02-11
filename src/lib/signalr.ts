@@ -48,6 +48,9 @@ export const SIGNALR_EVENTS = {
   MEMBER_PROMOTED: "MemberPromoted",
   CONVERSATION_UPDATED: "ConversationUpdated",
 
+  // ============= Category Events =============
+  CATEGORY_DEPARTMENT_LINKED: "CategoryDepartmentLinked",
+
   // ============= Typing Indicators =============
   USER_TYPING: "UserTyping",
   USER_STOPPED_TYPING: "UserStoppedTyping",
@@ -147,6 +150,7 @@ export interface ConversationCreatedEvent {
 export interface MemberAddedEvent {
   conversationId: string;
   userId: string;
+  role: string;
   addedBy: string;
   timestamp: string;
 }
@@ -179,6 +183,15 @@ export interface ConversationUpdatedEvent {
   name?: string;
   avatar?: string;
   // ... other updated fields
+}
+
+// Category Events
+export interface CategoryDepartmentLinkedEvent {
+  categoryId: string;
+  categoryName: string;
+  departmentId: string;
+  linkedBy: string;
+  timestamp: string;
 }
 
 // Typing Indicators
@@ -430,10 +443,10 @@ class ChatHubConnection {
       );
       return;
     }
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] ${timestamp} | Joining conversation | ConversationId: ${conversationId}`,
-    );
+    // const timestamp = new Date().toISOString();
+    // console.log(
+    //   `[SignalR] ${timestamp} | Joining conversation | ConversationId: ${conversationId}`,
+    // );
 
     try {
       await this.connection.invoke(
@@ -442,14 +455,14 @@ class ChatHubConnection {
       );
     } catch (error) {
       console.warn(
-        `[SignalR] ${timestamp} | Primary join failed, trying fallback... | ConversationId: ${conversationId}`,
+        `[SignalR] | Primary join failed, trying fallback... | ConversationId: ${conversationId}`,
         error,
       );
       try {
         await this.connection.invoke(SIGNALR_EVENTS.JOIN_GROUP, conversationId);
       } catch (fallbackError) {
         console.error(
-          `[SignalR] ${timestamp} | Failed to join ${conversationId}:`,
+          `[SignalR] | Failed to join ${conversationId}:`,
           fallbackError,
         );
       }
@@ -460,35 +473,29 @@ class ChatHubConnection {
     if (this.connection?.state !== signalR.HubConnectionState.Connected) {
       return;
     }
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] ${timestamp} | Leaving conversation | ConversationId: ${conversationId}`,
-    );
+    // const timestamp = new Date().toISOString();
+    // console.log(
+    //   `[SignalR] ${timestamp} | Leaving conversation | ConversationId: ${conversationId}`,
+    // );
 
     try {
       await this.connection.invoke(
         SIGNALR_EVENTS.LEAVE_CONVERSATION,
         conversationId,
       );
-      console.log(
-        `[SignalR] ${timestamp} | Successfully left conversation | ConversationId: ${conversationId}`,
-      );
     } catch {
       console.warn(
-        `[SignalR] ${timestamp} | Primary leave failed, trying fallback... | ConversationId: ${conversationId}`,
+        `[SignalR] | Primary leave failed, trying fallback... | ConversationId: ${conversationId}`,
       );
       try {
         await this.connection.invoke(
           SIGNALR_EVENTS.LEAVE_GROUP,
           conversationId,
         );
-        console.log(
-          `[SignalR] ${timestamp} | Successfully left via fallback | ConversationId: ${conversationId}`,
-        );
       } catch {
         // Ignore errors when leaving
         console.log(
-          `[SignalR] ${timestamp} | Leave failed (may be already left) | ConversationId: ${conversationId}`,
+          `[SignalR] | Leave failed (may be already left) | ConversationId: ${conversationId}`,
         );
       }
     }
@@ -568,11 +575,6 @@ class ChatHubConnection {
   }
 
   onMessageEdited(callback: (event: MessageEditedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MessageEdited handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MessageEditedEvent) => {
       const eventTimestamp = new Date().toISOString();
       console.log(
@@ -593,11 +595,6 @@ class ChatHubConnection {
   }
 
   onMessageDeleted(callback: (event: MessageDeletedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MessageDeleted handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MessageDeletedEvent) => {
       const eventTimestamp = new Date().toISOString();
       console.log(
@@ -617,11 +614,6 @@ class ChatHubConnection {
   }
 
   onMessageRead(callback: (event: MessageReadEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MessageRead handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MessageReadEvent) => {
       const eventTimestamp = new Date().toISOString();
       console.log(
@@ -645,11 +637,6 @@ class ChatHubConnection {
   onConversationCreated(
     callback: (event: ConversationCreatedEvent) => void,
   ): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering ConversationCreated handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: ConversationCreatedEvent) => {
       const eventTimestamp = new Date().toISOString();
       console.log(
@@ -672,11 +659,6 @@ class ChatHubConnection {
   }
 
   onMemberAdded(callback: (event: MemberAddedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MemberAdded handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MemberAddedEvent) => {
       const eventTimestamp = new Date().toISOString();
       console.log(
@@ -806,6 +788,36 @@ class ChatHubConnection {
     };
 
     this.connection?.on(SIGNALR_EVENTS.CONVERSATION_UPDATED, wrappedCallback);
+  }
+
+  onCategoryDepartmentLinked(
+    callback: (event: CategoryDepartmentLinkedEvent) => void,
+  ): void {
+    const timestamp = new Date().toISOString();
+    console.log(
+      `[SignalR] Registering CategoryDepartmentLinked handler | Timestamp: ${timestamp}`,
+    );
+
+    const wrappedCallback = (event: CategoryDepartmentLinkedEvent) => {
+      const eventTimestamp = new Date().toISOString();
+      console.log(
+        `[SignalR EVENT] ${eventTimestamp} | CategoryDepartmentLinked | Event Data:`,
+        {
+          eventName: SIGNALR_EVENTS.CATEGORY_DEPARTMENT_LINKED,
+          categoryId: event.categoryId,
+          categoryName: event.categoryName,
+          departmentId: event.departmentId,
+          linkedBy: event.linkedBy,
+          fullEvent: event,
+        },
+      );
+      callback(event);
+    };
+
+    this.connection?.on(
+      SIGNALR_EVENTS.CATEGORY_DEPARTMENT_LINKED,
+      wrappedCallback,
+    );
   }
 
   // Typing Indicators
@@ -1197,6 +1209,10 @@ class ChatHubConnection {
     this.connection?.off(SIGNALR_EVENTS.CONVERSATION_UPDATED);
   }
 
+  offCategoryDepartmentLinked(): void {
+    this.connection?.off(SIGNALR_EVENTS.CATEGORY_DEPARTMENT_LINKED);
+  }
+
   offUserTyping(): void {
     this.connection?.off(SIGNALR_EVENTS.USER_TYPING);
   }
@@ -1273,6 +1289,7 @@ class ChatHubConnection {
     this.offMemberRemoved();
     this.offMemberPromoted();
     this.offConversationUpdated();
+    this.offCategoryDepartmentLinked();
 
     // Typing indicators
     this.offUserTyping();

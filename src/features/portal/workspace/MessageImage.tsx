@@ -75,10 +75,10 @@ export default function MessageImage({
     };
   }, [forceLoad, fileId]);
 
-  // 🆕 v1.2.0 - Subscribe to cache changes for this fileId
+  // Get cached blob URL directly (no TTL check needed)
   const cachedUrl = useImageCacheStore((state) => state.cache.get(fileId));
 
-  // 🆕 v1.2.0 - Update imageUrl when cache has this image
+  // Update imageUrl when cache has this image
   useEffect(() => {
     if (cachedUrl) {
       setImageUrl(cachedUrl);
@@ -87,7 +87,7 @@ export default function MessageImage({
     }
   }, [cachedUrl]);
 
-  // 🆕 v1.2.0 - Fetch thumbnail when visible (if not in cache)
+  // Fetch thumbnail when visible (if not in cache)
   useEffect(() => {
     if (!isVisible) return;
     if (cachedUrl) return; // Already in cache, no need to fetch

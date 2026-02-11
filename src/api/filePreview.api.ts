@@ -38,11 +38,22 @@ fileApiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     // Disable cache to avoid 304 Not Modified
-    config.headers["Cache-Control"] = "no-cache";
+    config.headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
     config.headers["Pragma"] = "no-cache";
+    config.headers["Expires"] = "0";
+
+    // ✅ Add timestamp to force fresh request for preview and watermark endpoints
+    if (
+      config.url?.includes("/preview") ||
+      config.url?.includes("/watermarked-thumbnail")
+    ) {
+      const separator = config.url.includes("?") ? "&" : "?";
+      config.url += `${separator}t=${Date.now()}`;
+    }
+
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 // Handle 304 Not Modified as success
@@ -54,7 +65,7 @@ fileApiClient.interceptors.response.use(
       return error.response;
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 /**
@@ -71,7 +82,7 @@ fileApiClient.interceptors.response.use(
  * const imageUrl = URL.createObjectURL(result.data);
  */
 export async function getFilePreview(
-  request: FilePreviewRequest
+  request: FilePreviewRequest,
 ): Promise<FilePreviewResponse> {
   try {
     const pageNumber = request.page || 1;
@@ -79,7 +90,7 @@ export async function getFilePreview(
       `/api/Files/${request.fileId}/preview?page=${pageNumber}`,
       {
         responseType: "blob",
-      }
+      },
     );
 
     return {
@@ -104,7 +115,7 @@ export async function getFilePreview(
       throw new Error(
         `Không thể tải xem trước: ${
           error.response?.statusText || error.message
-        }`
+        }`,
       );
     }
     throw error;
@@ -128,7 +139,7 @@ export async function getFilePreview(
  * const imageUrl = URL.createObjectURL(result.data);
  */
 export async function renderPdfPage(
-  request: PdfRenderRequest
+  request: PdfRenderRequest,
 ): Promise<PdfRenderResponse> {
   try {
     const params = new URLSearchParams();
@@ -145,7 +156,7 @@ export async function renderPdfPage(
       }/render?${params.toString()}`,
       {
         responseType: "blob",
-      }
+      },
     );
 
     return {
@@ -162,7 +173,7 @@ export async function renderPdfPage(
       throw new Error(
         `Không thể hiển thị trang: ${
           error.response?.statusText || error.message
-        }`
+        }`,
       );
     }
     throw error;
@@ -232,7 +243,7 @@ export async function previewWordFile(fileId: string): Promise<WordPreviewDto> {
       `/api/Files/${fileId}/preview/word`,
       {
         responseType: "json",
-      }
+      },
     );
 
     return response.data;
@@ -250,7 +261,7 @@ export async function previewWordFile(fileId: string): Promise<WordPreviewDto> {
       throw new Error(
         `Không thể tải xem trước Word: ${
           error.response?.statusText || error.message
-        }`
+        }`,
       );
     }
     throw error;
@@ -281,7 +292,7 @@ export async function previewWordFile(fileId: string): Promise<WordPreviewDto> {
  */
 export async function previewExcelFile(
   fileId: string,
-  options?: ExcelPreviewOptions
+  options?: ExcelPreviewOptions,
 ): Promise<ExcelPreviewDto> {
   try {
     const params = new URLSearchParams();
@@ -312,7 +323,7 @@ export async function previewExcelFile(
       }
       if (error.response?.status === 415) {
         throw new Error(
-          "Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ .xlsx và .xls"
+          "Định dạng tệp không được hỗ trợ. Chỉ hỗ trợ .xlsx và .xls",
         );
       }
       if (error.response?.status === 400) {
@@ -321,7 +332,7 @@ export async function previewExcelFile(
       throw new Error(
         `Không thể tải xem trước Excel: ${
           error.response?.statusText || error.message
-        }`
+        }`,
       );
     }
     throw error;

@@ -20,7 +20,6 @@ import {
 } from "@/hooks/queries/useStarredMessages";
 import { useMessageRealtime } from "@/hooks/useMessageRealtime";
 import { useConversationRealtime } from "@/hooks/useConversationRealtime"; // 🐛 FIX: Join category conversations
-import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime"; // 🆕 NEW: Realtime category updates
 import { useSendTypingIndicator } from "@/hooks/useSendTypingIndicator";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useAuthStore } from "@/stores/authStore";
@@ -509,18 +508,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     activeConversationId: conversationId,
   });
 
-  // ✅ Realtime updates for categories (worktype changes + unread counts)
-  // 🐛 FIX: Pass conversationId to prevent unread increment for active conversation
-  useCategoriesRealtime(categoriesQuery.data, conversationId);
-
-  // Realtime updates for message list (current conversation only)
-  const { typingUsers } = useMessageRealtime({
-    conversationId,
-    onNewMessage: () => {
-      // Check if the new message is from another user (not from current user)
-      // We'll check this in a separate useEffect by comparing last message's senderId
-    },
-  });
+  // ❌ REMOVED: useMessageRealtime - Moved to parent (WorkspaceView) to avoid re-renders
+  // ❌ REMOVED: useCategoriesRealtime - Moved to parent (WorkspaceView) to avoid re-renders
+  // Parent component handles real-time message and category updates for better performance
+  const typingUsers: Array<{ userId: string; userName: string; timestamp: number }> = []; // Empty array since moved to parent
 
   // Typing indicator
   const { handleTyping, stopTyping } = useSendTypingIndicator({

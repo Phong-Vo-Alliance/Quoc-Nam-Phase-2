@@ -72,12 +72,12 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
         selectedCategory.departmentIds?.includes(dept.departmentId),
     );
 
-    console.log("AddMemberDialog - Department matching:", {
-      selectedCategoryId,
-      categoryDepartmentIds: selectedCategory.departmentIds,
-      userDepartments: user.departments,
-      matchedDepartmentId: matchingDepartment?.departmentId,
-    });
+    // console.log("AddMemberDialog - Department matching:", {
+    //   selectedCategoryId,
+    //   categoryDepartmentIds: selectedCategory.departmentIds,
+    //   userDepartments: user.departments,
+    //   matchedDepartmentId: matchingDepartment?.departmentId,
+    // });
 
     return matchingDepartment?.departmentId;
   }, [selectedCategoryId, categories, user]);
@@ -88,7 +88,7 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   });
   // console.log("Department members:", data);
   // console.log("Existing member IDs:", existingMemberIds);
-  console.log(isError, error);
+  // console.log(isError, error);
   // Mutation for adding members
   const addMemberMutation = useAddGroupMember();
   const [addingProgress, setAddingProgress] = useState<{

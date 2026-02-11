@@ -40,11 +40,27 @@ fileApiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // ✅ Add cache-busting headers to prevent browser HTTP cache
+    // This ensures fresh image data when files are updated on server
+    config.headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+    config.headers["Pragma"] = "no-cache";
+    config.headers["Expires"] = "0";
+
+    // ✅ For GET requests (images/previews/watermark), add timestamp to force fresh request
+    if (
+      config.method?.toLowerCase() === "get" &&
+      (config.url?.includes("/preview") ||
+        config.url?.includes("/watermarked-thumbnail"))
+    ) {
+      const separator = config.url.includes("?") ? "&" : "?";
+      config.url += `${separator}t=${Date.now()}`;
+    }
+
     return config;
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 /**
@@ -80,7 +96,7 @@ fileApiClient.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default fileApiClient;

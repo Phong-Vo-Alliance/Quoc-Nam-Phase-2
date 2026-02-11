@@ -10,6 +10,7 @@ import type { LoginApiUser } from "@/types/auth";
 import { queryClient } from "@/lib/queryClient";
 import { clearSelectedConversation } from "@/utils/storage";
 import { useConversationStore } from "./conversationStore";
+import { useImageCacheStore } from "./imageCacheStore";
 import type { UserDepartmentDto } from "@/types/identity";
 
 // Auth user type (from login API)
@@ -86,8 +87,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        // ✅ IMPORTANT: Clear storage FIRST, then update state
-        // This prevents Zustand persist from restoring old data
+        // ✅ IMPORTANT: Clear ALL localStorage FIRST
+        localStorage.clear();
+
+        // ✅ Clear specific auth storage (redundant but safer)
         clearAuthStorage();
         removeAccessToken();
 
@@ -96,6 +99,9 @@ export const useAuthStore = create<AuthState>()(
 
         // ✅ Clear conversation store
         useConversationStore.getState().clearSelectedConversation();
+
+        // ✅ Clear image cache to prevent showing cached images of previous user
+        useImageCacheStore.getState().clearCache();
 
         // Then update Zustand state
         set({
@@ -109,13 +115,17 @@ export const useAuthStore = create<AuthState>()(
         // ✅ Clear again after set() to override Zustand persist auto-save
         // Use setTimeout to ensure persistence middleware has finished
         setTimeout(() => {
+          localStorage.clear();
           clearAuthStorage();
           removeAccessToken();
         }, 100);
       },
 
       clearAuth: () => {
-        // ✅ Same order: Clear storage first
+        // ✅ Clear ALL localStorage FIRST
+        localStorage.clear();
+
+        // ✅ Clear specific auth storage (redundant but safer)
         clearAuthStorage();
         removeAccessToken();
 
@@ -124,6 +134,9 @@ export const useAuthStore = create<AuthState>()(
 
         // ✅ Clear conversation store
         useConversationStore.getState().clearSelectedConversation();
+
+        // ✅ Clear image cache to prevent showing cached images of previous user
+        useImageCacheStore.getState().clearCache();
 
         set({
           user: null,
@@ -135,6 +148,7 @@ export const useAuthStore = create<AuthState>()(
 
         // ✅ Clear again after set()
         setTimeout(() => {
+          localStorage.clear();
           clearAuthStorage();
           removeAccessToken();
         }, 100);
