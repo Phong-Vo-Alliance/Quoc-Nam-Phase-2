@@ -3,7 +3,7 @@
  * Fetches users from Identity API and allows selection
  */
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { X, Search, UserPlus, Loader2, AlertCircle, Check } from "lucide-react";
 import { useDepartmentMembers } from "@/hooks/queries/useDepartmentMembers";
 import { useAddGroupMember } from "@/hooks/mutations/useGroupMutations";
@@ -11,7 +11,6 @@ import { hasLeaderPermissions } from "@/utils/roleUtils";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { getSelectedCategory } from "@/utils/storage";
 import useAuthStore from "@/stores/authStore";
-import { getCurrentUser } from "@/utils/getCurrentUser";
 import { sendMessage } from "@/api/messages.api";
 import type { SendChatMessageRequest } from "@/types/messages";
 
@@ -37,13 +36,20 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
   // Get current user from localStorage
   const currentUserData = useAuthStore();
+  const userFetchedRef = useRef(false);
+
   useEffect(() => {
+    if (userFetchedRef.current) return;
+    userFetchedRef.current = true;
+
     (async () => {
-      return await getCurrentUser();
-    })().then((r) => {
-      // console.log("AddMemberDialog - Current User:", r);
-      currentUserData.setUser(r);
-    });
+      // Force refresh from API to get latest departments
+      const { getCurrentUserFromAPI } = await import("@/utils/getCurrentUser");
+      const freshUser = await getCurrentUserFromAPI();
+      if (freshUser) {
+        currentUserData.setUser(freshUser as any);
+      }
+    })();
   }, []);
   const user = currentUserData.user || null;
 
@@ -55,6 +61,13 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
   // Find the selected category and match with user's leader department
   const departmentId = useMemo(() => {
+    console.log("AddMemberDialog - Input check:", {
+      selectedCategoryId,
+      hasCategories: !!categories,
+      categoriesLength: categories?.length,
+      userDepartments: user?.departments,
+    });
+
     if (!selectedCategoryId || !categories || !user?.departments)
       return undefined;
 
@@ -62,6 +75,12 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
     const selectedCategory = categories.find(
       (cat) => cat.id === selectedCategoryId,
     );
+
+    console.log("AddMemberDialog - Selected category:", {
+      selectedCategory,
+      departmentIds: selectedCategory?.departmentIds,
+    });
+
     if (!selectedCategory?.departmentIds) return undefined;
 
     // Find user's department where isLeader=true AND departmentId is in category.departmentIds
@@ -71,12 +90,12 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
         selectedCategory.departmentIds?.includes(dept.departmentId),
     );
 
-    // console.log("AddMemberDialog - Department matching:", {
-    //   selectedCategoryId,
-    //   categoryDepartmentIds: selectedCategory.departmentIds,
-    //   userDepartments: user.departments,
-    //   matchedDepartmentId: matchingDepartment?.departmentId,
-    // });
+    console.log("AddMemberDialog - Department matching:", {
+      selectedCategoryId,
+      categoryDepartmentIds: selectedCategory.departmentIds,
+      userDepartments: user.departments,
+      matchedDepartmentId: matchingDepartment?.departmentId,
+    });
 
     return matchingDepartment?.departmentId;
   }, [selectedCategoryId, categories, user]);
@@ -85,9 +104,14 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   const { data, isLoading, isError, error } = useDepartmentMembers({
     departmentId,
   });
-  // console.log("Department members:", data);
-  // console.log("Existing member IDs:", existingMemberIds);
-  // console.log(isError, error);
+  console.log("AddMemberDialog - Department members:", {
+    departmentId,
+    data,
+    existingMemberIds,
+    isLoading,
+    isError,
+    error,
+  });
   // Mutation for adding members
   const addMemberMutation = useAddGroupMember();
   const [addingProgress, setAddingProgress] = useState<{

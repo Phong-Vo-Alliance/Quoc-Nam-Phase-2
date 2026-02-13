@@ -127,7 +127,10 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   };
 
   const initials = React.useMemo(() => {
-    const parts = (currentUserName || "").trim().split(/\s+/).filter(Boolean);
+    const parts = (currentUserName || "")
+      .trim()
+      .split(/\s+/)
+      .filter((p) => p && p !== "-" && p !== "–"); // Filter out dashes
     if (parts.length === 0) return "U";
     const chars = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "");
     return chars.join("");
