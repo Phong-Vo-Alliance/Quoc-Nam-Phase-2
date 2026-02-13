@@ -12,7 +12,6 @@ import { useCategories } from "@/hooks/queries/useCategories";
 import { getSelectedCategory } from "@/utils/storage";
 import useAuthStore from "@/stores/authStore";
 import { getCurrentUser } from "@/utils/getCurrentUser";
-import { toast } from "sonner";
 import { sendMessage } from "@/api/messages.api";
 import type { SendChatMessageRequest } from "@/types/messages";
 
@@ -42,7 +41,7 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
     (async () => {
       return await getCurrentUser();
     })().then((r) => {
-      console.log("AddMemberDialog - Current User:", r);
+      // console.log("AddMemberDialog - Current User:", r);
       currentUserData.setUser(r);
     });
   }, []);
@@ -103,6 +102,7 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
     return data.filter((member) => {
       // Exclude existing members (compare userId, not member.id)
+      console.log("Checking member:", member.userId, existingMemberIds);
       if (existingMemberIds.includes(member.userId)) return false;
 
       // Search filter
@@ -170,15 +170,11 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
       }
     }
 
-    // Show toast and send system messages for successfully added members
+    // Send system messages for successfully added members (toast is shown via SignalR MemberAdded event)
     for (const member of successfullyAdded) {
-      // Toast notification
-      const displayInfo = member.userEmail || member.userId;
-      toast.success(`Đã thêm ${member.userName} (${displayInfo})`);
-
-      // Send system message
       if (conversationId) {
         try {
+          const displayInfo = member.userEmail || member.userId;
           const systemMessageData: SendChatMessageRequest = {
             conversationId,
             content: `${member.userName} (${displayInfo}) đã được thêm vào nhóm`,
@@ -214,13 +210,13 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl flex flex-col max-h-[80vh]">
+      <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl flex flex-col h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b bg-gradient-to-r from-brand-50 to-emerald-50 px-6 py-4">
           <div className="flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-brand-600" />
             <h3 className="text-sm font-semibold text-gray-900">
-              Thêm Thành Viên
+              Thêm thành viên
             </h3>
           </div>
           <button
@@ -240,9 +236,18 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
               placeholder="Tìm kiếm theo tên hoặc email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full rounded-lg border border-gray-300 pl-10 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               autoFocus
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-transparent p-0 border-none hover:border-none"
+                data-testid="clear-member-search-add-dialog"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
 

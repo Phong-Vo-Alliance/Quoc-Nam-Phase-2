@@ -31,6 +31,8 @@ export interface CheckListTemplateResponse {
   description: string | null;
   /** Associated conversation ID (UUID) or null */
   conversationId: string | null;
+  /** Indicates if this is the default template for its conversation */
+  isDefault: boolean;
   /** Template items list */
   items: TemplateItemDto[];
   /** Creation timestamp (ISO 8601) */
@@ -51,6 +53,8 @@ export interface CreateCheckListTemplateRequest {
   conversationId?: string | null;
   /** Template items as simple string array (at least 1 required) */
   items: string[];
+  /** Mark this template as default for its conversation */
+  isDefault?: boolean;
 }
 
 /**
@@ -67,6 +71,8 @@ export interface UpdateCheckListTemplateRequest {
   conversationId?: string | null;
   /** Updated template items as simple string array */
   items: string[];
+  /** Mark this template as default for its conversation */
+  isDefault?: boolean;
 }
 
 /**

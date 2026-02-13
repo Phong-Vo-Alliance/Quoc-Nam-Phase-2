@@ -1,12 +1,12 @@
 // LinkedTasksPanel - Display tasks linked to a conversation
 
-import React from 'react';
-import { ClipboardList, Loader2, AlertCircle, SquarePen } from 'lucide-react';
-import { RightAccordion } from './RightAccordion';
-import { useLinkedTasks, getTaskCount } from '@/hooks/queries/useLinkedTasks';
-import type { LinkedTaskDto } from '@/types/tasks_api';
-import { hasLeaderPermissions, hasStaffPermissions } from '@/utils/roleUtils';
-import { useAuthStore } from '@/stores/authStore';
+import React from "react";
+import { ClipboardList, Loader2, AlertCircle, SquarePen } from "lucide-react";
+import { RightAccordion } from "./RightAccordion";
+import { useLinkedTasks, getTaskCount } from "@/hooks/queries/useLinkedTasks";
+import type { LinkedTaskDto } from "@/types/tasks_api";
+import { hasLeaderPermissions, hasStaffPermissions } from "@/utils/roleUtils";
+import { useAuthStore } from "@/stores/authStore";
 
 interface LinkedTasksPanelProps {
   conversationId: string;
@@ -17,10 +17,10 @@ interface LinkedTasksPanelProps {
 
 /**
  * LinkedTasksPanel Component
- * 
+ *
  * Displays all tasks linked to a conversation in the right side panel
  * Uses GET /api/conversations/{conversationId}/tasks endpoint
- * 
+ *
  * Features:
  * - Auto-refresh linked tasks when new task is created
  * - Loading states
@@ -35,13 +35,7 @@ export function LinkedTasksPanel({
   onViewAll,
   currentUserId,
 }: LinkedTasksPanelProps) {
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useLinkedTasks({
+  const { data, isLoading, isError, error, refetch } = useLinkedTasks({
     conversationId,
     enabled: !!conversationId,
   });
@@ -55,9 +49,9 @@ export function LinkedTasksPanel({
   const authUser = useAuthStore((state) => state.user);
   const effectiveUserId = currentUserId ?? authUser?.id;
 
-  console.log('LinkedTasksPanel - currentUserId:', currentUserId);
-  console.log('LinkedTasksPanel - authUser:', authUser);
-  console.log('LinkedTasksPanel - effectiveUserId:', effectiveUserId);
+  console.log("LinkedTasksPanel - currentUserId:", currentUserId);
+  console.log("LinkedTasksPanel - authUser:", authUser);
+  console.log("LinkedTasksPanel - effectiveUserId:", effectiveUserId);
 
   // Helper: Check if date is today
   const isToday = (dateStr?: string) => {
@@ -73,40 +67,47 @@ export function LinkedTasksPanel({
 
   // Helper: Truncate title
   const truncateTitle = (t?: string | null) =>
-    (t || '').length > 80 ? (t || '').slice(0, 77) + '…' : t || '';
+    (t || "").length > 80 ? (t || "").slice(0, 77) + "…" : t || "";
 
   // Filter tasks for staff: only show today's tasks assigned to current user
   const myTasks = React.useMemo(() => {
     if (!hasStaffPermissions() || !effectiveUserId) return [];
-    
-    return tasks
-      .filter((linkedTask) => {
-        const task = linkedTask.task;
-        // Check if task is assigned to current user
-        const isMyTask = task.assignedTo?.id === effectiveUserId;
-        // Check if task was created today (using messageId timestamp as proxy)
-        // TODO: Need actual task.createdAt from API
-        return isMyTask;
-      });
+
+    return tasks.filter((linkedTask) => {
+      const task = linkedTask.task;
+      // Check if task is assigned to current user
+      const isMyTask = task.assignedTo?.id === effectiveUserId;
+      // Check if task was created today (using messageId timestamp as proxy)
+      // TODO: Need actual task.createdAt from API
+      return isMyTask;
+    });
   }, [tasks, effectiveUserId]);
   console.log(myTasks);
   // Group staff tasks by status
   const staffBuckets = React.useMemo(() => {
-    if (!hasStaffPermissions()) return { todo: [], inProgress: [], awaiting: [], done: [] };
-    
+    if (!hasStaffPermissions())
+      return { todo: [], inProgress: [], awaiting: [], done: [] };
+
     return {
-      todo: myTasks.filter((lt) => lt.task.status === 'todo'),
-      inProgress: myTasks.filter((lt) => lt.task.status === 'doing' || lt.task.status === 'in_progress'),
-      awaiting: myTasks.filter((lt) => lt.task.status === 'need_to_verified' || lt.task.status === 'awaiting_review'),
-      done: myTasks.filter((lt) => lt.task.status === 'finished' || lt.task.status === 'done'),
+      todo: myTasks.filter((lt) => lt.task.status === "todo"),
+      inProgress: myTasks.filter(
+        (lt) => lt.task.status === "doing" || lt.task.status === "in_progress",
+      ),
+      awaiting: myTasks.filter(
+        (lt) =>
+          lt.task.status === "need_to_verified" ||
+          lt.task.status === "awaiting_review",
+      ),
+      done: myTasks.filter(
+        (lt) => lt.task.status === "finished" || lt.task.status === "done",
+      ),
     };
   }, [myTasks]);
   console.log(hasStaffPermissions(), staffBuckets);
   // STAFF UI
   if (hasStaffPermissions()) {
-    
-    console.log('Current User ID:', staffBuckets);
-    console.log('Rendering LinkedTasksPanel for Staff with tasks:', myTasks);
+    console.log("Current User ID:", staffBuckets);
+    console.log("Rendering LinkedTasksPanel for Staff with tasks:", myTasks);
     return (
       <>
         {/* Primary: Todo + In Progress */}
@@ -118,20 +119,30 @@ export function LinkedTasksPanel({
             <div className="grid grid-cols-1 gap-3">
               {/* Loading State */}
               {isLoading && (
-                <div className="flex items-center justify-center py-4" data-testid="linked-tasks-loading">
+                <div
+                  className="flex items-center justify-center py-4"
+                  data-testid="linked-tasks-loading"
+                >
                   <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
                 </div>
               )}
 
               {/* Error State */}
               {isError && !isLoading && (
-                <div className="rounded border border-red-200 bg-red-50 p-3" data-testid="linked-tasks-error">
+                <div
+                  className="rounded border border-red-200 bg-red-50 p-3"
+                  data-testid="linked-tasks-error"
+                >
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm text-red-800">Failed to load tasks</p>
+                      <p className="text-sm text-red-800">
+                        Failed to load tasks
+                      </p>
                       <p className="text-xs text-red-600 mt-1">
-                        {error instanceof Error ? error.message : 'Unknown error'}
+                        {error instanceof Error
+                          ? error.message
+                          : "Unknown error"}
                       </p>
                       <button
                         onClick={() => refetch()}
@@ -145,29 +156,36 @@ export function LinkedTasksPanel({
               )}
 
               {/* Empty State */}
-              {!isLoading && !isError && staffBuckets.todo.length + staffBuckets.inProgress.length === 0 && (
-                <div className="rounded border p-3 text-xs text-gray-500">
-                  Không có việc cần làm.
-                </div>
-              )}
+              {!isLoading &&
+                !isError &&
+                staffBuckets.todo.length + staffBuckets.inProgress.length ===
+                  0 && (
+                  <div className="rounded border p-3 text-xs text-gray-500">
+                    Không có việc cần làm.
+                  </div>
+                )}
 
               {/* Todo Tasks */}
-              {!isLoading && !isError && staffBuckets.todo.map((linkedTask) => (
-                <LinkedTaskCard
-                  key={linkedTask.taskId}
-                  linkedTask={linkedTask}
-                  onClick={onTaskClick}
-                />
-              ))}
+              {!isLoading &&
+                !isError &&
+                staffBuckets.todo.map((linkedTask) => (
+                  <LinkedTaskCard
+                    key={linkedTask.taskId}
+                    linkedTask={linkedTask}
+                    onClick={onTaskClick}
+                  />
+                ))}
 
               {/* In Progress Tasks */}
-              {!isLoading && !isError && staffBuckets.inProgress.map((linkedTask) => (
-                <LinkedTaskCard
-                  key={linkedTask.taskId}
-                  linkedTask={linkedTask}
-                  onClick={onTaskClick}
-                />
-              ))}
+              {!isLoading &&
+                !isError &&
+                staffBuckets.inProgress.map((linkedTask) => (
+                  <LinkedTaskCard
+                    key={linkedTask.taskId}
+                    linkedTask={linkedTask}
+                    onClick={onTaskClick}
+                  />
+                ))}
             </div>
           </RightAccordion>
         </div>
@@ -194,13 +212,15 @@ export function LinkedTasksPanel({
               )}
 
               {/* Awaiting Tasks */}
-              {!isLoading && !isError && staffBuckets.awaiting.map((linkedTask) => (
-                <LinkedTaskCard
-                  key={linkedTask.taskId}
-                  linkedTask={linkedTask}
-                  onClick={onTaskClick}
-                />
-              ))}
+              {!isLoading &&
+                !isError &&
+                staffBuckets.awaiting.map((linkedTask) => (
+                  <LinkedTaskCard
+                    key={linkedTask.taskId}
+                    linkedTask={linkedTask}
+                    onClick={onTaskClick}
+                  />
+                ))}
             </div>
             <div className="mt-2 text-right">
               <button
@@ -216,7 +236,7 @@ export function LinkedTasksPanel({
         {/* Completed Tasks Modal */}
         {showCompleted && (
           <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
-            <div className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] h-[80vh] overflow-hidden flex flex-col">
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-brand-50 to-emerald-50">
                 <div className="flex items-center gap-2">
@@ -260,10 +280,10 @@ export function LinkedTasksPanel({
 
                   // Group by date (dd/MM/yyyy format)
                   const grouped: Record<string, typeof completed> = {};
-                  const today = new Date().toLocaleDateString('vi-VN', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
+                  const today = new Date().toLocaleDateString("vi-VN", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
                   });
 
                   completed.forEach((linkedTask) => {
@@ -284,7 +304,7 @@ export function LinkedTasksPanel({
                             {/* Date Header */}
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-xs font-semibold text-gray-600">
-                                📅{' '}
+                                📅{" "}
                                 {isTodayDate ? `Hôm nay - ${dateKey}` : dateKey}
                               </span>
                               <span className="text-xs text-gray-400">
@@ -296,12 +316,14 @@ export function LinkedTasksPanel({
                             <div className="space-y-2 ml-4">
                               {linkedTasks.map((linkedTask) => {
                                 const task = linkedTask.task;
-                                
+
                                 return (
                                   <div
                                     key={linkedTask.taskId}
                                     className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                    onClick={() => onTaskClick?.(linkedTask.taskId)}
+                                    onClick={() =>
+                                      onTaskClick?.(linkedTask.taskId)
+                                    }
                                   >
                                     {/* Title */}
                                     <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
@@ -311,7 +333,7 @@ export function LinkedTasksPanel({
                                     {/* Meta: Time */}
                                     <div className="flex items-center justify-between text-xs text-gray-500">
                                       <span>
-                                        Hoàn tất lúc{' '}
+                                        Hoàn tất lúc{" "}
                                         <span className="font-medium text-gray-700">
                                           --:--
                                         </span>
@@ -360,7 +382,7 @@ export function LinkedTasksPanel({
     <div className="premium-accordion-wrapper">
       <RightAccordion
         icon={<ClipboardList className="h-4 w-4 text-brand-600" />}
-        title={`Linked Tasks${taskCount > 0 ? ` (${taskCount})` : ''}`}
+        title={`Linked Tasks${taskCount > 0 ? ` (${taskCount})` : ""}`}
         action={
           taskCount > 0 && onViewAll ? (
             <button
@@ -382,10 +404,7 @@ export function LinkedTasksPanel({
           ) : undefined
         }
       >
-        <div
-          className="space-y-3"
-          data-testid="linked-tasks-panel"
-        >
+        <div className="space-y-3" data-testid="linked-tasks-panel">
           {/* Loading State */}
           {isLoading && (
             <div
@@ -407,7 +426,7 @@ export function LinkedTasksPanel({
                 <div className="flex-1">
                   <p className="text-sm text-red-800">Failed to load tasks</p>
                   <p className="text-xs text-red-600 mt-1">
-                    {error instanceof Error ? error.message : 'Unknown error'}
+                    {error instanceof Error ? error.message : "Unknown error"}
                   </p>
                   <button
                     onClick={() => refetch()}
@@ -499,7 +518,7 @@ function LinkedTaskCard({ linkedTask, onClick }: LinkedTaskCardProps) {
       <div className="flex flex-col gap-2">
         {/* Title */}
         <div className="text-[13px] font-semibold leading-snug pr-16">
-          {task.title || 'Untitled Task'}
+          {task.title || "Untitled Task"}
         </div>
 
         {/* Meta Info */}

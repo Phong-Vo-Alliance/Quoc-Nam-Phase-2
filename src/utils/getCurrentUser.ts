@@ -1,7 +1,7 @@
 /**
  * Utility to safely get current user
  * Used by mock data and demo components
- * 
+ *
  * Priority:
  * 1. localStorage "current_user" (new primary storage)
  * 2. localStorage "auth-storage" (Zustand auth store)
@@ -14,9 +14,11 @@ import { identityApiClient } from "@/api/identityClient";
 import type { UserDepartmentDto } from "@/types/identity";
 
 // Cache for API response to avoid repeated calls
+// Updated: 2026-02-11 - Added fullName field
 let cachedCurrentUser: {
   id: string;
   identifier: string;
+  fullName?: string; // ✅ NEW: Full name for display
   roles: string[];
   departments?: UserDepartmentDto[];
 } | null = null;
@@ -24,19 +26,21 @@ let cachedCurrentUser: {
 /**
  * Get current user from storage or API with proper fallback handling
  * Async version that attempts API call if localStorage is empty
- * 
+ *
  * Priority:
  * 1. localStorage "current_user" (synchronous)
  * 2. localStorage "auth-storage" (synchronous)
  * 3. Cached API response
  * 4. API call to GET /api/auth/me (async)
  * 5. Demo user as last resort
- * 
+ *
  * @returns Promise<CurrentUser> with fallback to demo user
+ * Updated: 2026-02-11 - Added fullName support
  */
 export async function getCurrentUser(): Promise<{
   id: string;
   identifier: string;
+  fullName?: string; // ✅ NEW: Full name from API
   roles: string[];
   departments?: UserDepartmentDto[];
 }> {
@@ -50,16 +54,17 @@ export async function getCurrentUser(): Promise<{
         if (user?.id) {
           // If departments are missing, we need to fetch from API
           if (!user.departments || user.departments.length === 0) {
-            console.log("Departments missing in current_user, fetching from API...");
+            // console.log("Departments missing in current_user, fetching from API...");
             const apiUser = await getCurrentUserFromAPI();
             if (apiUser) {
               return apiUser;
             }
           }
-          
+
           return {
             id: user.id,
             identifier: user.identifier || user.email || "",
+            fullName: user.fullName, // ✅ Include fullName
             departments: user.departments || [],
             roles: user.roles || [],
           };
@@ -76,8 +81,13 @@ export async function getCurrentUser(): Promise<{
         const parsed = JSON.parse(authStorage);
         if (parsed.state?.user?.id) {
           // If departments are missing, we need to fetch from API
-          if (!parsed.state.user.departments || parsed.state.user.departments.length === 0) {
-            console.log("Departments missing in auth-storage, fetching from API...");
+          if (
+            !parsed.state.user.departments ||
+            parsed.state.user.departments.length === 0
+          ) {
+            console.log(
+              "Departments missing in auth-storage, fetching from API...",
+            );
             const apiUser = await getCurrentUserFromAPI();
             if (apiUser) {
               // Also update the auth-storage with departments
@@ -85,14 +95,18 @@ export async function getCurrentUser(): Promise<{
               try {
                 localStorage.setItem("auth-storage", JSON.stringify(parsed));
               } catch (e) {
-                console.warn("Failed to update auth-storage with departments:", e);
+                console.warn(
+                  "Failed to update auth-storage with departments:",
+                  e,
+                );
               }
               return apiUser;
             }
           }
-          
+
           return {
             id: parsed.state.user.id,
+            fullName: parsed.state.user.fullName, // ✅ Include fullName
             identifier: parsed.state.user.identifier || "",
             departments: parsed.state.user.departments || [],
             roles: parsed.state.user.roles || [],
@@ -129,40 +143,52 @@ export async function getCurrentUser(): Promise<{
   return demoUser;
 }
 
-/**, departments }
- * 
+/**
+ * Fetch current user from API: GET /api/auth/me
+ *
+ * Per Swagger spec (vega-identity-api-dev.allianceitsc.com):
+ * Endpoint: GET /api/auth/me
+ * Auth: Required (Bearer token)
+ * Response: { id, identifier, fullName, roles, departments }
+ *
  * HTTP Status Codes (per Swagger):
- * - 200: Success - returns { id, identifier?, roles?, departments? }
+ * - 200: Success - returns { id, identifier?, fullName?, roles?, departments? }
  * - 401: Unauthorized - token missing, expired, or invalid
  * - 403: Forbidden - authenticated but access denied (rare for /me)
  * - 5xx: Server error - API unavailable
- * 
+ *
  * Automatically saves successful response to localStorage "current_user"
- * 
+ *
  * @returns Promise<CurrentUser> or null if unauthenticated/failed
+ * Updated: 2026-02-11 - Added fullName support
  */
 export async function getCurrentUserFromAPI(): Promise<{
   id: string;
   identifier: string;
+  fullName?: string; // ✅ NEW: Full name from API
   roles: string[];
   departments?: UserDepartmentDto[];
 } | null> {
   try {
     const response = await identityApiClient.get<{
-      id: string;
+      id?: string; // ⚠️ Make optional to detect if missing
+      userId?: string; // ⚠️ Check if API returns userId instead
       identifier?: string;
       email?: string;
+      fullName?: string; // ✅ NEW: Full name from API
       roles?: string[];
       departments?: UserDepartmentDto[];
     }>("/api/auth/me");
 
     // 200 OK: Successfully retrieved user
     const userData = response.data;
+
     const user = {
-      departments: userData.departments || [],
-      id: userData.userId || userData.id,
+      id: userData.id || userData.userId || "", // ⚠️ Try both field names
       identifier: userData.identifier || userData.email || "",
+      fullName: userData.fullName, // ✅ Save fullName
       roles: userData.roles || [],
+      departments: userData.departments || [],
     };
 
     // Cache the response to avoid repeated API calls
@@ -185,7 +211,7 @@ export async function getCurrentUserFromAPI(): Promise<{
     if (status === 401) {
       // Unauthorized: Token missing, expired, or invalid
       console.warn(
-        "User not authenticated (401): Token missing or expired. Clear localStorage and redirect to login."
+        "User not authenticated (401): Token missing or expired. Clear localStorage and redirect to login.",
       );
 
       // Clear invalid tokens to prevent retries with stale credentials
@@ -200,13 +226,17 @@ export async function getCurrentUserFromAPI(): Promise<{
 
     if (status === 403) {
       // Forbidden: Authenticated but access denied (shouldn't happen for /me endpoint)
-      console.warn("Access forbidden (403) for /api/auth/me - unexpected error");
+      console.warn(
+        "Access forbidden (403) for /api/auth/me - unexpected error",
+      );
       return null;
     }
 
     if (status && status >= 500) {
       // Server error: API is unavailable
-      console.warn(`Server error (${status}): API unavailable. Will use cached or demo user.`);
+      console.warn(
+        `Server error (${status}): API unavailable. Will use cached or demo user.`,
+      );
       return null;
     }
 
@@ -303,7 +333,7 @@ export function isAuthenticatedUserSync(): boolean {
 /**
  * Check if current user is authenticated (async version)
  * Checks localStorage first, then API if needed
- * 
+ *
  * @returns Promise<boolean> - true if successfully authenticated
  */
 export async function isAuthenticatedUser(): Promise<boolean> {

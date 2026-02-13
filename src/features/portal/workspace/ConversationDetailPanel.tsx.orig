@@ -1,10 +1,14 @@
 import React from "react";
+import { hasLeaderPermissions, hasStaffPermissions } from "@/utils/roleUtils";
 import { RightAccordion } from "../components";
 import { LinkedTasksPanel } from "../components/LinkedTasksPanel";
 import { ViewAllTasksModal } from "../components/ViewAllTasksModal";
 import { SegmentedTabs } from "../components/SegmentedTabs";
 import { AddMemberDialog } from "./AddMemberDialog";
-import type { FileManagerPhase1AProps } from "../components/FileManagerPhase1A";
+import type {
+  FileManagerPhase1AProps,
+  MessageLike,
+} from "../components/FileManagerPhase1A";
 import type {
   Task,
   ReceivedInfo,
@@ -14,6 +18,7 @@ import type {
   TaskLogMessage,
   ChecklistVariant,
 } from "../types";
+import type { StarredMessageDto } from "@/types/pinned_and_starred";
 import { ChecklistTemplatePanel } from "../components/ChecklistTemplatePanel";
 import {
   TaskChecklistEditor,
@@ -26,8 +31,19 @@ import { transformTemplatesToMap } from "@/utils/checklistTemplateTransform";
 import {
   useAddCheckItem,
   useToggleCheckItem,
+  useUpdateCheckItem,
+  useDeleteCheckItem,
   useUpdateTaskStatus,
-} from "@/hooks/mutations/useTaskMutations";
+} from "@/hooks/mutations";
+import { useInformationConfirmed } from "@/hooks/queries/useInformationConfirmed";
+import type { InformationConfirmedDto } from "@/types/information_confirmed";
+import { ConfirmedInfoTransferSheet } from "@/components/sheet/ConfirmedInfoTransferSheet";
+import { sendMessage } from "@/api/messages.api";
+import {
+  createInformationConfirmed,
+  updateInformationConfirmed,
+} from "@/api/information_confirmed.api";
+import { toast } from "sonner";
 
 import {
   Users,
@@ -47,6 +63,7 @@ import {
   SquarePen,
   ListTodo,
   UserIcon,
+  Loader2,
 } from "lucide-react";
 import {
   Popover,
@@ -57,9 +74,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 import { Button } from "@/components/ui/button";
 import { HintBubble } from "../components/HintBubble";
+import { useAuthStore } from "@/stores/authStore";
+import { useConversationStore } from "@/stores";
+import { isDirectConversation } from "@/types/conversations";
 import { FileNode } from "../components/FileManager";
 import { FileManagerPhase1A } from "../components/FileManagerPhase1A";
 import { group } from "console";
+import { set } from "date-fns";
 
 export const formatTime = (iso: string) => {
   const d = new Date(iso);
@@ -136,18 +157,23 @@ const TaskCard: React.FC<{
   members: MinimalMember[];
   viewMode: ViewMode;
   isLeaderOwnTask?: boolean; // Flag when leader is task owner
+  groupName?: string; // Group/conversation name to display
+  checklistVariants?: ChecklistVariant[]; // Available checklist variants to look up template name
   onChangeStatus?: (id: string, next: Task["status"]) => void;
   onReassign?: (id: string, assignTo: string) => void;
   onToggleChecklist?: (taskId: string, itemId: string, done: boolean) => void;
   onUpdateTaskChecklist?: (taskId: string, next: ChecklistItem[]) => void;
   taskLogs?: Record<string, TaskLogMessage[]>;
   onOpenTaskLog?: (taskId: string) => void;
-  onClickTitle?: (sourceMessageId: string) => void;
+  onClickTitle?: (messageDto: StarredMessageDto | null) => void;
+  messages?: MessageLike[]; // Messages array to build StarredMessageDto
 }> = ({
   t,
   members,
   viewMode,
   isLeaderOwnTask = false,
+  groupName,
+  checklistVariants,
   onChangeStatus,
   onReassign,
   onToggleChecklist,
@@ -155,39 +181,43 @@ const TaskCard: React.FC<{
   taskLogs,
   onOpenTaskLog,
   onClickTitle,
+  messages = [],
 }) => {
   const [open, setOpen] = React.useState(false);
   const assigneeName =
     members.find((m) => m.id === t.assignTo)?.name ?? t.assignTo;
   const [editingItem, setEditingItem] = React.useState<ChecklistItem | null>(
-    null
+    null,
   );
   const [newLabel, setNewLabel] = React.useState("");
 
   // Mutation hooks for API calls
   const addCheckItemMutation = useAddCheckItem();
   const toggleCheckItemMutation = useToggleCheckItem();
+  const updateCheckItemMutation = useUpdateCheckItem();
+  const deleteCheckItemMutation = useDeleteCheckItem();
   const updateStatusMutation = useUpdateTaskStatus();
 
   const total = t.checklist?.length ?? 0;
   const doneCount = t.checklist?.filter((c) => c.done).length ?? 0;
   const progress = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const workTypeLabel = t.workTypeName ?? t.workTypeId;
-  const displayWorkTypeLabel = t.checklistVariantName
-    ? `${workTypeLabel} · ${t.checklistVariantName}`
-    : workTypeLabel;
-
+  const displayLabel = groupName || "không xác định";
+  // Look up template name from checklistTemplateId
+  console.log("t.checklistTemplateId", t.checklistTemplateId);
+  console.log("checklistVariants", checklistVariants);
+  const templateName = t.checklistTemplateId
+    ? checklistVariants?.find((v) => v.id === t.checklistTemplateId)?.name
+    : null;
   const progressText =
     t.progressText ??
     (total ? `${doneCount}/${total} mục` : "Không có checklist");
 
   const [editChecklist, setEditChecklist] = React.useState(false);
-  const canEditStructure = viewMode === "lead" && t.status.code === "todo";
+  const canEditStructure = hasLeaderPermissions() && t.status.code === "todo";
 
   // Get permissions from task (from API)
   const permissions = t.permissions;
-
   return (
     <>
       {/* Checklist Edit Dialog */}
@@ -214,7 +244,11 @@ const TaskCard: React.FC<{
               </button>
               <button
                 className="text-xs px-3 py-1 rounded bg-emerald-600 text-white"
-                disabled={addCheckItemMutation.isPending || !newLabel.trim()}
+                disabled={
+                  addCheckItemMutation.isPending ||
+                  updateCheckItemMutation.isPending ||
+                  !newLabel.trim()
+                }
                 onClick={async () => {
                   if (!newLabel.trim()) return;
 
@@ -233,17 +267,27 @@ const TaskCard: React.FC<{
                       // Optionally show error message to user
                     }
                   } else {
-                    // For editing existing items, use the old callback
-                    // (API doesn't have an update endpoint yet)
-                    const updated = (t.checklist ?? []).map((i) =>
-                      i.id === editingItem.id ? { ...i, label: newLabel } : i
-                    );
-                    onUpdateTaskChecklist?.(t.id, updated);
-                    setEditingItem(null);
+                    // Call API to update existing checklist item
+                    try {
+                      await updateCheckItemMutation.mutateAsync({
+                        taskId: t.id,
+                        itemId: editingItem.id,
+                        content: newLabel.trim(),
+                      });
+                      setEditingItem(null);
+                      setNewLabel("");
+                      setOpen(true); // Keep checklist open
+                    } catch (error) {
+                      console.error("Failed to update checklist item:", error);
+                      // Optionally show error message to user
+                    }
                   }
                 }}
               >
-                {addCheckItemMutation.isPending ? "Đang lưu..." : "Lưu"}
+                {addCheckItemMutation.isPending ||
+                updateCheckItemMutation.isPending
+                  ? "Đang lưu..."
+                  : "Lưu"}
               </button>
             </div>
           </div>
@@ -263,9 +307,10 @@ const TaskCard: React.FC<{
           duration-200
           hover:-translate-y-[1px]
         "
+        data-testid={`task-item-${t.id}`}
       >
         {/* Floating status badge góc phải trên */}
-        <div className="absolute -top-3 right-2">
+        <div className="absolute -top-3 right-2" data-testid="task-status">
           <StatusBadge s={t.status} />
         </div>
 
@@ -275,16 +320,51 @@ const TaskCard: React.FC<{
             <div className="text-[13px] font-semibold leading-snug truncate">
               {/* ✅ UPDATED:  Clickable Title */}
               <a
-                href={
-                  t.sourceMessageId ? `#msg-${t.sourceMessageId}` : undefined
-                }
+                href={t.messageId ? `#msg-${t.messageId}` : undefined}
                 onClick={(e) => {
-                  if (!t.sourceMessageId) {
-                    e.preventDefault();
+                  e.preventDefault();
+                  if (!t.messageId) {
                     return;
                   }
-                  e.preventDefault();
-                  onClickTitle?.(t.sourceMessageId);
+                  // Build StarredMessageDto object (same pattern as PinnedMessagesPanel)
+                  console.log("messages", messages);
+                  const messageDto: StarredMessageDto = {
+                    messageId: t.messageId,
+                    starredAt: t.createdAt || new Date().toISOString(),
+                    message: {
+                      id: t.messageId,
+                      conversationId: t.workTypeId || "",
+                      senderId: "", // MessageLike doesn't have senderId
+                      senderName: t.assignFrom || "Không xác định",
+                      senderIdentifier: null,
+                      senderFullName: t.assignFrom || null,
+                      senderRoles: null,
+                      parentMessageId: null,
+                      quoteMessageId: null,
+                      content: t.title || t.description || "", // MessageLike doesn't store content separately
+                      contentType: "TXT",
+                      sentAt: t.createdAt || new Date().toISOString(),
+                      editedAt: null,
+                      linkedTaskId: t.id,
+                      reactions: [],
+                      attachments: (t.attachments || []).map((att) => ({
+                        id: att.id || "",
+                        fileId: att.id || "",
+                        fileName: att.fileName || null,
+                        fileSize: att.fileSize || 0,
+                        contentType: att.contentType || null,
+                        createdAt: t.createdAt || new Date().toISOString(),
+                      })),
+                      replyCount: 0,
+                      isStarred: false,
+                      isPinned: false,
+                      threadPreview: null,
+                      mentions: [],
+                    },
+                  };
+
+                  // Switch to chat tab and scroll to message
+                  onClickTitle?.(messageDto);
                 }}
                 className={`
                   block w-full text-left
@@ -292,7 +372,7 @@ const TaskCard: React.FC<{
                   truncate
                   transition-colors duration-200
                   ${
-                    t.sourceMessageId
+                    t.messageId
                       ? `
                       text-gray-800 
                       hover:text-brand-600 
@@ -310,41 +390,41 @@ const TaskCard: React.FC<{
                   }
                 `}
                 title={
-                  t.sourceMessageId
+                  t.messageId
                     ? "📌 Nhấn để xem tin nhắn gốc"
                     : "⚠️ Không có tin nhắn nguồn"
                 }
-                aria-disabled={!t.sourceMessageId}
+                aria-disabled={!t.messageId}
+                data-testid="task-title"
               >
-                {truncateMessageTitle(t.title || t.description)}
+                {truncateMessageTitle(t.title || t.description || "")}
               </a>
             </div>
 
-            {/* Meta: loại việc, progress, assignee */}
+            {/* Meta: group name, progress, assignee */}
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
               <span className="inline-flex items-center gap-1">
-                <span>Loại việc:</span>
+                <span>Nhóm:</span>
 
-                {/* WorkType name */}
+                {/* Group/Conversation name */}
                 <span className="font-medium text-gray-700">
-                  {workTypeLabel}
+                  {displayLabel}
                 </span>
+              </span>
 
-                {/* CHIP variant */}
-                {t.checklistVariantName && (
-                  <span
-                    className="
+              {/* CHIP template name */}
+              {templateName && (
+                <span
+                  className="
                       inline-flex items-center px-1.5 py-0.5
                       rounded-md text-[10px] font-semibold
                       bg-emerald-50 text-emerald-700 border border-emerald-200
                       shadow-sm
                     "
-                  >
-                    {t.checklistVariantName}
-                  </span>
-                )}
-              </span>
-
+                >
+                  {templateName}
+                </span>
+              )}
               {/* {total > 0 && (
                 <>
                   <span>•</span>
@@ -357,25 +437,29 @@ const TaskCard: React.FC<{
                 </>
               )} */}
 
-              {viewMode === "lead" && (
+              {hasLeaderPermissions() && (
                 <>
                   <span>•</span>
-                  <span>
-                    Giao cho:{" "}
-                    <span className="font-medium text-gray-700">
-                      <select
-                        className="mt-1 rounded-md border px-2 py-0.5 text-[11px] bg-white"
-                        value={t.assignTo}
-                        onChange={(e) => onReassign?.(t.id, e.target.value)}
-                      >
-                        {members.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
+                  {t.status.code !== "need_to_verified" ? (
+                    <span>
+                      Giao cho:{" "}
+                      <span className="font-medium text-gray-700">
+                        <select
+                          className="mt-1 rounded-md border px-2 py-0.5 text-[11px] bg-white"
+                          value={t.assignTo}
+                          onChange={(e) => onReassign?.(t.id, e.target.value)}
+                        >
+                          {members.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
                     </span>
-                  </span>
+                  ) : (
+                    "Giao cho:" + members.find((m) => m.id === t.assignTo)?.name
+                  )}
                 </>
               )}
             </div>
@@ -455,36 +539,37 @@ const TaskCard: React.FC<{
                         className="group flex items-center gap-2 text-[12px] leading-snug rounded-md px-2 py-1 hover:bg-gray-50 transition-all"
                       >
                         {/* Checkbox */}
-                        {c.done ? (
-                          <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
-                            <Check className="w-3 h-3" />
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className=" checklist-btn
+                        <button
+                          type="button"
+                          className={`
                             h-4 w-4 shrink-0 rounded-full
-                            border-[1px] border-emerald-300
-                            bg-white
-                            hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]
                             transition flex items-center justify-center
-                          "
-                            disabled={toggleCheckItemMutation.isPending}
-                            onClick={async () => {
-                              try {
-                                await toggleCheckItemMutation.mutateAsync({
-                                  taskId: t.id,
-                                  itemId: c.id,
-                                });
-                              } catch (error) {
-                                console.error(
-                                  "Failed to toggle checklist item:",
-                                  error
-                                );
-                              }
-                            }}
-                          />
-                        )}
+                            ${
+                              c.done
+                                ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer checklist-btn"
+                                : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
+                            }
+                          `}
+                          disabled={toggleCheckItemMutation.isPending}
+                          onClick={async () => {
+                            try {
+                              await toggleCheckItemMutation.mutateAsync({
+                                taskId: t.id,
+                                itemId: c.id,
+                              });
+                            } catch (error) {
+                              console.error(
+                                "Failed to toggle checklist item:",
+                                error,
+                              );
+                            }
+                          }}
+                          title={
+                            c.done ? "Nhấn để bỏ chọn" : "Nhấn để hoàn thành"
+                          }
+                        >
+                          {c.done && <Check className="w-3 h-3" />}
+                        </button>
 
                         {/* Label */}
                         <span
@@ -510,15 +595,27 @@ const TaskCard: React.FC<{
                             />
 
                             {/* Delete */}
-                            <Trash2
-                              className="w-3.5 h-3.5 text-rose-500 cursor-pointer hover:text-rose-600"
-                              onClick={() => {
-                                const updated = (t.checklist ?? []).filter(
-                                  (i) => i.id !== c.id
-                                );
-                                onUpdateTaskChecklist?.(t.id, updated);
-                              }}
-                            />
+                            {deleteCheckItemMutation.isPending ? (
+                              <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
+                            ) : (
+                              <Trash2
+                                className="w-3.5 h-3.5 text-rose-500 cursor-pointer hover:text-rose-600"
+                                onClick={async () => {
+                                  if (!confirm(`Xóa mục "${c.label}"?`)) return;
+                                  try {
+                                    await deleteCheckItemMutation.mutateAsync({
+                                      taskId: t.id,
+                                      itemId: c.id,
+                                    });
+                                  } catch (error) {
+                                    console.error(
+                                      "Failed to delete checklist item:",
+                                      error,
+                                    );
+                                  }
+                                }}
+                              />
+                            )}
                           </div>
                         )}
                       </li>
@@ -587,6 +684,24 @@ const TaskCard: React.FC<{
                     disabled={updateStatusMutation.isPending}
                     onClick={async () => {
                       try {
+                        // Validate: All checklist items must be checked (100%)
+                        const totalItems = t.checklist?.length || 0;
+                        const checkedItems =
+                          t.checklist?.filter((c) => c.done).length || 0;
+
+                        if (totalItems > 0 && checkedItems < totalItems) {
+                          const percentage = Math.round(
+                            (checkedItems / totalItems) * 100
+                          );
+                          toast.error(
+                            `Không thể hoàn thành công việc! Vui lòng hoàn thành tất cả checklist items (${percentage}% / 100%)`,
+                            {
+                              duration: 4000,
+                            }
+                          );
+                          return; // Prevent status change
+                        }
+
                         await updateStatusMutation.mutateAsync({
                           taskId: t.id,
                           status: "need_to_verified",
@@ -605,9 +720,31 @@ const TaskCard: React.FC<{
                 (t.status.code === "doing" ||
                   t.status.code === "need_to_verified") && (
                   <button
-                    disabled={updateStatusMutation.isPending}
+                    disabled={
+                      updateStatusMutation.isPending ||
+                      toggleCheckItemMutation.isPending
+                    }
                     onClick={async () => {
                       try {
+                        // Validate: All checklist items must be checked (100%)
+                        const totalItems = t.checklist?.length || 0;
+                        const checkedItems =
+                          t.checklist?.filter((c) => c.done).length || 0;
+
+                        if (totalItems > 0 && checkedItems < totalItems) {
+                          const percentage = Math.round(
+                            (checkedItems / totalItems) * 100
+                          );
+                          toast.error(
+                            `Không thể hoàn thành công việc! Vui lòng hoàn thành tất cả checklist items (${percentage}% / 100%)`,
+                            {
+                              duration: 4000,
+                            }
+                          );
+                          return; // Prevent status change
+                        }
+
+                        // All checklist items are checked (or no checklist) - proceed to finish
                         await updateStatusMutation.mutateAsync({
                           taskId: t.id,
                           status: "finished",
@@ -618,7 +755,10 @@ const TaskCard: React.FC<{
                     }}
                     className="rounded-md border px-2 py-0.5 text-[11px] hover:bg-emerald-50 disabled:opacity-50"
                   >
-                    {updateStatusMutation.isPending ? "..." : "Hoàn tất"}
+                    {updateStatusMutation.isPending ||
+                    toggleCheckItemMutation.isPending
+                      ? "..."
+                      : "Hoàn tất"}
                   </button>
                 )}
             </div>
@@ -742,14 +882,14 @@ const ReceivedInfoSection: React.FC<{
 /* =============== ConversationDetailPanel =============== */
 export const ConversationDetailPanel: React.FC<{
   // Tabs
-  tab: "info" | "order" | "tasks";
-  setTab: (v: "info" | "order" | "tasks") => void;
+  tab: "info" | "order" | "tasks" | "chat";
+  setTab: (v: "info" | "order" | "tasks" | "chat") => void;
 
   // Context
   viewMode?: ViewMode; // 'lead' | 'staff'
   groupId?: string;
-  groupName?: string;
   workTypeName?: string;
+  // Note: groupName and categoryName removed - now from store
 
   // Members (for "Thành viên" accordion)
   members?: MinimalMember[];
@@ -773,11 +913,11 @@ export const ConversationDetailPanel: React.FC<{
   >;
   applyTemplateToTasks?: (
     workTypeId: string,
-    template: ChecklistTemplateItem[]
+    template: ChecklistTemplateItem[],
   ) => void;
   taskLogs?: Record<string, TaskLogMessage[]>;
   onOpenTaskLog?: (taskId: string) => void;
-  onOpenSourceMessage?: (messageId: string) => void;
+  onOpenSourceMessage?: (messageDto: StarredMessageDto | null) => void;
   checklistVariants?: ChecklistVariant[];
   messages?: MessageLike[]; // Messages from chat to extract files from
 
@@ -792,8 +932,8 @@ export const ConversationDetailPanel: React.FC<{
   setTab,
   viewMode = "staff",
   groupId,
-  groupName = "Nhóm",
   workTypeName = "—",
+  // categoryName and groupName removed from props
   members = [],
   onAddMember,
   tasks = [],
@@ -817,11 +957,224 @@ export const ConversationDetailPanel: React.FC<{
   messages = [],
   messagesQuery, // Phase 2: For auto-loading older messages
 }) => {
+  // Read conversation data from store
+  const categoryName = useConversationStore((s) => s.getConversationCategory());
+  const groupName =
+    useConversationStore((s) => s.getConversationName()) || "đội";
+
+  // 🆕 NEW: Fetch confirmed information for this conversation (leader only)
+  const { data: confirmedInfoData } = useInformationConfirmed(
+    {
+      conversationId: groupId,
+      isFinished: false, // Only show unfinished confirmed info
+    },
+    { enabled: !!groupId && hasLeaderPermissions() }
+  );
+
+  const confirmedInfos = confirmedInfoData?.data || [];
+
+  // 🆕 NEW: Transform confirmed info to ReceivedInfo format for display
+  const transformedConfirmedInfos: ReceivedInfo[] = confirmedInfos.map((info) => ({
+    id: info.id,
+    messageId: info.messageId,
+    groupId: info.conversationId,
+    title: info.content?.substring(0, 60) || "Không có nội dung",
+    sender: "Đã xác nhận",
+    createdAt: info.createdAt,
+    status: "waiting", // Always waiting since we filter isFinished=false
+  }));
+
+  // 🆕 NEW: State for confirmed info transfer sheet
+  const [confirmedInfoTransferSheet, setConfirmedInfoTransferSheet] = React.useState<{
+    open: boolean;
+    confirmedInfo?: InformationConfirmedDto;
+  }>({ open: false });
+
+  // 🆕 NEW: Handler for confirmed info assign task
+  const handleConfirmedInfoAssign = (info: ReceivedInfo) => {
+    // Find original confirmed info to pass correct message ID and full content
+    const confirmedInfo = confirmedInfos.find((ci) => ci.id === info.id);
+    if (!confirmedInfo) return;
+
+    // Open assign sheet with confirmed info data (with FULL content, not truncated)
+    // Pass confirmed info ID so it can be marked as finished when task is created
+    onAssignInfo?.({
+      ...info,
+      messageId: confirmedInfo.messageId,
+      title: confirmedInfo.content || "Không có nội dung", // Full content for task name
+    });
+  };
+
+  // 🆕 NEW: Handler for confirmed info transfer to another group
+  const handleConfirmedInfoTransfer = (info: ReceivedInfo) => {
+    const confirmedInfo = confirmedInfos.find((ci) => ci.id === info.id);
+    if (!confirmedInfo) return;
+
+    setConfirmedInfoTransferSheet({
+      open: true,
+      confirmedInfo,
+    });
+  };
+
+  // 🆕 NEW: Handler for confirmed info transfer confirmation
+  const handleConfirmedInfoTransferConfirm = async (payload: {
+    confirmedInfoId: string;
+    toCategoryId: string;
+    toCategoryName: string;
+    toConversationId: string;
+    toConversationName: string;
+    assignTo: string;
+    messageContent: string;
+  }) => {
+    try {
+      // 1. Send message to target conversation
+      const sentMessage = await sendMessage({
+        conversationId: payload.toConversationId,
+        content: payload.messageContent,
+        messageType: "TXT",
+      });
+
+      // 2. Create new confirmed information for the new conversation
+      const user = useAuthStore.getState().user;
+      if (sentMessage && user) {
+        await createInformationConfirmed({
+          conversationId: payload.toConversationId,
+          messageId: sentMessage.id,
+          content: payload.messageContent,
+          statusCode: "pending", // or appropriate status
+          confirmedBy: payload.assignTo,
+        });
+      }
+
+      // 3. Mark old confirmed information as finished
+      await updateInformationConfirmed(payload.confirmedInfoId, {
+        isFinished: true,
+      });
+
+      toast.success(`Đã chuyển thông tin sang ${payload.toConversationName}`);
+
+      // 4. Navigate to target conversation
+      const conversationStore = useConversationStore.getState();
+      conversationStore.setSelectedConversation({
+        type: "group",
+        id: payload.toConversationId,
+        name: payload.toConversationName,
+        categoryId: payload.toCategoryId,
+        category: payload.toCategoryName,
+      });
+
+      // 5. Close sheet
+      setConfirmedInfoTransferSheet({ open: false });
+    } catch (error) {
+      console.error("Failed to transfer confirmed info:", error);
+      toast.error("Không thể chuyển thông tin");
+    }
+  };
+
+  // 🆕 Check if conversation is DM (personal chat) to hide tasks tab
+  // Use activeTabType to handle tab switches even when no conversation selected
+  const selectedConversation = useConversationStore(
+    (s) => s.selectedConversation,
+  );
+  const activeTabType = useConversationStore((s) => s.activeTabType);
+  const isDM = activeTabType === "dm" || selectedConversation?.type === "dm";
+
+  // 🆕 Dynamic tabs based on conversation type
+  const detailTabs = React.useMemo(() => {
+    const baseTabs = [{ key: "info", label: "Thông Tin" }];
+
+    // Only add tasks tab for group chats (not DM)
+    if (!isDM) {
+      baseTabs.push({ key: "order", label: "Công Việc" });
+    }
+
+    return baseTabs;
+  }, [isDM]);
+
+  // 🆕 Auto-switch to "info" tab if DM and currently on "order"
+  React.useEffect(() => {
+    if (isDM && tab === "order") {
+      setTab("info");
+    }
+  }, [isDM, tab, setTab]);
+
   // State for View All Tasks Modal
-  const [showViewAllTasksModal, setShowViewAllTasksModal] = React.useState(false);
+
+  const [showViewAllTasksModal, setShowViewAllTasksModal] =
+    React.useState(false);
   // State for Add Member Dialog
   const [showAddMemberDialog, setShowAddMemberDialog] = React.useState(false);
-  
+
+  // Helper: Convert messageId to StarredMessageDto for child components
+  // This allows legacy components (FileManagerPhase1A) that only pass messageId
+  // to still trigger the message scroll functionality
+  const handleOpenSourceMessageById = React.useCallback(
+    (messageId: string) => {
+      // Find the message from messages array
+      const sourceMessage = messages.find((m) => m.id === messageId);
+
+      if (!sourceMessage) {
+        console.warn("Source message not found:", messageId);
+        return;
+      }
+
+      // Build StarredMessageDto object
+      const messageDto: StarredMessageDto = {
+        messageId: sourceMessage.id,
+        starredAt:
+          sourceMessage.createdAt ||
+          sourceMessage.time ||
+          new Date().toISOString(),
+        message: {
+          id: sourceMessage.id,
+          conversationId: sourceMessage.groupId || "",
+          senderId: "",
+          senderName:
+            sourceMessage.senderName || sourceMessage.sender || "Unknown",
+          senderIdentifier: null,
+          senderFullName: sourceMessage.senderName || null,
+          senderRoles: null,
+          parentMessageId: null,
+          quoteMessageId: null,
+          content: "",
+          contentType:
+            sourceMessage.type === "image"
+              ? "IMG"
+              : sourceMessage.type === "file"
+                ? "FILE"
+                : "TXT",
+          sentAt:
+            sourceMessage.createdAt ||
+            sourceMessage.time ||
+            new Date().toISOString(),
+          editedAt: null,
+          linkedTaskId: null,
+          reactions: [],
+          attachments: (sourceMessage.attachments || []).map((att) => ({
+            id: att.fileId || "",
+            fileId: att.fileId || "",
+            fileName: att.fileName || att.name || null,
+            fileSize: att.fileSize || 0,
+            contentType: att.contentType || null,
+            createdAt: sourceMessage.createdAt || new Date().toISOString(),
+          })),
+          replyCount: 0,
+          isStarred: false,
+          isPinned: false,
+          threadPreview: null,
+          mentions: [],
+        },
+      };
+
+      // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+      // User can see highlighted message in current tab
+      // setTab("chat");
+      // Trigger scroll to message
+      onOpenSourceMessage?.(messageDto);
+    },
+    [messages, onOpenSourceMessage, setTab],
+  );
+
   // Fetch all tasks for conversation (no user task filter)
   const {
     data: linkedTasksData,
@@ -914,7 +1267,7 @@ export const ConversationDetailPanel: React.FC<{
         checklistVariants.find((v) => v.isDefault) ?? checklistVariants[0];
       // Nếu state hiện tại không hợp lệ, reset về default
       setTemplateVariantId((prev) =>
-        prev && checklistVariants.some((v) => v.id === prev) ? prev : def?.id
+        prev && checklistVariants.some((v) => v.id === prev) ? prev : def?.id,
       );
     } else {
       setTemplateVariantId(undefined);
@@ -956,74 +1309,74 @@ export const ConversationDetailPanel: React.FC<{
   const tasksByWorkRaw = React.useMemo(
     () =>
       tasks.filter(
-        (t) => !selectedWorkTypeId || t.workTypeId === selectedWorkTypeId
+        (t) => !selectedWorkTypeId || t.workTypeId === selectedWorkTypeId,
       ),
-    [tasks, selectedWorkTypeId]
+    [tasks, selectedWorkTypeId],
   );
 
   // Leader thấy toàn bộ task của hôm nay
   // Staff chỉ thấy task của mình trong hôm nay
   const tasksToday = React.useMemo(() => {
-    if (viewMode === "lead") {
+    if (hasLeaderPermissions()) {
       return tasksByWorkRaw.filter((t) => isToday(t.createdAt));
     }
-    if (viewMode === "staff") {
+    if (hasStaffPermissions()) {
       return tasksByWorkRaw.filter(
-        (t) => t.assignTo === currentUserId && isToday(t.createdAt)
+        (t) => t.assignTo === currentUserId && isToday(t.createdAt),
       );
     }
     return tasksByWorkRaw;
-  }, [tasksByWorkRaw, viewMode, currentUserId]);
+  }, [tasksByWorkRaw, currentUserId]);
+  // Get auth user as fallback when currentUserId prop is not provided
+  const authUser = useAuthStore((state) => state.user);
+  const effectiveUserId = authUser?.id;
 
   // Filter leader's own tasks
-  console.log("currentUserId", currentUserId);
   const leaderOwnTasks = React.useMemo(() => {
-    if (viewMode !== "lead" || !currentUserId) return [];
+    if (!hasLeaderPermissions() || !effectiveUserId) return [];
 
-    return tasksToday.filter((t) => t.assignTo === currentUserId);
-  }, [tasksToday, viewMode, currentUserId]);
+    return tasksByWorkRaw.filter((t) => t.assignTo === effectiveUserId);
+  }, [tasksByWorkRaw, viewMode, effectiveUserId]);
 
-  console.log("Leader own tasks:", leaderOwnTasks);
   // Group leader own tasks by status
   const leaderOwnBuckets = React.useMemo(
     () => ({
       todo: leaderOwnTasks.filter((t) => t.status.code === "todo"),
       inProgress: leaderOwnTasks.filter((t) => t.status.code === "doing"),
-      // Done TODAY only (for inline display)
+      // All done tasks (not just today)
       doneToday: leaderOwnTasks.filter(
         (t) =>
-          (t.status.code === "need_to_verified" ||
-            t.status.code === "finished") &&
-          isToday(t.updatedAt || t.createdAt)
+          t.status.code === "need_to_verified" || t.status.code === "finished",
       ),
     }),
-    [leaderOwnTasks]
+    [leaderOwnTasks],
   );
 
   // All completed tasks (any date) for modal
   const leaderOwnAllCompleted = React.useMemo(() => {
-    if (viewMode !== "lead" || !currentUserId) return [];
+    if (!hasLeaderPermissions() || !effectiveUserId) return [];
 
     return tasksByWorkRaw
       .filter(
         (t) =>
-          t.assignTo === currentUserId &&
+          t.assignTo === effectiveUserId &&
           (t.status.code === "need_to_verified" ||
             t.status.code === "finished") &&
-          (!selectedWorkTypeId || t.workTypeId === selectedWorkTypeId)
+          (!selectedWorkTypeId || t.workTypeId === selectedWorkTypeId),
       )
       .sort((a, b) => {
         const da = new Date(a.updatedAt || a.createdAt || "");
         const db = new Date(b.updatedAt || b.createdAt || "");
         return db.getTime() - da.getTime(); // Newest first
       });
-  }, [tasksByWorkRaw, viewMode, currentUserId, selectedWorkTypeId]);
-
-  const myTasks = tasksToday;
-  // const myTasks = React.useMemo(
-  //   () => (currentUserId ? tasksByWork.filter((t) => t.assignTo === currentUserId) : tasksByWork),
-  //   [tasksByWork, currentUserId]
-  // );
+  }, [tasksByWorkRaw, viewMode, effectiveUserId, selectedWorkTypeId]);
+  const myTasks = React.useMemo(
+    () =>
+      effectiveUserId
+        ? tasksByWorkRaw.filter((t) => t.assignTo === effectiveUserId)
+        : tasksByWorkRaw,
+    [tasksByWorkRaw, effectiveUserId],
+  );
 
   const splitByStatus = (list: Task[]) => ({
     todo: list.filter((t) => t.status.code === "todo"),
@@ -1033,17 +1386,13 @@ export const ConversationDetailPanel: React.FC<{
   });
   const staffBuckets = splitByStatus(myTasks);
   const [assigneeFilter, setAssigneeFilter] = React.useState<string>("all");
-  // const leadBuckets = React.useMemo(() => {
-  //   const base = assigneeFilter === "all" ? tasksByWork : tasksByWork.filter((t) => t.assignTo === assigneeFilter);
-  //   return splitByStatus(base);
-  // }, [assigneeFilter, tasksByWork]);
   const leadBuckets = React.useMemo(() => {
     const base =
       assigneeFilter === "all"
-        ? tasksToday
-        : tasksToday.filter((t) => t.assignTo === assigneeFilter);
+        ? tasksByWorkRaw
+        : tasksByWorkRaw.filter((t) => t.assignTo === assigneeFilter);
     return splitByStatus(base);
-  }, [assigneeFilter, tasksToday]);
+  }, [assigneeFilter, tasksByWorkRaw]);
 
   // Toàn bộ task đã hoàn thành (không chỉ hôm nay) cho Leader (lọc theo assigneeFilter + workType)
   const allLeadDoneTasks = React.useMemo(() => {
@@ -1054,7 +1403,7 @@ export const ConversationDetailPanel: React.FC<{
 
     return base.filter(
       (t) =>
-        t.status.code === "finished" || t.status.code === "need_to_verified"
+        t.status.code === "finished" || t.status.code === "need_to_verified",
     );
   }, [assigneeFilter, tasksByWorkRaw]);
 
@@ -1073,52 +1422,68 @@ export const ConversationDetailPanel: React.FC<{
 
   const workTypeTemplate =
     mergedChecklistTemplates?.[workTypeKey]?.[activeVariantId] ?? [];
-
+  console.log("workTypeTemplate:", workTypeTemplate);
   return (
-    <aside className="bg-white shadow-sm flex flex-col min-h-0">
+    <aside
+      className="bg-white shadow-sm flex flex-col min-h-0"
+      data-testid="conversation-detail-panel"
+    >
       {/* Header: chỉ còn Tabs, bỏ dropdown CSKH/THU MUA */}
       <div
         className="flex items-center gap-3 border border-gray-300
         border-b-[2px] border-b-[#38AE3C] rounded-tl-2xl rounded-tr-2xl bg-white p-3 sticky top-0 z-10"
+        data-testid="detail-panel-header"
       >
         <SegmentedTabs
-          tabs={[
-            { key: "info", label: "Thông Tin" },
-            { key: "order", label: "Công Việc" },
-          ]}
+          tabs={detailTabs}
           active={isTasksTab ? "order" : "info"}
           onChange={(v) => setTab(v as any)}
         />
       </div>
 
       {/* CONTENT — SCROLLABLE */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-0 pt-3">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto px-0 pt-3"
+        data-testid="detail-panel-content"
+      >
         {/* INFO TAB */}
         {!isTasksTab ? (
-          <div className="space-y-4 min-h-0">
-            {/* Group + WorkType */}
-            <div className="rounded-xl border p-6 bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50">
-              <div className="flex flex-col items-center text-center gap-1">
-                <div className="text-sm font-semibold">{groupName}</div>
-                <div className="text-xs text-gray-700">
-                  Đang xem thông tin cho{" "}
-                  <span className="font-medium text-brand-600">
-                    Loại việc: {workTypeName}
-                  </span>
+          <div className="space-y-4 min-h-0" data-testid="info-tab-content">
+            {/* Group + WorkType - Only show for group chats */}
+            {!isDM && (
+              <div
+                className="rounded-xl border p-6 bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50"
+                data-testid="conversation-info-card"
+              >
+                <div className="flex flex-col items-center text-center gap-1">
+                  <div className="text-sm font-semibold">{categoryName}</div>
+                  <div className="text-xs text-gray-700">
+                    Đang xem thông tin cho{" "}
+                    <span className="font-medium text-brand-600">
+                      Loại việc: {groupName}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Ảnh / Video (GRID) */}
-            <div className="premium-accordion-wrapper">
+            <div
+              className="premium-accordion-wrapper"
+              data-testid="media-section"
+            >
               <div className="premium-light-bar" />
               <RightAccordion title="Ảnh / Video">
                 <FileManagerPhase1A
                   mode="media"
                   groupId={groupId}
                   selectedWorkTypeId={selectedWorkTypeId}
-                  onOpenSourceMessage={onOpenSourceMessage}
-                  onNavigateToChat={() => setTab("chat")}
+                  onOpenSourceMessage={handleOpenSourceMessageById}
+                  onNavigateToChat={() => {
+                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                    // User can see highlighted message in current tab
+                    // setTab("chat");
+                  }}
                   messages={messages}
                   messagesQuery={messagesQuery}
                 />
@@ -1126,24 +1491,34 @@ export const ConversationDetailPanel: React.FC<{
             </div>
 
             {/* Tài liệu (LIST) - Phase 1A (list file từ chat, không thư mục) */}
-            <div className="premium-accordion-wrapper">
+            <div
+              className="premium-accordion-wrapper"
+              data-testid="documents-section"
+            >
               <div className="premium-light-bar" />
               <RightAccordion title="Tài liệu">
                 <FileManagerPhase1A
                   mode="docs"
                   groupId={groupId}
                   selectedWorkTypeId={selectedWorkTypeId}
-                  onOpenSourceMessage={onOpenSourceMessage}
-                  onNavigateToChat={() => setTab("chat")}
+                  onOpenSourceMessage={handleOpenSourceMessageById}
+                  onNavigateToChat={() => {
+                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                    // User can see highlighted message in current tab
+                    // setTab("chat");
+                  }}
                   messages={messages}
                   messagesQuery={messagesQuery}
                 />
               </RightAccordion>
             </div>
 
-            {/* Thành viên (Leader only) */}
-            {viewMode === "lead" && (
-              <div className="premium-accordion-wrapper">
+            {/* Thành viên (Leader only + Group chat only) */}
+            {hasLeaderPermissions() && !isDM && (
+              <div
+                className="premium-accordion-wrapper"
+                data-testid="members-section"
+              >
                 <div className="premium-light-bar" />
                 <RightAccordion title="Thành viên">
                   <div className="flex items-center justify-between rounded-lg">
@@ -1159,6 +1534,7 @@ export const ConversationDetailPanel: React.FC<{
                     <button
                       onClick={() => setShowAddMemberDialog(true)}
                       className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs hover:bg-brand-50"
+                      data-testid="add-member-button"
                     >
                       <Plus className="h-3.5 w-3.5" /> Thêm
                     </button>
@@ -1169,20 +1545,21 @@ export const ConversationDetailPanel: React.FC<{
           </div>
         ) : (
           /* TASKS TAB */
-          <div className="space-y-4 min-h-0">
+          <div className="space-y-4 min-h-0" data-testid="tasks-tab-content">
             {/* NEW: Linked Tasks Panel - Show for all users */}
-            {groupId && (
+            {/* {groupId && (
               <LinkedTasksPanel
                 conversationId={groupId}
+                currentUserId={currentUserId}
                 onTaskClick={(taskId) => {
                   // TODO: Navigate to task detail or open task modal
                   console.log("Task clicked:", taskId);
                 }}
                 onViewAll={() => setShowViewAllTasksModal(true)}
               />
-            )}
+            )} */}
 
-            {viewMode === "lead" && (
+            {hasLeaderPermissions() && (
               <>
                 {isTasksTab && (
                   <HintBubble
@@ -1207,13 +1584,24 @@ export const ConversationDetailPanel: React.FC<{
                   //onTransferInfo={(id, dept) => onTransferInfo?.(id, dept)}
                   onOpenGroupTransfer={onOpenGroupTransfer}
                 />
+
+                {/* 🆕 NEW: Confirmed Information Section */}
+                {transformedConfirmedInfos.length > 0 && (
+                  <ReceivedInfoSection
+                    items={transformedConfirmedInfos}
+                    onAssignInfo={handleConfirmedInfoAssign}
+                    onOpenGroupTransfer={handleConfirmedInfoTransfer}
+                  />
+                )}
               </>
             )}
-
-            {viewMode === "staff" ? (
+            {hasStaffPermissions() ? (
               <>
                 {/* Primary: Chưa xử lý + Đang xử lý */}
-                <div className="premium-accordion-wrapper">
+                <div
+                  className="premium-accordion-wrapper"
+                  data-testid="staff-my-tasks-section"
+                >
                   <RightAccordion
                     icon={<ClipboardList className="h-4 w-4 text-brand-600" />}
                     title="Công Việc Của Tôi"
@@ -1232,6 +1620,8 @@ export const ConversationDetailPanel: React.FC<{
                           t={t}
                           members={members}
                           viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
                           onChangeStatus={onChangeTaskStatus}
                           onReassign={onReassignTask}
                           onToggleChecklist={onToggleChecklist}
@@ -1239,10 +1629,14 @@ export const ConversationDetailPanel: React.FC<{
                             onUpdateTaskChecklist?.(taskId, next);
                           }}
                           taskLogs={taskLogs}
-                          onClickTitle={(messageId) => {
-                            onOpenSourceMessage?.(messageId);
+                          onClickTitle={(messageDto) => {
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
                           }}
                           onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
                         />
                       ))}
                       {staffBuckets.inProgress.map((t) => (
@@ -1251,6 +1645,8 @@ export const ConversationDetailPanel: React.FC<{
                           t={t}
                           members={members}
                           viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
                           onChangeStatus={onChangeTaskStatus}
                           onReassign={onReassignTask}
                           onToggleChecklist={onToggleChecklist}
@@ -1258,10 +1654,14 @@ export const ConversationDetailPanel: React.FC<{
                             onUpdateTaskChecklist?.(taskId, next);
                           }}
                           taskLogs={taskLogs}
-                          onClickTitle={(messageId) => {
-                            onOpenSourceMessage?.(messageId);
+                          onClickTitle={(messageDto) => {
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
                           }}
                           onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
                         />
                       ))}
                     </div>
@@ -1269,7 +1669,10 @@ export const ConversationDetailPanel: React.FC<{
                 </div>
 
                 {/* Secondary: Chờ duyệt */}
-                <div className="premium-accordion-wrapper">
+                <div
+                  className="premium-accordion-wrapper"
+                  data-testid="staff-awaiting-section"
+                >
                   <RightAccordion
                     icon={<SquarePen className="h-4 w-4 text-gray-400" />}
                     title="Chờ Duyệt"
@@ -1286,14 +1689,20 @@ export const ConversationDetailPanel: React.FC<{
                           t={t}
                           members={members}
                           viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
                           onChangeStatus={onChangeTaskStatus}
                           onReassign={onReassignTask}
                           onToggleChecklist={onToggleChecklist}
                           taskLogs={taskLogs}
-                          onClickTitle={(messageId) => {
-                            onOpenSourceMessage?.(messageId);
+                          onClickTitle={(messageDto) => {
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
                           }}
                           onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
                         />
                       ))}
                     </div>
@@ -1301,6 +1710,7 @@ export const ConversationDetailPanel: React.FC<{
                       <button
                         className="text-xs text-brand-700 hover:underline"
                         onClick={() => setShowCompleted(true)}
+                        data-testid="staff-view-all-completed-button"
                       >
                         Xem tất cả công việc đã hoàn thành
                       </button>
@@ -1308,8 +1718,14 @@ export const ConversationDetailPanel: React.FC<{
                   </RightAccordion>
                 </div>
                 {showCompleted && (
-                  <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
-                    <div className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] max-h-[80vh] overflow-hidden flex flex-col">
+                  <div
+                    className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4"
+                    data-testid="staff-completed-modal-backdrop"
+                  >
+                    <div
+                      className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
+                      data-testid="staff-completed-modal"
+                    >
                       {/* ============================================
                             HEADER (consistent với leader modal)
                             ============================================ */}
@@ -1351,17 +1767,17 @@ export const ConversationDetailPanel: React.FC<{
                               (t) =>
                                 (t.status.code === "finished" ||
                                   t.status.code === "need_to_verified") &&
-                                t.assignTo === currentUserId &&
+                                t.assignTo === effectiveUserId &&
                                 (!selectedWorkTypeId ||
-                                  t.workTypeId === selectedWorkTypeId)
+                                  t.workTypeId === selectedWorkTypeId),
                             )
                             .slice()
                             .sort((a, b) => {
                               const da = new Date(
-                                a.updatedAt || a.createdAt || ""
+                                a.updatedAt || a.createdAt || "",
                               );
                               const db = new Date(
-                                b.updatedAt || b.createdAt || ""
+                                b.updatedAt || b.createdAt || "",
                               );
                               return db.getTime() - da.getTime(); // Newest first
                             });
@@ -1433,7 +1849,7 @@ export const ConversationDetailPanel: React.FC<{
                                             {/* Title */}
                                             <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
                                               {truncateMessageTitle(
-                                                t.title || t.description
+                                                t.title || t.description || "",
                                               )}
                                             </div>
 
@@ -1444,13 +1860,13 @@ export const ConversationDetailPanel: React.FC<{
                                                 <span className="font-medium text-gray-700">
                                                   {t.updatedAt
                                                     ? new Date(
-                                                        t.updatedAt
+                                                        t.updatedAt,
                                                       ).toLocaleTimeString(
                                                         "vi-VN",
                                                         {
                                                           hour: "2-digit",
                                                           minute: "2-digit",
-                                                        }
+                                                        },
                                                       )
                                                     : "--:--"}
                                                 </span>
@@ -1463,7 +1879,7 @@ export const ConversationDetailPanel: React.FC<{
                                                     ✓{" "}
                                                     {
                                                       t.checklist.filter(
-                                                        (c) => c.done
+                                                        (c) => c.done,
                                                       ).length
                                                     }
                                                     /{t.checklist.length} mục
@@ -1471,20 +1887,12 @@ export const ConversationDetailPanel: React.FC<{
                                                 )}
                                             </div>
 
-                                            {/* WorkType + Variant chips */}
-                                            {(t.workTypeName ||
-                                              t.checklistVariantName) && (
+                                            {/* WorkType chip */}
+                                            {t.workTypeName && (
                                               <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-                                                {t.workTypeName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                                                    {t.workTypeName}
-                                                  </span>
-                                                )}
-                                                {t.checklistVariantName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    {t.checklistVariantName}
-                                                  </span>
-                                                )}
+                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                                  {t.workTypeName}
+                                                </span>
                                               </div>
                                             )}
                                           </div>
@@ -1492,7 +1900,7 @@ export const ConversationDetailPanel: React.FC<{
                                       </div>
                                     </div>
                                   );
-                                }
+                                },
                               )}
                             </div>
                           );
@@ -1528,6 +1936,7 @@ export const ConversationDetailPanel: React.FC<{
                   >
                     <ToggleGroupItem
                       value="team"
+                      data-testid="team-filter-button"
                       className="
                         flex items-center justify-center gap-2
                         data-[state=on]:bg-brand-600 data-[state=on]:text-white
@@ -1542,6 +1951,7 @@ export const ConversationDetailPanel: React.FC<{
                     </ToggleGroupItem>
                     <ToggleGroupItem
                       value="mine"
+                      data-testid="personal-filter-button"
                       className="
                         flex items-center justify-center gap-2
                         data-[state=on]:bg-brand-600 data-[state=on]:text-white
@@ -1556,7 +1966,7 @@ export const ConversationDetailPanel: React.FC<{
                       {leaderOwnTasks.filter(
                         (t) =>
                           t.status.code !== "need_to_verified" &&
-                          t.status.code !== "finished"
+                          t.status.code !== "finished",
                       ).length > 0 && (
                         <span
                           className="
@@ -1570,7 +1980,7 @@ export const ConversationDetailPanel: React.FC<{
                             leaderOwnTasks.filter(
                               (t) =>
                                 t.status.code !== "need_to_verified" &&
-                                t.status.code !== "finished"
+                                t.status.code !== "finished",
                             ).length
                           }
                         </span>
@@ -1585,33 +1995,40 @@ export const ConversationDetailPanel: React.FC<{
                 {leaderMode === "team" && (
                   <>
                     {/* Lead: lọc theo assignee */}
-                    <div className="rounded-xl border bg-white p-4 shadow-sm mb-3">
+                    <div
+                      className="rounded-xl border bg-white p-4 shadow-sm mb-3"
+                      data-testid="leader-team-header"
+                    >
                       <div className="flex flex-col gap-1">
                         {/* Title + Group + WorkType */}
                         <div className="flex items-center justify-center gap-2 flex-wrap">
                           <Users className="h-4 w-4 text-brand-600" />
                           <span className="text-sm font-semibold">
                             Công Việc Của Nhóm{" "}
-                            <span className="text-brand-500"> {groupName}</span>
+                            <span className="text-brand-500">
+                              {" "}
+                              {categoryName}
+                            </span>
                           </span>
                           <span className="text-xs text-gray-500">
                             • Loại việc:{" "}
                             <span className="font-medium text-gray-700">
-                              {workTypeName}
+                              {groupName}
                             </span>
                           </span>
                         </div>
 
                         {/* Filter - Select nhân viên */}
-                        <div className="flex justify-start mt-2">
+                        <div className="flex justify-between items-center w-full mt-2">
                           <div className="flex items-center gap-2 text-xs">
                             <span>Nhân viên:</span>
                             <select
-                              className="rounded-lg border border-brand-200 px-2 py-1 bg-white"
+                              className="w-full rounded-lg border border-brand-200 px-2 py-1 bg-white"
                               value={assigneeFilter}
                               onChange={(e) =>
                                 setAssigneeFilter(e.target.value)
                               }
+                              data-testid="assignee-filter-select"
                             >
                               <option value="all">Tất cả</option>
                               {members.map((m) => (
@@ -1622,12 +2039,14 @@ export const ConversationDetailPanel: React.FC<{
                             </select>
                           </div>
 
-                          <span
-                            className="ml-auto mt-2 text-[12px] text-emerald-700 cursor-pointer hover:underline select-none"
+                          <button
+                            className="ml-auto mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors group"
                             onClick={() => setTemplateOpen(true)}
+                            data-testid="default-checklist-link"
+                            title="Xem và chỉnh sửa checklist mặc định"
                           >
-                            Checklist mặc định
-                          </span>
+                            <FileText className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
+                          </button>
                         </div>
                       </div>
 
@@ -1649,202 +2068,225 @@ export const ConversationDetailPanel: React.FC<{
                     </div>
 
                     {/* Grouped tasks theo trạng thái */}
-                    {leadBuckets.todo.length +
-                      leadBuckets.inProgress.length +
-                      leadBuckets.awaiting.length ===
-                    0 ? (
-                      <div className="rounded-xl border border-dashed bg-white/60 p-4 text-xs text-gray-500 text-center">
-                        Không có công việc nào trong nhóm với bộ lọc hiện tại.
-                      </div>
-                    ) : (
+                    {
                       <div className="space-y-6">
-                        {/* AWAITING REVIEW */}
-                        {leadBuckets.awaiting.length > 0 && (
-                          <section>
+                        {/* AWAITING REVIEW - Always show */}
+                        <section data-testid="leader-awaiting-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => {
+                              setShowLeadAwaiting((prev) => {
+                                const next = !prev;
+                                if (next && !awaitingOpenedRef.current) {
+                                  awaitingOpenedRef.current = true;
+                                  setHighlightAwaiting(true);
+                                  setTimeout(
+                                    () => setHighlightAwaiting(false),
+                                    700,
+                                  );
+                                }
+                                return next;
+                              });
+                            }}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                            <span>
+                              Chờ duyệt ({leadBuckets.awaiting.length}){" "}
+                              {showLeadAwaiting ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+                          {showLeadAwaiting && (
                             <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => {
-                                setShowLeadAwaiting((prev) => {
-                                  const next = !prev;
-                                  if (next && !awaitingOpenedRef.current) {
-                                    awaitingOpenedRef.current = true;
-                                    setHighlightAwaiting(true);
-                                    setTimeout(
-                                      () => setHighlightAwaiting(false),
-                                      700
-                                    );
-                                  }
-                                  return next;
-                                });
-                              }}
+                              className={`space-y-3 transition-colors duration-300 ${
+                                highlightAwaiting
+                                  ? "bg-amber-50/80 rounded-lg -mx-2 px-2 py-1"
+                                  : ""
+                              }`}
                             >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
-                              <span>
-                                Chờ duyệt ({leadBuckets.awaiting.length}){" "}
-                                {showLeadAwaiting ? " ▲" : " ▼"}
-                              </span>
+                              {leadBuckets.awaiting.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // ✅ Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
                             </div>
-                            {showLeadAwaiting && (
-                              <div
-                                className={`space-y-3 transition-colors duration-300 ${
-                                  highlightAwaiting
-                                    ? "bg-amber-50/80 rounded-lg -mx-2 px-2 py-1"
-                                    : ""
-                                }`}
-                              >
-                                {leadBuckets.awaiting.map((t) => (
+                          )}
+                        </section>
+
+                        {/* TODO - Always show */}
+                        <section data-testid="leader-todo-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadTodo((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                            <span>
+                              Chưa xử lý ({leadBuckets.todo.length}){" "}
+                              {showLeadTodo ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+                          {showLeadTodo && (
+                            <div className="space-y-3">
+                              {leadBuckets.todo.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // ✅ Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  onUpdateTaskChecklist={onUpdateTaskChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        {/* IN PROGRESS - Always show */}
+                        <section data-testid="leader-inprogress-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadInProgress((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
+                            <span>
+                              Đang xử lý ({leadBuckets.inProgress.length})
+                              {showLeadInProgress ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+
+                          {showLeadInProgress && (
+                            <div className="space-y-3">
+                              {leadBuckets.inProgress.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        {/* DONE TODAY - Always show, filter only today */}
+                        <section data-testid="leader-done-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadDone((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                            <span>
+                              Hoàn thành (
+                              {
+                                leadBuckets.done.filter((t) =>
+                                  isToday(t.updatedAt || t.createdAt),
+                                ).length
+                              }
+                              ) {showLeadDone ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+
+                          {showLeadDone && (
+                            <div className="space-y-3">
+                              {leadBuckets.done
+                                .filter((t) =>
+                                  isToday(t.updatedAt || t.createdAt),
+                                )
+                                .map((t) => (
                                   <TaskCard
                                     key={t.id}
                                     t={t}
                                     members={members}
                                     viewMode="lead"
                                     isLeaderOwnTask={false} // ✅ Team task
+                                    groupName={groupName}
+                                    checklistVariants={checklistVariants}
                                     onChangeStatus={onChangeTaskStatus}
                                     onReassign={onReassignTask}
                                     onToggleChecklist={onToggleChecklist}
                                     taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
+                                    onClickTitle={(messageDto) => {
+                                      // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                      // setTab("chat");
+                                      // Trigger scroll to message
+                                      onOpenSourceMessage?.(messageDto);
                                     }}
                                     onOpenTaskLog={onOpenTaskLog}
+                                    messages={messages}
                                   />
                                 ))}
-                              </div>
-                            )}
-                          </section>
-                        )}
+                            </div>
+                          )}
 
-                        {/* TODO */}
-                        {leadBuckets.todo.length > 0 && (
-                          <section>
-                            <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => setShowLeadTodo((v) => !v)}
+                          <div className="mt-2 text-right">
+                            <button
+                              className="text-xs text-brand-700 hover:underline"
+                              onClick={() => setShowLeadCompletedAll(true)}
+                              data-testid="leader-view-all-completed-button"
                             >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                              <span>
-                                Chưa xử lý ({leadBuckets.todo.length}){" "}
-                                {showLeadTodo ? " ▲" : " ▼"}
-                              </span>
-                            </div>
-                            {showLeadTodo && (
-                              <div className="space-y-3">
-                                {leadBuckets.todo.map((t) => (
-                                  <TaskCard
-                                    key={t.id}
-                                    t={t}
-                                    members={members}
-                                    viewMode="lead"
-                                    isLeaderOwnTask={false} // ✅ Team task
-                                    onChangeStatus={onChangeTaskStatus}
-                                    onReassign={onReassignTask}
-                                    onToggleChecklist={onToggleChecklist}
-                                    onUpdateTaskChecklist={
-                                      onUpdateTaskChecklist
-                                    }
-                                    taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
-                                    }}
-                                    onOpenTaskLog={onOpenTaskLog}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </section>
-                        )}
-
-                        {/* IN PROGRESS */}
-                        {leadBuckets.inProgress.length > 0 && (
-                          <section>
-                            <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => setShowLeadInProgress((v) => !v)}
-                            >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
-                              <span>
-                                Đang xử lý ({leadBuckets.inProgress.length})
-                                {showLeadInProgress ? " ▲" : " ▼"}
-                              </span>
-                            </div>
-
-                            {showLeadInProgress && (
-                              <div className="space-y-3">
-                                {leadBuckets.inProgress.map((t) => (
-                                  <TaskCard
-                                    key={t.id}
-                                    t={t}
-                                    members={members}
-                                    viewMode="lead"
-                                    isLeaderOwnTask={false} // Team task
-                                    onChangeStatus={onChangeTaskStatus}
-                                    onReassign={onReassignTask}
-                                    onToggleChecklist={onToggleChecklist}
-                                    taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
-                                    }}
-                                    onOpenTaskLog={onOpenTaskLog}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </section>
-                        )}
-
-                        {/* DONE TODAY */}
-                        {leadBuckets.done.length > 0 && (
-                          <section>
-                            <div
-                              className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                              onClick={() => setShowLeadDone((v) => !v)}
-                            >
-                              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                              <span>
-                                Hoàn thành ({leadBuckets.done.length}){" "}
-                                {showLeadDone ? " ▲" : " ▼"}
-                              </span>
-                            </div>
-
-                            {showLeadDone && (
-                              <div className="space-y-3">
-                                {leadBuckets.done.map((t) => (
-                                  <TaskCard
-                                    key={t.id}
-                                    t={t}
-                                    members={members}
-                                    viewMode="lead"
-                                    isLeaderOwnTask={false} // ✅ Team task
-                                    onChangeStatus={onChangeTaskStatus}
-                                    onReassign={onReassignTask}
-                                    onToggleChecklist={onToggleChecklist}
-                                    taskLogs={taskLogs}
-                                    onClickTitle={(messageId) => {
-                                      onOpenSourceMessage?.(messageId);
-                                    }}
-                                    onOpenTaskLog={onOpenTaskLog}
-                                  />
-                                ))}
-                              </div>
-                            )}
-
-                            <div className="mt-2 text-right">
-                              <button
-                                className="text-xs text-brand-700 hover:underline"
-                                onClick={() => setShowLeadCompletedAll(true)}
-                              >
-                                Xem tất cả công việc đã hoàn thành
-                              </button>
-                            </div>
-                          </section>
-                        )}
+                              Xem tất cả công việc đã hoàn thành
+                            </button>
+                          </div>
+                        </section>
                       </div>
-                    )}
+                    }
 
                     {/* Modal:  All completed tasks */}
                     {showLeadCompletedAll && (
-                      <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
-                        <div className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] max-h-[80vh] overflow-hidden flex flex-col">
+                      <div
+                        className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4"
+                        data-testid="leader-team-completed-modal-backdrop"
+                      >
+                        <div
+                          className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
+                          data-testid="leader-team-completed-modal"
+                        >
                           {/* Header */}
                           <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-brand-50 to-emerald-50">
                             <div className="flex items-center gap-2">
@@ -1899,7 +2341,7 @@ export const ConversationDetailPanel: React.FC<{
                                         day: "2-digit",
                                         month: "2-digit",
                                         year: "numeric",
-                                      }
+                                      },
                                     );
 
                                     if (!grouped[key]) grouped[key] = [];
@@ -1912,7 +2354,7 @@ export const ConversationDetailPanel: React.FC<{
                                       day: "2-digit",
                                       month: "2-digit",
                                       year: "numeric",
-                                    }
+                                    },
                                   );
 
                                   return Object.entries(grouped).map(
@@ -1941,7 +2383,9 @@ export const ConversationDetailPanel: React.FC<{
                                               >
                                                 <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
                                                   {truncateMessageTitle(
-                                                    t.title || t.description
+                                                    t.title ||
+                                                      t.description ||
+                                                      "",
                                                   )}
                                                 </div>
 
@@ -1951,13 +2395,13 @@ export const ConversationDetailPanel: React.FC<{
                                                     <span className="font-medium text-gray-700">
                                                       {t.updatedAt
                                                         ? new Date(
-                                                            t.updatedAt
+                                                            t.updatedAt,
                                                           ).toLocaleTimeString(
                                                             "vi-VN",
                                                             {
                                                               hour: "2-digit",
                                                               minute: "2-digit",
-                                                            }
+                                                            },
                                                           )
                                                         : "--:--"}
                                                     </span>
@@ -1968,7 +2412,7 @@ export const ConversationDetailPanel: React.FC<{
                                                     <span className="font-medium text-gray-700">
                                                       {members.find(
                                                         (m) =>
-                                                          m.id === t.assignTo
+                                                          m.id === t.assignTo,
                                                       )?.name ?? t.assignTo}
                                                     </span>
                                                   </span>
@@ -1980,7 +2424,7 @@ export const ConversationDetailPanel: React.FC<{
                                                       ✓{" "}
                                                       {
                                                         t.checklist.filter(
-                                                          (c) => c.done
+                                                          (c) => c.done,
                                                         ).length
                                                       }
                                                       /{t.checklist.length} mục
@@ -1991,7 +2435,7 @@ export const ConversationDetailPanel: React.FC<{
                                           </div>
                                         </div>
                                       );
-                                    }
+                                    },
                                   );
                                 })()}
                               </div>
@@ -2017,9 +2461,15 @@ export const ConversationDetailPanel: React.FC<{
                     MINE MODE (NEW)
                     ============================================ */}
                 {leaderMode === "mine" && (
-                  <div className="space-y-4">
+                  <div
+                    className="space-y-4"
+                    data-testid="leader-mine-mode-content"
+                  >
                     {/* Summary card */}
-                    <div className="rounded-xl border bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50 p-4 shadow-sm">
+                    <div
+                      className="rounded-xl border bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50 p-4 shadow-sm"
+                      data-testid="leader-mine-summary-card"
+                    >
                       <div className="flex items-center justify-center gap-2 mb-2">
                         <UserIcon className="h-5 w-5 text-brand-600" />
                         <span className="text-sm font-semibold text-gray-900">
@@ -2031,7 +2481,7 @@ export const ConversationDetailPanel: React.FC<{
                         {leaderOwnTasks.filter(
                           (t) =>
                             t.status.code !== "need_to_verified" &&
-                            t.status.code !== "finished"
+                            t.status.code !== "finished",
                         ).length > 0 ? (
                           <>
                             <span className="font-semibold text-brand-700">
@@ -2039,7 +2489,7 @@ export const ConversationDetailPanel: React.FC<{
                                 leaderOwnTasks.filter(
                                   (t) =>
                                     t.status.code !== "need_to_verified" &&
-                                    t.status.code !== "finished"
+                                    t.status.code !== "finished",
                                 ).length
                               }
                             </span>{" "}
@@ -2074,10 +2524,13 @@ export const ConversationDetailPanel: React.FC<{
                     {leaderOwnTasks.filter(
                       (t) =>
                         t.status.code !== "need_to_verified" &&
-                        t.status.code !== "finished"
+                        t.status.code !== "finished",
                     ).length === 0 &&
                       leaderOwnBuckets.doneToday.length === 0 && (
-                        <div className="rounded-xl border border-dashed bg-white/60 p-8 text-center">
+                        <div
+                          className="rounded-xl border border-dashed bg-white/60 p-8 text-center"
+                          data-testid="leader-mine-empty-state"
+                        >
                           <UserIcon className="h-12 w-12 mx-auto text-gray-300 mb-3" />
                           <p className="text-sm text-gray-500 font-medium mb-1">
                             Bạn chưa có công việc nào cần làm
@@ -2092,7 +2545,7 @@ export const ConversationDetailPanel: React.FC<{
                             TODO SECTION (Collapsible)
                             ============================================ */}
                     {leaderOwnBuckets.todo.length > 0 && (
-                      <section>
+                      <section data-testid="leader-mine-todo-section">
                         <div
                           className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
                           onClick={() => setShowLeaderOwnTodo((v) => !v)}
@@ -2126,15 +2579,21 @@ export const ConversationDetailPanel: React.FC<{
                                 members={members}
                                 viewMode="lead"
                                 isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
                                 onChangeStatus={onChangeTaskStatus}
                                 onReassign={onReassignTask}
                                 onToggleChecklist={onToggleChecklist}
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
-                                onClickTitle={(messageId) => {
-                                  onOpenSourceMessage?.(messageId);
+                                onClickTitle={(messageDto) => {
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
                                 }}
                                 onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
                               />
                             ))}
                           </div>
@@ -2146,7 +2605,7 @@ export const ConversationDetailPanel: React.FC<{
                             IN_PROGRESS SECTION (Collapsible)
                             ============================================ */}
                     {leaderOwnBuckets.inProgress.length > 0 && (
-                      <section>
+                      <section data-testid="leader-mine-inprogress-section">
                         <div
                           className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
                           onClick={() => setShowLeaderOwnInProgress((v) => !v)}
@@ -2169,15 +2628,21 @@ export const ConversationDetailPanel: React.FC<{
                                 members={members}
                                 viewMode="lead"
                                 isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
                                 onChangeStatus={onChangeTaskStatus}
                                 onReassign={onReassignTask}
                                 onToggleChecklist={onToggleChecklist}
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
-                                onClickTitle={(messageId) => {
-                                  onOpenSourceMessage?.(messageId);
+                                onClickTitle={(messageDto) => {
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
                                 }}
                                 onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
                               />
                             ))}
                           </div>
@@ -2189,7 +2654,7 @@ export const ConversationDetailPanel: React.FC<{
                             DONE TODAY SECTION (Collapsible)
                             ============================================ */}
                     {leaderOwnBuckets.doneToday.length > 0 && (
-                      <section>
+                      <section data-testid="leader-mine-done-section">
                         <div
                           className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
                           onClick={() => setShowLeaderOwnDone((v) => !v)}
@@ -2213,15 +2678,21 @@ export const ConversationDetailPanel: React.FC<{
                                 members={members}
                                 viewMode="lead"
                                 isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
                                 onChangeStatus={onChangeTaskStatus}
                                 onReassign={onReassignTask}
                                 onToggleChecklist={onToggleChecklist}
                                 onUpdateTaskChecklist={onUpdateTaskChecklist}
                                 taskLogs={taskLogs}
-                                onClickTitle={(messageId) => {
-                                  onOpenSourceMessage?.(messageId);
+                                onClickTitle={(messageDto) => {
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
                                 }}
                                 onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
                               />
                             ))}
                           </div>
@@ -2237,6 +2708,7 @@ export const ConversationDetailPanel: React.FC<{
                         <button
                           className="text-xs text-brand-700 hover:text-brand-800 hover:underline font-medium"
                           onClick={() => setShowLeaderOwnCompletedAll(true)}
+                          data-testid="leader-mine-view-all-completed-button"
                         >
                           Xem tất cả công việc đã hoàn thành (
                           {leaderOwnAllCompleted.length}) →
@@ -2250,8 +2722,14 @@ export const ConversationDetailPanel: React.FC<{
                         MODAL:  All Completed Tasks (Leader Own)
                         ============================================ */}
                 {showLeaderOwnCompletedAll && (
-                  <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
-                    <div className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] max-h-[80vh] overflow-hidden flex flex-col">
+                  <div
+                    className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4"
+                    data-testid="leader-mine-completed-modal-backdrop"
+                  >
+                    <div
+                      className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
+                      data-testid="leader-mine-completed-modal"
+                    >
                       {/* Header */}
                       <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-brand-50 to-emerald-50">
                         <div className="flex items-center gap-2">
@@ -2316,7 +2794,7 @@ export const ConversationDetailPanel: React.FC<{
                                   day: "2-digit",
                                   month: "2-digit",
                                   year: "numeric",
-                                }
+                                },
                               );
 
                               return Object.entries(grouped).map(
@@ -2348,7 +2826,7 @@ export const ConversationDetailPanel: React.FC<{
                                             {/* Title */}
                                             <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
                                               {truncateMessageTitle(
-                                                t.title || t.description
+                                                t.title || t.description || "",
                                               )}
                                             </div>
 
@@ -2359,13 +2837,13 @@ export const ConversationDetailPanel: React.FC<{
                                                 <span className="font-medium text-gray-700">
                                                   {t.updatedAt
                                                     ? new Date(
-                                                        t.updatedAt
+                                                        t.updatedAt,
                                                       ).toLocaleTimeString(
                                                         "vi-VN",
                                                         {
                                                           hour: "2-digit",
                                                           minute: "2-digit",
-                                                        }
+                                                        },
                                                       )
                                                     : "--:--"}
                                                 </span>
@@ -2378,7 +2856,7 @@ export const ConversationDetailPanel: React.FC<{
                                                     ✓{" "}
                                                     {
                                                       t.checklist.filter(
-                                                        (c) => c.done
+                                                        (c) => c.done,
                                                       ).length
                                                     }
                                                     /{t.checklist.length} mục
@@ -2386,20 +2864,12 @@ export const ConversationDetailPanel: React.FC<{
                                                 )}
                                             </div>
 
-                                            {/* WorkType + Variant */}
-                                            {(t.workTypeName ||
-                                              t.checklistVariantName) && (
+                                            {/* WorkType */}
+                                            {t.workTypeName && (
                                               <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-                                                {t.workTypeName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                                                    {t.workTypeName}
-                                                  </span>
-                                                )}
-                                                {t.checklistVariantName && (
-                                                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    {t.checklistVariantName}
-                                                  </span>
-                                                )}
+                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                                  {t.workTypeName}
+                                                </span>
                                               </div>
                                             )}
                                           </div>
@@ -2407,7 +2877,7 @@ export const ConversationDetailPanel: React.FC<{
                                       </div>
                                     </div>
                                   );
-                                }
+                                },
                               );
                             })()}
                           </div>
@@ -2436,8 +2906,8 @@ export const ConversationDetailPanel: React.FC<{
           onClose={() => setTemplateOpen(false)}
           workTypeName={workTypeName}
           template={workTypeTemplate}
-          conversationId={groupId}
           checklistVariants={checklistVariants}
+          conversationId={groupId ?? ""}
           activeVariantId={
             activeVariantId !== "__default__" ? activeVariantId : undefined
           }
@@ -2524,13 +2994,21 @@ export const ConversationDetailPanel: React.FC<{
     max-height:  2000px;
   }
 `}</style>
-
       {/* Add Member Dialog */}
       <AddMemberDialog
         open={showAddMemberDialog}
         onClose={() => setShowAddMemberDialog(false)}
         groupId={groupId}
-        existingMemberIds={members.map(m => m.id)}
+        conversationId={groupId}
+        existingMemberIds={members.map((m) => m.id)}
+      />
+
+      {/* 🆕 NEW: Confirmed Info Transfer Sheet */}
+      <ConfirmedInfoTransferSheet
+        open={confirmedInfoTransferSheet.open}
+        confirmedInfo={confirmedInfoTransferSheet.confirmedInfo}
+        onClose={() => setConfirmedInfoTransferSheet({ open: false })}
+        onConfirm={handleConfirmedInfoTransferConfirm}
       />
     </aside>
   );

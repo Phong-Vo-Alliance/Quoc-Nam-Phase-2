@@ -1,31 +1,18 @@
-// useMessageRealtime hook - Handle realtime message updates via SignalR (REFACTORED v2)
+// useMessageRealtime hook - Handle realtime message updates via SignalR (REFACTORED v3)
+// v3: Removed categories/directs cache update - now handled by useCategoriesRealtime only
 
 import { useEffect, useCallback, useState, useRef } from "react";
-import { useQueryClient, InfiniteData } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { chatHub, SIGNALR_EVENTS, type UserTypingEvent } from "@/lib/signalr";
 import { useSignalRConnection } from "@/providers/SignalRProvider";
 import { useAuthStore } from "@/stores/authStore";
 import { messageKeys } from "./queries/keys/messageKeys";
-import { conversationKeys } from "./queries/keys/conversationKeys";
-import { categoriesKeys } from "./queries/useCategories"; // 🆕 For updating categories
 import { tasksKeys } from "./queries/useTasks";
 import type {
   ChatMessage,
   ChatMessageContentType,
   GetMessagesResponse,
 } from "@/types/messages";
-import type {
-  GroupConversation,
-  DirectConversation,
-} from "@/types/conversations";
-import type { CategoryWithUnread } from "@/types/categories";
-
-// API response structure for conversation pages
-type ConversationPage = {
-  items: (GroupConversation | DirectConversation)[];
-  nextCursor: string | null;
-  hasMore: boolean;
-};
 
 interface UseMessageRealtimeOptions {
   conversationId: string;
@@ -45,20 +32,18 @@ interface MessageSentEvent {
 }
 
 /**
- * Hook to handle realtime message updates for a specific conversation (REFACTORED v2)
+ * Hook to handle realtime message updates for a specific conversation (REFACTORED v3)
  *
  * Primary Responsibilities:
  * - ✅ Receives MESSAGE_SENT via SignalR and updates message cache
- * - ✅ Updates conversation cache (lastMessage, unreadCount)
  * - ✅ Handles typing indicators (USER_TYPING)
  * - ✅ Refetches tasks when SYS messages arrive
  * - ❌ Does NOT join conversation group (already joined by useConversationRealtime)
+ * - ❌ Does NOT update categories/directs cache (handled by useCategoriesRealtime)
  *
- * Changes from v1:
- * - Removed duplicate group join (conversation already joined globally)
- * - Added comprehensive conversation cache updates
- * - Added SYS message handling for task refetch
- * - Added proper unreadCount management
+ * Changes from v2:
+ * - Removed categories/directs cache update to fix unread badge race condition
+ * - See: docs/bugfixes/unread-badge-not-showing-after-read-20260213/
  */
 export function useMessageRealtime({
   conversationId,
@@ -113,8 +98,6 @@ export function useMessageRealtime({
         isOwnMessage: message.senderId === currentUserId,
       });
 
-      const isOwnMessage = message.senderId === currentUserId;
-
       // 1. Add message to MESSAGE cache
       queryClient.setQueryData<{
         pages: GetMessagesResponse[];
@@ -144,84 +127,13 @@ export function useMessageRealtime({
         };
       });
 
-      // 2. Update CATEGORIES cache - Update lastMessage and unreadCount directly (don't invalidate)
-      const categoriesData = queryClient.getQueryData<CategoryWithUnread[]>(
-        categoriesKeys.list(),
-      );
+      // ❌ REMOVED: Categories cache update - Now handled ONLY by useCategoriesRealtime
+      // This was causing race condition where useMessageRealtime would overwrite unread counts
+      // with stale isConversationActive value (hook tracks old conversation after switch)
+      // See: docs/bugfixes/unread-badge-not-showing-after-read-20260213/
 
-      if (categoriesData) {
-        const updatedCategories = categoriesData.map((category) => ({
-          ...category,
-          conversations: category.conversations.map((conv) => {
-            if (conv.conversationId === message.conversationId) {
-              const currentUnreadCount = conv.unreadCount ?? 0;
-              const newUnreadCount = isOwnMessage ? 0 : currentUnreadCount + 1;
-
-              return {
-                ...conv,
-                lastMessage: {
-                  senderId: message.senderId,
-                  senderName: message.senderName,
-                  content: message.content,
-                  sentAt: message.sentAt,
-                  attachments: message.attachments, // 🐛 FIX: Add missing attachments for formatMessagePreview
-                },
-                unreadCount: newUnreadCount,
-              };
-            }
-            return conv;
-          }),
-        }));
-
-        queryClient.setQueryData(categoriesKeys.list(), updatedCategories);
-      }
-
-      // 3. Update CONVERSATION cache (directs) - Same logic
-      const directsData = queryClient.getQueryData<
-        InfiniteData<ConversationPage>
-      >(conversationKeys.directs());
-
-      if (directsData?.pages) {
-        const updatedPages = directsData.pages.map((page) => ({
-          ...page,
-          items: page.items.map((conv) => {
-            if (conv.id === message.conversationId) {
-              const currentUnreadCount = conv.unreadCount ?? 0;
-              const newUnreadCount = isOwnMessage ? 0 : currentUnreadCount + 1;
-
-              return {
-                ...conv,
-                lastMessage: {
-                  id: message.id,
-                  conversationId: message.conversationId,
-                  senderId: message.senderId,
-                  senderName: message.senderName,
-                  parentMessageId: message.parentMessageId,
-                  content: message.content,
-                  contentType: message.contentType,
-                  sentAt: message.sentAt,
-                  editedAt: message.editedAt,
-                  linkedTaskId: message.linkedTaskId,
-                  reactions: message.reactions,
-                  attachments: message.attachments,
-                  replyCount: message.replyCount,
-                  isStarred: message.isStarred,
-                  isPinned: message.isPinned,
-                  threadPreview: message.threadPreview,
-                  mentions: message.mentions,
-                },
-                unreadCount: newUnreadCount,
-              };
-            }
-            return conv;
-          }),
-        }));
-
-        queryClient.setQueryData(conversationKeys.directs(), {
-          ...directsData,
-          pages: updatedPages,
-        });
-      }
+      // ❌ REMOVED: Directs cache update - Same reason as above
+      // useCategoriesRealtime handles unread counts for all conversations
 
       // 4. Special handling: Refetch tasks if SYS message (system-generated task update)
       if (message.contentType === "SYS" && message.conversationId) {
@@ -236,38 +148,45 @@ export function useMessageRealtime({
     [conversationId, queryClient, onNewMessage, currentUserId],
   );
 
-  // Handle typing indicator event
+  // Handle typing indicator event - User started typing
   const handleUserTyping = useCallback(
     (event: UserTypingEvent) => {
       // Only handle typing for this conversation
       if (event.conversationId !== conversationId) return;
 
       setTypingUsers((prev) => {
-        if (event.isTyping) {
-          // Add or update typing user
-          const existing = prev.find((u) => u.userId === event.userId);
-          if (existing) {
-            return prev.map((u) =>
-              u.userId === event.userId ? { ...u, timestamp: Date.now() } : u,
-            );
-          }
-          return [
-            ...prev,
-            {
-              userId: event.userId,
-              userName: event.userName,
-              timestamp: Date.now(),
-            },
-          ];
-        } else {
-          // Remove typing user
-          return prev.filter((u) => u.userId !== event.userId);
+        // Add or update typing user
+        const existing = prev.find((u) => u.userId === event.userId);
+        if (existing) {
+          return prev.map((u) =>
+            u.userId === event.userId ? { ...u, timestamp: Date.now() } : u,
+          );
         }
+        return [
+          ...prev,
+          {
+            userId: event.userId,
+            userName: "", // 🐛 FIX: userName not in event, will be cleaned up by timeout
+            timestamp: Date.now(),
+          },
+        ];
       });
 
       onUserTyping?.(event);
     },
     [conversationId, onUserTyping],
+  );
+
+  // Handle typing stopped event - User stopped typing
+  const handleUserStoppedTyping = useCallback(
+    (event: UserTypingEvent) => {
+      // Only handle typing for this conversation
+      if (event.conversationId !== conversationId) return;
+
+      // Remove typing user
+      setTypingUsers((prev) => prev.filter((u) => u.userId !== event.userId));
+    },
+    [conversationId],
   );
 
   // Setup SignalR listeners when connected
@@ -288,6 +207,10 @@ export function useMessageRealtime({
     chatHub.on<ChatMessage>(SIGNALR_EVENTS.NEW_MESSAGE, handleMessageSent);
     chatHub.on<ChatMessage>(SIGNALR_EVENTS.RECEIVE_MESSAGE, handleMessageSent);
     chatHub.on<UserTypingEvent>(SIGNALR_EVENTS.USER_TYPING, handleUserTyping);
+    chatHub.on<UserTypingEvent>(
+      SIGNALR_EVENTS.USER_STOPPED_TYPING,
+      handleUserStoppedTyping,
+    );
 
     // ❌ REMOVED: Duplicate group join
     // Conversation group is already joined by useConversationRealtime (global)
@@ -311,9 +234,19 @@ export function useMessageRealtime({
         SIGNALR_EVENTS.USER_TYPING,
         handleUserTyping as (...args: unknown[]) => void,
       );
+      chatHub.off(
+        SIGNALR_EVENTS.USER_STOPPED_TYPING,
+        handleUserStoppedTyping as (...args: unknown[]) => void,
+      );
       // ❌ REMOVED: Group leave (never joined in this hook)
     };
-  }, [conversationId, handleMessageSent, handleUserTyping, isConnected]);
+  }, [
+    conversationId,
+    handleMessageSent,
+    handleUserTyping,
+    handleUserStoppedTyping,
+    isConnected,
+  ]);
 
   // Cleanup stale typing indicators (after 3 seconds of no update)
   useEffect(() => {

@@ -4,12 +4,12 @@
  * TanStack Query mutation for login
  */
 
-import { useMutation } from '@tanstack/react-query';
-import { login } from '@/api/auth.api';
-import { useAuthStore } from '@/stores/authStore';
-import { getAuthErrorMessage } from '@/lib/validation/auth';
-import type { LoginRequest, LoginResponse } from '@/types/auth';
-import { getCurrentUser } from '@/utils/getCurrentUser';
+import { useMutation } from "@tanstack/react-query";
+import { login } from "@/api/auth.api";
+import { useAuthStore } from "@/stores/authStore";
+import { getAuthErrorMessage } from "@/lib/validation/auth";
+import type { LoginRequest, LoginResponse } from "@/types/auth";
+import { getCurrentUser } from "@/utils/getCurrentUser";
 
 interface UseLoginOptions {
   onSuccess?: (data: LoginResponse) => void;
@@ -33,18 +33,21 @@ export function useLogin(options?: UseLoginOptions) {
     onSuccess: async (data) => {
       // Update auth store with user and token
       loginSuccess(data.user, data.accessToken);
-      
+
       // Fetch and update user with departments if missing
       try {
         const userWithDepartments = await getCurrentUser();
-        if (userWithDepartments.departments && userWithDepartments.departments.length > 0) {
+        if (
+          userWithDepartments.departments &&
+          userWithDepartments.departments.length > 0
+        ) {
           // Update auth store with complete user data including departments
           useAuthStore.getState().setUser(userWithDepartments);
         }
       } catch (error) {
-        console.warn('Failed to fetch user departments after login:', error);
+        console.warn("Failed to fetch user departments after login:", error);
       }
-      
+
       options?.onSuccess?.(data);
     },
     onError: (error: Error & { errorCode?: string }) => {
@@ -61,12 +64,12 @@ export function useLogin(options?: UseLoginOptions) {
  * Get user-friendly error message from login error
  */
 export function getLoginErrorMessage(
-  error: Error & { errorCode?: string }
+  error: Error & { errorCode?: string },
 ): string {
   if (error.errorCode) {
     return getAuthErrorMessage(error.errorCode);
   }
-  return getAuthErrorMessage('UNKNOWN_ERROR');
+  return getAuthErrorMessage("UNKNOWN_ERROR");
 }
 
 export default useLogin;

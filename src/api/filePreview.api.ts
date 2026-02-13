@@ -13,8 +13,6 @@ import { API_ENDPOINTS } from "@/config/env.config";
 import type {
   FilePreviewRequest,
   FilePreviewResponse,
-  PdfRenderRequest,
-  PdfRenderResponse,
 } from "@/types/filePreview";
 
 // Use file API endpoint
@@ -86,9 +84,15 @@ export async function getFilePreview(
 ): Promise<FilePreviewResponse> {
   try {
     const pageNumber = request.page || 1;
+    const dpi = request.dpi || 200; // Default DPI = 200 per user decision
+
     const response = await fileApiClient.get<Blob>(
-      `/api/Files/${request.fileId}/preview?page=${pageNumber}`,
+      `/api/Files/${request.fileId}/preview-page`,
       {
+        params: {
+          page: pageNumber,
+          dpi: dpi,
+        },
         responseType: "blob",
       },
     );
@@ -122,63 +126,8 @@ export async function getFilePreview(
   }
 }
 
-/**
- * Render a specific PDF page as PNG image
- * Used for pages 2+ (page 1 comes from getFilePreview)
- *
- * @param request - PDF render request parameters
- * @returns Promise with PNG image blob
- * @throws Error nếu không tìm thấy trang (404) hoặc lỗi kết nối mạng
- *
- * @example
- * const result = await renderPdfPage({
- *   fileId: "abc-123",
- *   pageNumber: 2,
- *   dpi: 300
- * });
- * const imageUrl = URL.createObjectURL(result.data);
- */
-export async function renderPdfPage(
-  request: PdfRenderRequest,
-): Promise<PdfRenderResponse> {
-  try {
-    const params = new URLSearchParams();
-    params.append("page", request.pageNumber.toString());
-    if (request.dpi) {
-      params.append("dpi", request.dpi.toString());
-    } else {
-      params.append("dpi", "300"); // Default DPI
-    }
-
-    const response = await fileApiClient.get<Blob>(
-      `/api/pdf/${request.fileId}/pages/${
-        request.pageNumber
-      }/render?${params.toString()}`,
-      {
-        responseType: "blob",
-      },
-    );
-
-    return {
-      data: response.data,
-      headers: {
-        "content-type": response.headers["content-type"] || "image/png",
-      },
-    };
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 404) {
-        throw new Error("Không tìm thấy trang");
-      }
-      throw new Error(
-        `Không thể hiển thị trang: ${
-          error.response?.statusText || error.message
-        }`,
-      );
-    }
-    throw error;
-  }
-}
+// renderPdfPage function removed - use getFilePreview for all pages
+// Decision: User approved single API for all pages with dpi=200
 
 /**
  * Create an object URL from blob data

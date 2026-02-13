@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import {
   chatHub,
+  taskHub,
   type SignalRConnectionState,
   SIGNALR_EVENTS,
 } from "@/lib/signalr";
@@ -31,6 +32,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   const [connectionState, setConnectionState] =
     useState<SignalRConnectionState>("Disconnected");
   const accessToken = useAuthStore((state) => state.accessToken);
+  const taskAccessToken = useAuthStore((state) => state.taskAccessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const connectionAttemptRef = useRef(false);
   const shouldConnectRef = useRef(false);
@@ -44,8 +46,6 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
       console.log("[SignalRProvider] Handlers already registered, skipping");
       return;
     }
-
-    console.log("[SignalRProvider] Registering global event handlers...");
 
     // ConversationCreated - Most important for the broadcast issue
     chatHub.on(SIGNALR_EVENTS.CONVERSATION_CREATED, (event: any) => {
@@ -127,7 +127,18 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
 
     try {
       setConnectionState("Connecting");
+      
+      // Connect Chat Hub
       await chatHub.start(accessToken || undefined);
+
+      // Connect Task Hub (parallel)
+      try {
+        await taskHub.start(taskAccessToken || undefined);
+        console.log("[SignalRProvider] ✅ Both Chat and Task hubs connected");
+      } catch (taskError) {
+        console.warn("[SignalRProvider] Task hub connection failed (non-critical):", taskError);
+        // Task hub failure is non-critical, continue with chat hub only
+      }
 
       if (mountedRef.current && shouldConnectRef.current) {
         setConnectionState("Connected");
@@ -143,7 +154,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     } finally {
       connectionAttemptRef.current = false;
     }
-  }, [accessToken, registerGlobalHandlers]);
+  }, [accessToken, taskAccessToken,  registerGlobalHandlers]);
 
   // Disconnect from SignalR
   const disconnect = useCallback(async () => {
@@ -151,7 +162,12 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
       // Unregister handlers before disconnecting
       unregisterGlobalHandlers();
 
-      await chatHub.stop();
+      // Disconnect both hubs
+      await Promise.all([
+        chatHub.stop(),
+        // taskHub.stop(),
+      ]);
+      
       if (mountedRef.current) {
         setConnectionState("Disconnected");
       }
@@ -195,6 +211,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
       // The connection will be stopped when component re-mounts with new state
       if (!connectionAttemptRef.current) {
         chatHub.stop();
+        // taskHub.stop(); // Also stop Task Hub
       }
     };
   }, [unregisterGlobalHandlers]);

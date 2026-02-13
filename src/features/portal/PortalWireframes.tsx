@@ -29,6 +29,8 @@ import { MainSidebar } from "./components/MainSidebar";
 import { ViewModeSwitcher } from "@/features/portal/components/ViewModeSwitcher";
 import { DepartmentTransferSheet } from "@/components/sheet/DepartmentTransferSheet";
 import { AssignTaskSheet } from "@/components/sheet/AssignTaskSheet";
+import { taskKeys } from "@/hooks/queries/keys/taskKeys";
+import { checklistTemplateKeys } from "@/hooks/queries/useChecklistTemplates";
 import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
 import type { ChecklistTemplateMap, ChecklistTemplateItem } from "./types";
 import { TaskLogThreadSheet } from "./workspace/TaskLogThreadSheet";
@@ -43,7 +45,7 @@ import {
 } from "@/hooks/mutations/useStarMessage";
 // TODO: Migrate wireframe to use categories API instead of mock data
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
-import { WorkTypeManagerDialog } from "./components/WorkTypeManagerDialog";
+import { WorkTypeManagerDialog } from "./worktype-manager";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useTabTitle } from "@/hooks/useTabTitle"; // 🆕 For tab title with unread count
 
@@ -70,18 +72,15 @@ export default function PortalWireframes({
 
   // Handle task creation - invalidate queries and close modal
   const handleTaskCreated = () => {
-    // Invalidate conversation-related queries to refresh the detail panel
-    queryClient.invalidateQueries({
-      predicate: (query) => {
-        // Invalidate any query keys that might contain conversation data
-        const queryKey = query.queryKey;
-        return (
-          queryKey.includes("conversation") ||
-          queryKey.includes("tasks") ||
-          queryKey.includes("messages")
-        );
-      },
-    });
+    // Invalidate only the specific queries that need to be refreshed
+    if (currentConversationId) {
+      queryClient.invalidateQueries({
+        queryKey: taskKeys.linkedTasks(currentConversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: checklistTemplateKeys.list(currentConversationId),
+      });
+    }
     // Close the modal
     closeModal();
   };
@@ -243,14 +242,19 @@ export default function PortalWireframes({
   /**
    * Get current user's display name
    * @returns The display name of the current user
+   * Updated: 2026-02-11 - Use fullName from API instead of identifier
    */
   const getCurrentUserName = (): string => {
     const user = useAuthStore.getState().user;
+    // ✅ Priority: fullName > identifier > fallback
+    if (user?.fullName) {
+      return user.fullName;
+    }
     if (user?.identifier) {
       return user.identifier;
     }
     // Fallback based on role permissions
-    return hasLeaderPermissions() ? "Thanh Trúc" : "Diễm Chi";
+    return hasLeaderPermissions() ? "Trưởng nhóm" : "Nhân viên";
   };
 
   // Dynamic user based on role permissions
@@ -933,6 +937,7 @@ export default function PortalWireframes({
     source?: "message" | "receivedInfo";
     message?: Message;
     info?: ReceivedInfo;
+    confirmedInfoId?: string; // Track confirmed info ID to mark as finished
   }>({
     open: false,
   });
@@ -943,6 +948,7 @@ export default function PortalWireframes({
       source: "receivedInfo",
       info,
       message: undefined, // vì assign từ info, không phải từ message
+      confirmedInfoId: info.id, // Pass confirmed info ID to mark as finished
     });
   };
 
@@ -1428,8 +1434,11 @@ export default function PortalWireframes({
         <AssignTaskSheet
           open={assignSheet.open}
           conversationId={currentConversationId}
-          messageId={assignSheet.message?.id}
-          messageContent={assignSheet.message?.content}
+          messageId={assignSheet.message?.id || assignSheet.info?.messageId}
+          messageContent={
+            assignSheet.message?.content || assignSheet.info?.title
+          }
+          confirmedInfoId={assignSheet.confirmedInfoId}
           onClose={() => setAssignSheet({ open: false })}
           onTaskCreated={() => {
             setAssignSheet({ open: false });

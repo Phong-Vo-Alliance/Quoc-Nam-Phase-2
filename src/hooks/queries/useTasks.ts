@@ -1,27 +1,29 @@
 // useTasks - Hook to fetch tasks from Task API
 
-import { useQuery } from '@tanstack/react-query';
-import { getTasks } from '@/api/tasks.api';
-import type { TaskDetailResponse } from '@/types/tasks_api';
+import { useQuery } from "@tanstack/react-query";
+import { getTasks } from "@/api/tasks.api";
+import type { TaskDetailResponse } from "@/types/tasks_api";
+import { normalizeTaskFromAPI } from "@/features/portal/types";
+import type { Task } from "@/features/portal/types";
 
 /**
  * Query key factory for tasks
  */
 export const tasksKeys = {
-  all: ['tasks'] as const,
-  lists: () => [...tasksKeys.all, 'list'] as const,
+  all: ["tasks"] as const,
+  lists: () => [...tasksKeys.all, "list"] as const,
   list: (filters?: {
-    userTask?: 'assigned' | 'created' | 'related';
+    userTask?: "assigned" | "created" | "related";
     conversationId?: string;
     messageId?: string;
   }) => [...tasksKeys.lists(), filters] as const,
-  details: () => [...tasksKeys.all, 'detail'] as const,
+  details: () => [...tasksKeys.all, "detail"] as const,
   detail: (id: string) => [...tasksKeys.details(), id] as const,
 };
 
 /**
  * Hook to fetch tasks with optional filters
- * 
+ *
  * @param params - Query parameters for filtering tasks
  * @param params.userTask - Filter by user relationship: "assigned", "created", or "related"
  * @param params.conversationId - Filter by conversation ID
@@ -30,7 +32,7 @@ export const tasksKeys = {
  * @returns Query result with tasks
  */
 export function useTasks(params?: {
-  userTask?: 'assigned' | 'created' | 'related';
+  userTask?: "assigned" | "created" | "related";
   conversationId?: string;
   messageId?: string;
   enabled?: boolean;
@@ -40,6 +42,8 @@ export function useTasks(params?: {
   return useQuery({
     queryKey: tasksKeys.list(filters),
     queryFn: () => getTasks(filters),
+    select: (data) =>
+      data.map((task) => normalizeTaskFromAPI(task as unknown as Task)),
     enabled,
     staleTime: 1000 * 30, // 30 seconds - tasks change frequently
   });
@@ -48,12 +52,12 @@ export function useTasks(params?: {
 /**
  * Hook to fetch tasks assigned to the current user
  */
-export function useAssignedTasks(options?: { 
+export function useAssignedTasks(options?: {
   enabled?: boolean;
   conversationId?: string;
 }) {
   return useTasks({
-    userTask: 'assigned',
+    userTask: "assigned",
     conversationId: options?.conversationId,
     enabled: options?.enabled,
   });
@@ -64,7 +68,7 @@ export function useAssignedTasks(options?: {
  */
 export function useCreatedTasks(options?: { enabled?: boolean }) {
   return useTasks({
-    userTask: 'created',
+    userTask: "created",
     enabled: options?.enabled,
   });
 }
@@ -74,7 +78,7 @@ export function useCreatedTasks(options?: { enabled?: boolean }) {
  */
 export function useRelatedTasks(options?: { enabled?: boolean }) {
   return useTasks({
-    userTask: 'related',
+    userTask: "related",
     enabled: options?.enabled,
   });
 }
@@ -83,7 +87,7 @@ export function useRelatedTasks(options?: { enabled?: boolean }) {
  * Hook to fetch all tasks for a specific conversation
  * No user task filter - returns all tasks linked to the conversation
  */
-export function useAllTasks(options?: { 
+export function useAllTasks(options?: {
   conversationId?: string;
   enabled?: boolean;
 }) {
@@ -112,7 +116,7 @@ export function hasTasks(data: TaskDetailResponse[] | undefined): boolean {
  */
 export function findTaskById(
   data: TaskDetailResponse[] | undefined,
-  taskId: string
+  taskId: string,
 ): TaskDetailResponse | undefined {
   return data?.find((task) => task.id === taskId);
 }
@@ -122,7 +126,7 @@ export function findTaskById(
  */
 export function filterTasksByStatus(
   data: TaskDetailResponse[] | undefined,
-  statusId: string
+  statusId: string,
 ): TaskDetailResponse[] {
   if (!data) return [];
   return data.filter((task) => task.status?.id === statusId);
@@ -133,7 +137,7 @@ export function filterTasksByStatus(
  */
 export function filterTasksByPriority(
   data: TaskDetailResponse[] | undefined,
-  priorityId: string
+  priorityId: string,
 ): TaskDetailResponse[] {
   if (!data) return [];
   return data.filter((task) => task.priority?.id === priorityId);

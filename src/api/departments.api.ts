@@ -5,6 +5,7 @@
 
 import { identityApiClient } from "./identityClient";
 import type { DepartmentMemberDto } from "@/types/identity";
+import type { GetDepartmentLeadersResponse } from "@/types/departments";
 
 /**
  * Get members of a specific department
@@ -42,5 +43,26 @@ export async function getAdminDepartmentMembers(
     `/api/admin/identity/departments/${departmentId}/members`
   );
   
+  return response.data;
+}
+
+/**
+ * Get leaders for multiple departments
+ * GET /api/v1/departments/leaders?departmentIds=id1,id2,id3
+ * 
+ * @param departmentIds - Array of department IDs
+ * @returns Array of department leaders (null if no leader assigned)
+ */
+export async function getDepartmentLeaders(
+  departmentIds: string[]
+): Promise<GetDepartmentLeadersResponse> {
+  const params = new URLSearchParams();
+  params.append("departmentIds", departmentIds.join(","));
+
+  const response = await identityApiClient.get<GetDepartmentLeadersResponse>(
+    "/api/v1/departments/leaders",
+    { params }
+  );
+
   return response.data;
 }

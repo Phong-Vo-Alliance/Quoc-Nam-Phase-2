@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { ConversationListSidebar } from "./ConversationListSidebar";
 import { ChatMessagePanel } from "./ChatMessagePanel";
-import { ConversationDetailPanel } from "./ConversationDetailPanel";
+import { ConversationDetailPanel } from "@/features/conversation-detail";
 import { PinnedMessagesPanel } from "../components/PinnedMessagesPanel";
 import { ChatMainContainer } from "../components/chat";
 import { EmptyChatState } from "../components/EmptyChatState";
@@ -25,6 +25,7 @@ import type {
   PinnedMessageDto,
   StarredMessageDto,
 } from "@/types/pinned_and_starred";
+import type { TaskDetailResponse } from "@/types/tasks_api";
 import { MessageSquareIcon, ClipboardListIcon, UserIcon } from "lucide-react";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useAllTasks } from "@/hooks/queries/useTasks";
@@ -33,6 +34,7 @@ import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW: Fetc
 import { useUpdateTask } from "@/hooks/mutations";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useMessageRealtime } from "@/hooks/useMessageRealtime"; // 🆕 MOVED from ChatMainContainer
+import { useTaskNotifications } from "@/hooks/useTaskNotifications"; // 🆕 Task SignalR notifications
 import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime"; // 🆕 MOVED from ChatMainContainer
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
@@ -469,6 +471,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   // Handles MemberAdded, CategoryDepartmentLinked events
   useCategoriesRealtime(categoriesQuery.data, selectedConversation?.id || "");
 
+  // 🆕 Task SignalR notifications - automatically refetch tasks when TasksUpdated event received
+  // Similar to SYS message handling in useMessageRealtime
+  useTaskNotifications();
+
   // Fetch conversation members from Chat API
   // This will re-fetch whenever selectedConversation changes (conversation switch)
   const {
@@ -586,9 +592,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       return tasks; // Fallback to prop tasks if no API data
     }
 
-    // Transform API tasks to local format
+    // Transform API tasks to local format (cast to TaskDetailResponse[])
     const transformedTasks = transformTasksToLocal(
-      tasksFromAPI,
+      tasksFromAPI as unknown as TaskDetailResponse[],
       selectedConversation?.id || "",
       selectedWorkTypeId || "",
     );
@@ -618,7 +624,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           data: {
             title: task.title,
             description: task.description || null,
-            priority: task.priority?.id || "Medium", // ✅ Extract id from TaskPriorityDto
+            priority: task.priority?.id || "medium", // ✅ Extract id from TaskPriorityDto
             dueDate: task.dueDate || null,
             conversationId: task.workTypeId || null,
             messageId: task.messageId || null,

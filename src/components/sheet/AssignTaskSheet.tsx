@@ -17,23 +17,27 @@ import {
 } from "@/components/ui/select";
 import React, { useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTaskConfig } from "@/hooks/queries/useTaskConfig";
+import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useFilteredAssignees } from "@/hooks/useFilteredAssignees";
 import { useCreateTask } from "@/hooks/mutations/useCreateTask";
 import { useLinkTaskToMessage } from "@/hooks/mutations/useLinkTaskToMessage";
 import { useAuthStore } from "@/stores/authStore";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { taskKeys } from "@/hooks/queries/keys/taskKeys";
+import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
 import { toast } from "sonner";
 import type { CreateTaskRequest } from "@/types/tasks_api";
 import { sendMessage } from "@/api/messages.api";
 import type { SendChatMessageRequest } from "@/types/messages";
+import { updateInformationConfirmed } from "@/api/information_confirmed.api";
 
 interface Props {
   open: boolean;
   conversationId?: string;
   messageId?: string;
   messageContent?: string;
+  confirmedInfoId?: string; // ID of confirmed information to mark as finished
   onClose: () => void;
   onTaskCreated?: () => void;
   onTabChange?: (tab: "info" | "order" | "tasks" | "chat") => void;
@@ -42,14 +46,12 @@ interface Props {
 interface FormData {
   title: string;
   assignTo: string;
-  priority: string;
   checklistTemplateId: string;
 }
 
 interface FormErrors {
   title?: string;
   assignTo?: string;
-  priority?: string;
   checklistTemplateId?: string;
 }
 
@@ -72,6 +74,7 @@ export function AssignTaskSheet({
   conversationId,
   messageId,
   messageContent,
+  confirmedInfoId,
   onClose,
   onTaskCreated,
   onTabChange,
@@ -79,12 +82,10 @@ export function AssignTaskSheet({
   const currentUser = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
 
-  // Fetch task configuration data
-  const {
-    priorities,
-    templates,
-    isLoading: configLoading,
-  } = useTaskConfig(open);
+  // Fetch checklist templates filtered by conversation
+  const { data: templates, isLoading: configLoading } = useChecklistTemplates(
+    open && conversationId ? conversationId : undefined,
+  );
 
   // Fetch conversation members
   const { data: membersData, isLoading: membersLoading } =
@@ -95,6 +96,28 @@ export function AssignTaskSheet({
 
   // Members data is array directly from API
   const members = membersData || [];
+
+  // Filter members by department for Leader role
+  const { filteredMembers: assigneeOptions } = useFilteredAssignees({
+    conversationId: conversationId || "",
+    enabled: open && !!conversationId,
+  });
+
+  // Normalize members for display (handle both MinimalMember and ConversationMember types)
+  const displayMembers = useMemo(() => {
+    if (assigneeOptions) {
+      // Use filtered members (MinimalMember format)
+      return assigneeOptions.map((m) => ({
+        id: m.id,
+        name: m.name,
+      }));
+    }
+    // Fallback to conversation members (ConversationMember format)
+    return members.map((m) => ({
+      id: m.userId,
+      name: m.userInfo?.fullName || m.userInfo?.userName || m.userName,
+    }));
+  }, [assigneeOptions, members]);
 
   // Link task to message mutation
   const linkTaskMutation = useLinkTaskToMessage({
@@ -124,7 +147,10 @@ export function AssignTaskSheet({
           const assignedMember = members.find(
             (m) => m.userId === formData.assignTo,
           );
-          const assignedUserName = assignedMember?.userName || "người dùng";
+          const assignedUserName =
+            assignedMember?.userInfo?.fullName ||
+            assignedMember?.userName ||
+            "người dùng";
 
           const systemMessageData: SendChatMessageRequest = {
             conversationId,
@@ -162,21 +188,37 @@ export function AssignTaskSheet({
 
   // Create task mutation
   const createTaskMutation = useCreateTask({
-    onSuccess: (createdTaskId) => {
+    onSuccess: async (createdTaskId) => {
       console.log("Task created with ID:", createdTaskId);
       console.log("messageId:", messageId);
       console.log("conversationId:", conversationId);
+      console.log("confirmedInfoId:", confirmedInfoId);
+
+      // Mark confirmed info as finished if this task was created from confirmed info
+      if (confirmedInfoId) {
+        try {
+          await updateInformationConfirmed(confirmedInfoId, {
+            isFinished: true,
+          });
+          console.log("Marked confirmed info as finished:", confirmedInfoId);
+          // Invalidate information confirmed queries to refresh the list
+          queryClient.invalidateQueries({
+            queryKey: informationConfirmedKeys.all,
+          });
+        } catch (error) {
+          console.error("Failed to mark confirmed info as finished:", error);
+          // Don't block the flow if this fails
+        }
+      }
 
       // Task created successfully - now link it to the message if messageId exists
       if (messageId && createdTaskId) {
-        console.log("Linking task to message...");
         linkTaskMutation.mutate({
           messageId,
           taskId: createdTaskId,
         });
       } else {
         // No message to link - just close and invalidate
-        console.log("No message to link, just invalidating...");
         if (conversationId) {
           queryClient.invalidateQueries({
             queryKey: taskKeys.linkedTasks(conversationId),
@@ -198,7 +240,6 @@ export function AssignTaskSheet({
   const [formData, setFormData] = useState<FormData>({
     title: "",
     assignTo: "",
-    priority: "",
     checklistTemplateId: "",
   });
 
@@ -206,7 +247,7 @@ export function AssignTaskSheet({
 
   // Get selected template for displaying items
   const selectedTemplate = useMemo(() => {
-    if (!formData.checklistTemplateId) return null;
+    if (!formData.checklistTemplateId || !templates) return null;
     return templates.find((t) => t.id === formData.checklistTemplateId);
   }, [formData.checklistTemplateId, templates]);
 
@@ -214,14 +255,14 @@ export function AssignTaskSheet({
   useEffect(() => {
     if (!open) return;
 
-    // Auto-fill title from message content (only if empty)
-    if (messageContent && !formData.title) {
+    // Auto-fill title from message content (always when available)
+    if (messageContent) {
       setFormData((prev) => ({
         ...prev,
         title: messageContent.substring(0, 255),
       }));
     }
-  }, [open, messageContent, formData.title]);
+  }, [open, messageContent]);
 
   // Set default assignee when sheet opens and user is available
   useEffect(() => {
@@ -233,36 +274,23 @@ export function AssignTaskSheet({
     }));
   }, [open, currentUser?.id, formData.assignTo]);
 
-  // Set default priority when priorities load
-  useEffect(() => {
-    if (!open || priorities.length === 0 || formData.priority) return;
-
-    setFormData((prev) => ({
-      ...prev,
-      priority: priorities[0].code || priorities[0].id,
-    }));
-  }, [open, priorities, formData.priority]);
-
   // Set default checklist template when sheet opens
   useEffect(() => {
-    if (!open || !conversationId || formData.checklistTemplateId) return;
+    if (!open || !conversationId || formData.checklistTemplateId || !templates)
+      return;
 
-    // Filter templates for this conversation
-    const conversationTemplates = templates.filter(
-      (t) => t.conversationId === conversationId
-    );
-
-    if (conversationTemplates.length === 0) {
+    // Templates are already filtered by conversationId from API
+    if (templates.length === 0) {
       // No templates for this conversation - leave empty
       return;
     }
 
     // Find default template for this conversation
-    const defaultTemplate = conversationTemplates.find((t) => t.isDefault);
+    const defaultTemplate = templates.find((t) => t.isDefault);
 
     setFormData((prev) => ({
       ...prev,
-      checklistTemplateId: defaultTemplate?.id || conversationTemplates[0].id,
+      checklistTemplateId: defaultTemplate?.id || templates[0].id,
     }));
   }, [open, conversationId, templates, formData.checklistTemplateId]);
 
@@ -272,7 +300,6 @@ export function AssignTaskSheet({
       setFormData({
         title: "",
         assignTo: "",
-        priority: "",
         checklistTemplateId: "",
       });
       setFormErrors({});
@@ -291,10 +318,6 @@ export function AssignTaskSheet({
 
     if (!formData.assignTo) {
       errors.assignTo = "Vui lòng chọn người thực hiện";
-    }
-
-    if (!formData.priority) {
-      errors.priority = "Vui lòng chọn độ ưu tiên";
     }
 
     // checklistTemplateId is optional - can be null if no templates available
@@ -316,7 +339,7 @@ export function AssignTaskSheet({
 
     const createTaskData: CreateTaskRequest = {
       title: formData.title.trim(),
-      priority: formData.priority,
+      priority: "low", // Hardcoded default priority
       assignTo: formData.assignTo,
       conversationId,
       checklistTemplateId: formData.checklistTemplateId || null,
@@ -353,7 +376,10 @@ export function AssignTaskSheet({
         </SheetHeader>
 
         {configLoading || membersLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div
+            className="flex items-center justify-center py-8"
+            data-testid="task-sheet-loading"
+          >
             <Loader2 className="h-6 w-6 animate-spin text-brand-600" />
           </div>
         ) : (
@@ -368,6 +394,7 @@ export function AssignTaskSheet({
               </Label>
               <Input
                 id="task-name"
+                data-testid="task-title-input"
                 value={formData.title}
                 onChange={(e) => handleFieldChange("title", e.target.value)}
                 placeholder="Nhập tên công việc"
@@ -393,15 +420,20 @@ export function AssignTaskSheet({
               >
                 <SelectTrigger
                   id="assign-to"
+                  data-testid="task-assignee-select"
                   className={formErrors.assignTo ? "border-red-500" : ""}
                 >
                   <SelectValue placeholder="Chọn nhân viên" />
                 </SelectTrigger>
-                <SelectContent>
-                  {members.map((member) => (
-                    <SelectItem key={member.userId} value={member.userId}>
-                      {member.userName}
-                      {member.userId === currentUser?.id && " (Tôi)"}
+                <SelectContent data-testid="task-assignee-list">
+                  {displayMembers.map((member) => (
+                    <SelectItem
+                      key={member.id}
+                      value={member.id}
+                      data-testid={`task-assignee-item-${member.id}`}
+                    >
+                      {member.name}
+                      {member.id === currentUser?.id && " (Tôi)"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -411,46 +443,6 @@ export function AssignTaskSheet({
               )}
             </div>
 
-            {/* Priority */}
-            {/* <div className="space-y-2">
-              <Label
-                htmlFor="priority"
-                className="text-xs font-medium text-gray-700"
-              >
-                Độ ưu tiên <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={formData.priority || undefined}
-                onValueChange={(value) => handleFieldChange("priority", value)}
-              >
-                <SelectTrigger
-                  id="priority"
-                  className={formErrors.priority ? "border-red-500" : ""}
-                >
-                  <SelectValue placeholder="Chọn độ ưu tiên" />
-                </SelectTrigger>
-                <SelectContent>
-                  {priorities.map((priority) => (
-                    <SelectItem
-                      key={priority.id}
-                      value={priority.code || priority.id}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="h-3 w-3 rounded-full"
-                          style={{ backgroundColor: priority.color || "#gray" }}
-                        />
-                        {priority.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.priority && (
-                <p className="text-xs text-red-500">{formErrors.priority}</p>
-              )}
-            </div> */}
-
             {/* Checklist Template */}
             <div className="space-y-2">
               <Label
@@ -459,7 +451,7 @@ export function AssignTaskSheet({
               >
                 Mẫu checklist
               </Label>
-              {templates.filter(template => template.conversationId === conversationId).length === 0 ? (
+              {!templates || templates.length === 0 ? (
                 <div className="text-sm text-gray-500 italic py-2">
                   Không có Mẫu checklist nào cho cuộc trò chuyện này
                 </div>
@@ -479,15 +471,17 @@ export function AssignTaskSheet({
                   >
                     <SelectValue placeholder="Chọn mẫu checklist" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {templates
-                      .filter(template => template.conversationId === conversationId)
-                      .map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                          {template.isDefault && " (Mặc định)"}
-                        </SelectItem>
-                      ))}
+                  <SelectContent data-testid="checklist-template-list">
+                    {(templates || []).map((template) => (
+                      <SelectItem
+                        key={template.id}
+                        value={template.id}
+                        data-testid={`checklist-template-item-${template.id}`}
+                      >
+                        {template.name}
+                        {template.isDefault && " (Mặc định)"}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
@@ -502,11 +496,17 @@ export function AssignTaskSheet({
             {selectedTemplate &&
               selectedTemplate.items &&
               selectedTemplate.items.length > 0 && (
-                <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div
+                  className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3"
+                  data-testid="checklist-preview"
+                >
                   <div className="text-xs font-medium text-gray-700">
                     Các mục checklist ({selectedTemplate.items.length})
                   </div>
-                  <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+                  <ul
+                    className="space-y-1.5 max-h-40 overflow-y-auto"
+                    data-testid="checklist-preview-items"
+                  >
                     {selectedTemplate.items
                       .sort((a, b) => a.order - b.order)
                       .map((item) => (
@@ -531,6 +531,7 @@ export function AssignTaskSheet({
             disabled={
               createTaskMutation.isPending || linkTaskMutation.isPending
             }
+            data-testid="task-cancel-button"
           >
             Huỷ
           </Button>

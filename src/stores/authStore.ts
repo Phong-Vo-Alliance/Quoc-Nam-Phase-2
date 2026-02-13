@@ -4,6 +4,7 @@ import {
   setAccessToken,
   removeAccessToken,
   clearAuthStorage,
+  setTaskAccessToken,
 } from "@/lib/auth/tokenStorage";
 import { getTokenExpiry } from "@/lib/auth/jwt";
 import type { LoginApiUser } from "@/types/auth";
@@ -14,9 +15,11 @@ import { useImageCacheStore } from "./imageCacheStore";
 import type { UserDepartmentDto } from "@/types/identity";
 
 // Auth user type (from login API)
+// Updated: 2026-02-11 - Added fullName field
 export interface AuthUser {
   id: string;
   identifier: string;
+  fullName?: string; // ✅ NEW: Full name for display (2026-02-11)
   roles: string[];
   departments?: UserDepartmentDto[];
 }
@@ -25,13 +28,15 @@ interface AuthState {
   // State
   user: AuthUser | null;
   accessToken: string | null;
+  taskAccessToken: string | null; // Token for Task API SignalR connection
   expiresAt: number | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 
   // Actions
   setUser: (user: AuthUser) => void;
-  loginSuccess: (user: LoginApiUser, accessToken: string) => void;
+  setTaskAccessToken: (token: string) => void;
+  loginSuccess: (user: LoginApiUser, accessToken: string, taskAccessToken?: string) => void;
   logout: () => void;
   clearAuth: () => void;
   setLoading: (loading: boolean) => void;
@@ -43,6 +48,7 @@ export const useAuthStore = create<AuthState>()(
       // Initial state
       user: null,
       accessToken: null,
+      taskAccessToken: null,
       expiresAt: null,
       isAuthenticated: false,
       isLoading: false,
@@ -54,7 +60,12 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         }),
 
-      loginSuccess: (apiUser, accessToken) => {
+      setTaskAccessToken: (token) => {
+        setTaskAccessToken(token);
+        set({ taskAccessToken: token });
+      },
+
+      loginSuccess: (apiUser, accessToken, taskAccessToken) => {
         // ✅ Clear previous user's chat state when logging in as different user
         const currentUser = useAuthStore.getState().user;
         if (currentUser && currentUser.id !== apiUser.id) {
@@ -65,6 +76,10 @@ export const useAuthStore = create<AuthState>()(
 
         // Store token in localStorage
         setAccessToken(accessToken);
+        // Note: taskAccessToken will be set after Task Hub negotiation completes
+        if (taskAccessToken) {
+          setTaskAccessToken(taskAccessToken);
+        }
 
         // Parse JWT to get expiry
         const expiresAt = getTokenExpiry(accessToken);
@@ -73,6 +88,7 @@ export const useAuthStore = create<AuthState>()(
         const user: AuthUser = {
           id: apiUser.id,
           identifier: apiUser.identifier,
+          fullName: apiUser.fullName, // ✅ Save fullName to localStorage
           roles: apiUser.roles,
           departments: apiUser.departments,
         };
@@ -80,6 +96,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           user,
           accessToken,
+          taskAccessToken: taskAccessToken || accessToken, // Use same token if taskAccessToken not provided
           expiresAt,
           isAuthenticated: true,
           isLoading: false,
@@ -107,6 +124,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
+          taskAccessToken: null,
           expiresAt: null,
           isAuthenticated: false,
           isLoading: false,
@@ -141,6 +159,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
+          taskAccessToken: null,
           expiresAt: null,
           isAuthenticated: false,
           isLoading: false,
@@ -163,8 +182,17 @@ export const useAuthStore = create<AuthState>()(
       name: "auth-storage",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        user: state.user,
+        user: state.user
+          ? {
+              id: state.user.id,
+              identifier: state.user.identifier,
+              fullName: state.user.fullName,
+              roles: state.user.roles,
+              departments: state.user.departments,
+            }
+          : null,
         accessToken: state.accessToken,
+        taskAccessToken: state.taskAccessToken,
         expiresAt: state.expiresAt,
         isAuthenticated: state.isAuthenticated,
       }),

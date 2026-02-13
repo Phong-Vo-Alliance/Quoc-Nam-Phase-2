@@ -19,6 +19,7 @@ export const AUTH_CONFIG = {
   // Storage keys
   storageKeys: {
     accessToken: "accessToken",
+    taskAccessToken: "taskAccessToken",
     user: "auth-storage", // Zustand persist key
   },
 

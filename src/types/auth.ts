@@ -1,7 +1,7 @@
 // Authentication related types
 
-import type { ID, Timestamps } from './common';
-import type { UserDepartmentDto } from './identity';
+import type { ID, Timestamps } from "./common";
+import type { UserDepartmentDto } from "./identity";
 
 export interface User extends Timestamps {
   id: ID;
@@ -16,9 +16,9 @@ export interface User extends Timestamps {
   lastActiveAt?: string;
 }
 
-export type UserRole = 'admin' | 'lead' | 'staff';
+export type UserRole = "admin" | "lead" | "staff";
 
-export type UserStatus = 'active' | 'inactive' | 'suspended';
+export type UserStatus = "active" | "inactive" | "suspended";
 
 // ============================================================
 // Login API Types (v1.0 - username based)
@@ -28,7 +28,7 @@ export type UserStatus = 'active' | 'inactive' | 'suspended';
  * Identifier type - Flexible for future changes
  * Currently uses 'username' (no format validation, just required)
  */
-export const IDENTIFIER_TYPE = 'username' as const;
+export const IDENTIFIER_TYPE = "username" as const;
 
 /**
  * Login credentials - sent to API
@@ -49,10 +49,12 @@ export interface LoginRequest {
 
 /**
  * Login API User - matches actual API response
+ * Updated: 2026-02-11 - Added fullName field
  */
 export interface LoginApiUser {
   id: string;
   identifier: string;
+  fullName?: string; // ✅ NEW: Full name from API (2026-02-11)
   roles: string[];
   departments?: UserDepartmentDto[];
 }
@@ -87,22 +89,22 @@ export const IDENTIFIER_PATTERNS = {
 // Labels for UI (Vietnamese)
 export const IDENTIFIER_LABELS = {
   username: {
-    label: 'Tài khoản',
-    placeholder: 'Nhập tài khoản của bạn',
-    errorRequired: 'Tài khoản là bắt buộc',
-    errorInvalid: '', // No format validation for username
+    label: "Tài khoản",
+    placeholder: "Nhập tài khoản của bạn",
+    errorRequired: "Tài khoản là bắt buộc",
+    errorInvalid: "", // No format validation for username
   },
   email: {
-    label: 'Email',
-    placeholder: 'Nhập email của bạn',
-    errorRequired: 'Email là bắt buộc',
-    errorInvalid: 'Email không hợp lệ',
+    label: "Email",
+    placeholder: "Nhập email của bạn",
+    errorRequired: "Email là bắt buộc",
+    errorInvalid: "Email không hợp lệ",
   },
   phone: {
-    label: 'Số điện thoại',
-    placeholder: 'Nhập số điện thoại (VD: 0901234567)',
-    errorRequired: 'Số điện thoại là bắt buộc',
-    errorInvalid: 'Số điện thoại không hợp lệ',
+    label: "Số điện thoại",
+    placeholder: "Nhập số điện thoại (VD: 0901234567)",
+    errorRequired: "Số điện thoại là bắt buộc",
+    errorInvalid: "Số điện thoại không hợp lệ",
   },
 } as const;
 

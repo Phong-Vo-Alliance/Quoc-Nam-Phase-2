@@ -25,6 +25,8 @@ import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useAuthStore } from "@/stores/authStore";
 import { useReplyStore } from "@/stores/replyStore"; // 🆕 NEW: Reply store
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW (CBN-002)
+import { useCreateInformationConfirmed } from "@/hooks/mutations/useCreateInformationConfirmed"; // 🆕 NEW: Confirmed information
+import { useInformationConfirmed } from "@/hooks/queries/useInformationConfirmed"; // 🆕 NEW: Confirmed information query
 import {
   saveSelectedConversation,
   getSelectedConversation,
@@ -291,7 +293,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   }, [internalSelectedCategoryId]);
 
   const [inputValue, setInputValue] = useState("");
-  const [currentMentions, setCurrentMentions] = useState<import("@/types/messages").MentionInputDto[]>([]);
+  const [currentMentions, setCurrentMentions] = useState<
+    import("@/types/messages").MentionInputDto[]
+  >([]);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<
     Map<string, FileUploadProgressState>
@@ -493,6 +497,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     enabled: showAllStarredModal,
   });
   // console.log(allStarredMessages);
+
+  // 🆕 NEW: Fetch confirmed information for this conversation
+  const { data: confirmedInfoData } = useInformationConfirmed(
+    {
+      conversationId,
+    },
+    { enabled: !!conversationId },
+  );
+
+  // 🆕 NEW: Create Set of message IDs that have confirmed information
+  const confirmedMessageIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (confirmedInfoData?.data) {
+      confirmedInfoData.data.forEach((info) => {
+        ids.add(info.messageId);
+      });
+    }
+    return ids;
+  }, [confirmedInfoData]);
+
   // Send message mutation
   const sendMessageMutation = useSendMessage({
     workspaceId,
@@ -511,7 +535,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // ❌ REMOVED: useMessageRealtime - Moved to parent (WorkspaceView) to avoid re-renders
   // ❌ REMOVED: useCategoriesRealtime - Moved to parent (WorkspaceView) to avoid re-renders
   // Parent component handles real-time message and category updates for better performance
-  const typingUsers: Array<{ userId: string; userName: string; timestamp: number }> = []; // Empty array since moved to parent
+  const typingUsers: Array<{
+    userId: string;
+    userName: string;
+    timestamp: number;
+  }> = []; // Empty array since moved to parent
 
   // Typing indicator
   const { handleTyping, stopTyping } = useSendTypingIndicator({
@@ -885,9 +913,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // File validation
   const { validateAndAdd } = useFileValidation();
 
-  // 🐛 FIX: Mark conversation as read when switching conversations OR receiving new messages
+  // 🐛 FIX: Mark conversation as read when entering conversation OR receiving new messages
   const markAsReadMutation = useMarkConversationAsRead();
-  const isFirstMountRef = useRef(true);
+  const lastMarkedConversationRef = useRef<string | undefined>(undefined);
   const lastMarkedMessageIdRef = useRef<string | undefined>(undefined);
 
   // Get last message ID from current messages
@@ -895,34 +923,24 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     messages.length > 0 ? messages[messages.length - 1]?.id : undefined;
 
   useEffect(() => {
-    // Skip only on first mount
-    if (isFirstMountRef.current) {
-      isFirstMountRef.current = false;
-      prevConversationIdRef.current = conversationId;
-      lastMarkedMessageIdRef.current = lastMessageId;
+    // Skip if no conversation or no messages
+    if (!conversationId || !lastMessageId) {
       return;
     }
 
-    // Case 1: Switching to different conversation
-    const isConversationChanged =
-      conversationId && prevConversationIdRef.current !== conversationId;
+    // Check if we already marked this exact state
+    const alreadyMarked =
+      lastMarkedConversationRef.current === conversationId &&
+      lastMarkedMessageIdRef.current === lastMessageId;
 
-    // Case 2: New message arrived in current conversation
-    const hasNewMessage =
-      conversationId &&
-      conversationId === prevConversationIdRef.current &&
-      lastMessageId &&
-      lastMessageId !== lastMarkedMessageIdRef.current;
-
-    if (isConversationChanged || hasNewMessage) {
-      // Mark as read up to last message ID (optimistic update in conversation list)
+    if (!alreadyMarked) {
+      // Mark as read up to last message ID
       markAsReadMutation.mutate({ conversationId, messageId: lastMessageId });
 
-      // Update refs
+      // Update refs to prevent re-triggering for same state
+      lastMarkedConversationRef.current = conversationId;
       lastMarkedMessageIdRef.current = lastMessageId;
     }
-
-    prevConversationIdRef.current = conversationId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, lastMessageId]); // Trigger on conversation change OR new message
 
@@ -1123,132 +1141,140 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // Handle send message with file upload (Phase 2 - Batch Upload)
   // Updated to support mentions
-  const handleSend = useCallback(async (content: string, mentions?: import("@/types/messages").MentionInputDto[]) => {
-    // Phase 7: Check network status before sending
-    if (!isOnline) {
-      toast.error("Không có kết nối mạng. Vui lòng kiểm tra kết nối của bạn.");
-      return;
-    }
-
-    const messageContent = content.trim();
-    if (!messageContent && selectedFiles.length === 0) return;
-
-    stopTyping();
-    setIsUploading(true);
-
-    try {
-      if (selectedFiles.length === 0) {
-        // Case 1: Text-only message (no files)
-        await sendMessageMutation.mutateAsync({
-          conversationId,
-          content: messageContent,
-          mentions: mentions || null, // 🆕 NEW: Mentions support
-          quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
-        });
-      } else if (selectedFiles.length === 1) {
-        // Case 2: Single file upload (Phase 1 API)
-        const result = await uploadFilesMutation.mutateAsync({
-          files: selectedFiles,
-          sourceModule: 1,
-          sourceEntityId: conversationId,
-          onProgress: (fileId, progress) => {
-            setUploadProgress((prev) => {
-              const next = new Map(prev);
-              const fileProgress = next.get(fileId);
-              if (fileProgress) {
-                next.set(fileId, {
-                  ...fileProgress,
-                  status: "uploading",
-                  progress,
-                });
-              }
-              return next;
-            });
-          },
-        });
-
-        if (result.failedCount > 0) {
-          toast.error("Lỗi upload file. Vui lòng thử lại.");
-          setIsUploading(false);
-          return;
-        }
-
-        // Send message with single attachment (as array)
-        const attachment = formatAttachment(
-          result.files[0].originalFile,
-          result.files[0].uploadResult,
+  const handleSend = useCallback(
+    async (
+      content: string,
+      mentions?: import("@/types/messages").MentionInputDto[],
+    ) => {
+      // Phase 7: Check network status before sending
+      if (!isOnline) {
+        toast.error(
+          "Không có kết nối mạng. Vui lòng kiểm tra kết nối của bạn.",
         );
-
-        await sendMessageMutation.mutateAsync({
-          conversationId,
-          content: messageContent || "", // Empty string instead of null for API
-          mentions: mentions || null, // 🆕 NEW: Mentions support
-          attachments: [attachment], // Phase 2: Always use attachments[] array
-          quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
-        });
-      } else {
-        // Case 3: Batch upload (Phase 2 API - 2+ files)
-        const batchResult = await uploadBatchMutation.mutateAsync({
-          files: selectedFiles.map((sf) => sf.file),
-          sourceModule: 1,
-          sourceEntityId: conversationId,
-        });
-
-        // Extract successful uploads
-        const attachments = extractSuccessfulUploads(batchResult);
-
-        if (attachments.length === 0) {
-          toast.error("Tất cả file upload thất bại. Vui lòng thử lại.");
-          setIsUploading(false);
-          return;
-        }
-
-        // Show warning for partial success
-        if (batchResult.partialSuccess) {
-          toast.warning(
-            `${batchResult.successCount}/${batchResult.totalFiles} file upload thành công`,
-          );
-        }
-
-        // Send 1 message with multiple attachments (Phase 2 API v2.0)
-        await sendMessageMutation.mutateAsync({
-          conversationId,
-          content: messageContent || "", // Empty string instead of null for API
-          mentions: mentions || null, // 🆕 NEW: Mentions support
-          attachments, // Phase 2: Array of AttachmentInputDto
-          quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
-        });
+        return;
       }
 
-      // Success - clear state
-      selectedFiles.forEach((sf) => revokeFilePreview(sf.preview));
-      setSelectedFiles([]);
-      setInputValue("");
-      setCurrentMentions([]); // 🆕 NEW: Clear mentions after sending
-      setIsUploading(false);
-      clearReply(); // 🆕 NEW: Clear reply state after sending message
+      const messageContent = content.trim();
+      if (!messageContent && selectedFiles.length === 0) return;
 
-      // Auto-scroll to bottom after sending message
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-        inputRef.current?.focus();
-      }, 100);
-    } catch (error) {
-      console.error("Send message error:", error);
-      toast.error("Lỗi gửi tin nhắn. Vui lòng thử lại.");
-      setIsUploading(false);
-    }
-  }, [
-    inputValue,
-    sendMessageMutation,
-    stopTyping,
-    selectedFiles,
-    conversationId,
-    uploadFilesMutation,
-    uploadBatchMutation,
-    isOnline,
-    clearReply,
-  ]);
+      stopTyping();
+      setIsUploading(true);
+
+      try {
+        if (selectedFiles.length === 0) {
+          // Case 1: Text-only message (no files)
+          await sendMessageMutation.mutateAsync({
+            conversationId,
+            content: messageContent,
+            mentions: mentions || null, // 🆕 NEW: Mentions support
+            quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
+          });
+        } else if (selectedFiles.length === 1) {
+          // Case 2: Single file upload (Phase 1 API)
+          const result = await uploadFilesMutation.mutateAsync({
+            files: selectedFiles,
+            sourceModule: 1,
+            sourceEntityId: conversationId,
+            onProgress: (fileId, progress) => {
+              setUploadProgress((prev) => {
+                const next = new Map(prev);
+                const fileProgress = next.get(fileId);
+                if (fileProgress) {
+                  next.set(fileId, {
+                    ...fileProgress,
+                    status: "uploading",
+                    progress,
+                  });
+                }
+                return next;
+              });
+            },
+          });
+
+          if (result.failedCount > 0) {
+            toast.error("Lỗi upload file. Vui lòng thử lại.");
+            setIsUploading(false);
+            return;
+          }
+
+          // Send message with single attachment (as array)
+          const attachment = formatAttachment(
+            result.files[0].originalFile,
+            result.files[0].uploadResult,
+          );
+
+          await sendMessageMutation.mutateAsync({
+            conversationId,
+            content: messageContent || "", // Empty string instead of null for API
+            mentions: mentions || null, // 🆕 NEW: Mentions support
+            attachments: [attachment], // Phase 2: Always use attachments[] array
+            quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
+          });
+        } else {
+          // Case 3: Batch upload (Phase 2 API - 2+ files)
+          const batchResult = await uploadBatchMutation.mutateAsync({
+            files: selectedFiles.map((sf) => sf.file),
+            sourceModule: 1,
+            sourceEntityId: conversationId,
+          });
+
+          // Extract successful uploads
+          const attachments = extractSuccessfulUploads(batchResult);
+
+          if (attachments.length === 0) {
+            toast.error("Tất cả file upload thất bại. Vui lòng thử lại.");
+            setIsUploading(false);
+            return;
+          }
+
+          // Show warning for partial success
+          if (batchResult.partialSuccess) {
+            toast.warning(
+              `${batchResult.successCount}/${batchResult.totalFiles} file upload thành công`,
+            );
+          }
+
+          // Send 1 message with multiple attachments (Phase 2 API v2.0)
+          await sendMessageMutation.mutateAsync({
+            conversationId,
+            content: messageContent || "", // Empty string instead of null for API
+            mentions: mentions || null, // 🆕 NEW: Mentions support
+            attachments, // Phase 2: Array of AttachmentInputDto
+            quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
+          });
+        }
+
+        // Success - clear state
+        selectedFiles.forEach((sf) => revokeFilePreview(sf.preview));
+        setSelectedFiles([]);
+        setInputValue("");
+        setCurrentMentions([]); // 🆕 NEW: Clear mentions after sending
+        setIsUploading(false);
+        clearReply(); // 🆕 NEW: Clear reply state after sending message
+
+        // Auto-scroll to bottom after sending message
+        setTimeout(() => {
+          bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+          inputRef.current?.focus();
+        }, 100);
+      } catch (error) {
+        console.error("Send message error:", error);
+        toast.error("Lỗi gửi tin nhắn. Vui lòng thử lại.");
+        setIsUploading(false);
+      }
+    },
+    [
+      inputValue,
+      sendMessageMutation,
+      stopTyping,
+      selectedFiles,
+      conversationId,
+      uploadFilesMutation,
+      uploadBatchMutation,
+      isOnline,
+      clearReply,
+    ],
+  );
 
   // Handle key press (Enter to send) - REMOVED: MentionInput now handles Enter key
   // const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1475,6 +1501,30 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       });
     },
     [conversationId, onCreateTaskFromMessage, groupedMessages],
+  );
+
+  // 🆕 NEW: Mutation for creating confirmed information
+  const createConfirmedInfoMutation = useCreateInformationConfirmed();
+
+  // 🆕 NEW: Handle confirm information from message
+  const handleConfirmInfo = useCallback(
+    (messageId: string) => {
+      // Find the message to get its content
+      const message = groupedMessages.find(
+        (g) => g.message.id === messageId,
+      )?.message;
+      if (!message || !user?.id) return;
+
+      // Create confirmed information
+      createConfirmedInfoMutation.mutate({
+        conversationId,
+        messageId,
+        content: message.content || message.attachments?.[0]?.fileName || "",
+        statusCode: "pending",
+        confirmedBy: user.id,
+      });
+    },
+    [conversationId, groupedMessages, user?.id, createConfirmedInfoMutation],
   );
 
   // 🆕 NEW: Scroll to quoted message (Quote Reply feature - 2026-02-04)
@@ -1821,6 +1871,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                     }}
                     onToggleStar={onToggleStar}
                     onCreateTask={handleCreateTask}
+                    onConfirmInfo={handleConfirmInfo}
+                    hasConfirmedInfo={confirmedMessageIds.has(message.id)}
                     onRetry={handleRetry}
                     onScrollToQuoted={handleScrollToQuoted}
                     isFirstInGroup={groupedMsg.isFirstInGroup}
@@ -1993,6 +2045,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             autoFocus
             disabled={sendMessageMutation.isPending || isUploading}
             className="flex-1"
+            placeholder="Nhập tin nhắn"
           />
 
           {/* Send button - Decision #9: Disable during upload */}
@@ -2093,7 +2146,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         open={showConversationStarredModal}
         onOpenChange={setShowConversationStarredModal}
       >
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-2xl h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Star className="h-5 w-5 text-amber-600" />
@@ -2151,7 +2204,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
       {/* All Starred Messages Modal */}
       <Dialog open={showAllStarredModal} onOpenChange={setShowAllStarredModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-2xl h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Star className="h-5 w-5 text-blue-600" />

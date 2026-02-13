@@ -135,15 +135,12 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
         chatId: msg.conversationId, // Add chatId for navigation
         fileInfo: msg.attachments?.[0]
           ? {
+              id: msg.attachments[0].fileId || "",
               name: msg.attachments[0].fileName || "file",
-              url: msg.attachments[0].fileId || "", // fileId is the file reference
+              url: msg.attachments[0].fileId || "",
               type: msg.attachments[0].contentType?.startsWith("image/")
                 ? "image"
-                : "file",
-              fileType: getFileExtension(
-                msg.attachments[0].fileName,
-                msg.attachments[0].contentType,
-              ).replace(".", ""),
+                : "other",
               size: msg.attachments[0].fileSize?.toString(),
             }
           : undefined,
@@ -328,14 +325,11 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                                 onPreviewClick={(fileId) => {
                                   if (onPreview && msg.fileInfo) {
                                     onPreview({
-                                      id: msg.fileInfo.url,
-                                      fileId: msg.fileInfo.url,
-                                      fileName: msg.fileInfo.name || "image",
-                                      fileSize: msg.fileInfo.size
-                                        ? parseInt(msg.fileInfo.size)
-                                        : undefined,
-                                      contentType: "image",
-                                      createdAt: msg.time,
+                                      id: msg.fileInfo.id,
+                                      name: msg.fileInfo.name || "image",
+                                      url: msg.fileInfo.url,
+                                      type: msg.fileInfo.type,
+                                      size: msg.fileInfo.size,
                                     });
                                   }
                                 }}
@@ -344,7 +338,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                           )}
 
                           {/* Tin nhắn có file */}
-                          {msg.fileInfo && msg.fileInfo.type === "file" && (
+                          {msg.fileInfo && msg.fileInfo.type !== "image" && (
                             <div
                               className={cn(
                                 "mt-2 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors rounded-md p-2 border border-gray-200 min-w-0 max-w-full",
@@ -353,17 +347,11 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                                 e.stopPropagation(); // Prevent triggering the parent onClick
                                 if (onPreview && msg.fileInfo) {
                                   onPreview({
-                                    id: msg.fileInfo.url,
-                                    fileId: msg.fileInfo.url,
+                                    id: msg.fileInfo.id,
                                     name: msg.fileInfo.name,
                                     url: msg.fileInfo.url,
-                                    type: msg.fileInfo.fileType,
-                                    fileName: msg.fileInfo.name || "file",
-                                    fileSize: msg.fileInfo.size
-                                      ? parseInt(msg.fileInfo.size)
-                                      : undefined,
-                                    contentType: "application/octet-stream",
-                                    createdAt: msg.time,
+                                    type: msg.fileInfo.type,
+                                    size: msg.fileInfo.size,
                                   });
                                 }
                               }}

@@ -15,7 +15,6 @@ import { usePdfPreview } from "../usePdfPreview";
 // Mock API functions
 vi.mock("@/api/filePreview.api", () => ({
   getFilePreview: vi.fn(),
-  renderPdfPage: vi.fn(),
   createObjectUrl: vi.fn(),
   revokeObjectUrl: vi.fn(),
 }));
@@ -57,6 +56,7 @@ describe("usePdfPreview Hook", () => {
       await waitFor(() => {
         expect(filePreviewApi.getFilePreview).toHaveBeenCalledWith({
           fileId: mockFileId,
+          page: 1,
         });
         expect(result.current.imageUrl).toBe(mockObjectUrl);
         expect(result.current.totalPages).toBe(5);
@@ -83,7 +83,7 @@ describe("usePdfPreview Hook", () => {
         resolvePreview = resolve;
       });
       vi.mocked(filePreviewApi.getFilePreview).mockReturnValue(
-        previewPromise as any
+        previewPromise as any,
       );
 
       // WHEN
@@ -196,9 +196,14 @@ describe("usePdfPreview Hook", () => {
       });
 
       const mockPage2Url = "blob:http://localhost:3000/page-2";
-      vi.mocked(filePreviewApi.renderPdfPage).mockResolvedValueOnce({
+      // Now getFilePreview is used for all pages (including page 2+)
+      vi.mocked(filePreviewApi.getFilePreview).mockResolvedValueOnce({
         data: mockBlob,
-        headers: { "content-type": "image/png" },
+        headers: {
+          "x-total-pages": "5",
+          "x-current-page": "2",
+          "content-type": "image/png",
+        },
       });
       vi.mocked(filePreviewApi.createObjectUrl)
         .mockReturnValueOnce(mockObjectUrl) // Page 1
@@ -218,10 +223,9 @@ describe("usePdfPreview Hook", () => {
 
       // THEN
       await waitFor(() => {
-        expect(filePreviewApi.renderPdfPage).toHaveBeenCalledWith({
+        expect(filePreviewApi.getFilePreview).toHaveBeenCalledWith({
           fileId: mockFileId,
-          pageNumber: 2,
-          dpi: 300,
+          page: 2,
         });
         expect(result.current.currentPage).toBe(2);
         expect(result.current.imageUrl).toBe(mockPage2Url);
@@ -251,8 +255,9 @@ describe("usePdfPreview Hook", () => {
         result.current.navigateToPage(5);
       });
 
-      // THEN - Should stay on page 1
-      expect(filePreviewApi.renderPdfPage).not.toHaveBeenCalled();
+      // THEN - Should stay on page 1 (getFilePreview not called again)
+      // getFilePreview was already called once for first page
+      expect(filePreviewApi.getFilePreview).toHaveBeenCalledTimes(1);
       expect(result.current.currentPage).toBe(1);
     });
 
@@ -279,8 +284,8 @@ describe("usePdfPreview Hook", () => {
         result.current.navigateToPage(0);
       });
 
-      // THEN
-      expect(filePreviewApi.renderPdfPage).not.toHaveBeenCalled();
+      // THEN (getFilePreview was only called once for first page)
+      expect(filePreviewApi.getFilePreview).toHaveBeenCalledTimes(1);
       expect(result.current.currentPage).toBe(1);
     });
   });
@@ -291,7 +296,7 @@ describe("usePdfPreview Hook", () => {
    */
   describe("TC-PH-004: Implements page caching", () => {
     it("should cache pages and reuse on navigation", async () => {
-      // GIVEN
+      // GIVEN - First page
       vi.mocked(filePreviewApi.getFilePreview).mockResolvedValueOnce({
         data: mockBlob,
         headers: {
@@ -302,9 +307,14 @@ describe("usePdfPreview Hook", () => {
       });
 
       const mockPage2Url = "blob:http://localhost:3000/page-2";
-      vi.mocked(filePreviewApi.renderPdfPage).mockResolvedValueOnce({
+      // Page 2 also uses getFilePreview
+      vi.mocked(filePreviewApi.getFilePreview).mockResolvedValueOnce({
         data: mockBlob,
-        headers: { "content-type": "image/png" },
+        headers: {
+          "x-total-pages": "3",
+          "x-current-page": "2",
+          "content-type": "image/png",
+        },
       });
       vi.mocked(filePreviewApi.createObjectUrl)
         .mockReturnValueOnce(mockObjectUrl)
@@ -337,9 +347,6 @@ describe("usePdfPreview Hook", () => {
         expect(result.current.imageUrl).toBe(mockObjectUrl);
       });
 
-      // THEN - getFilePreview called only once (cached)
-      expect(filePreviewApi.getFilePreview).toHaveBeenCalledTimes(1);
-
       // Navigate to page 2 again
       act(() => {
         result.current.navigateToPage(2);
@@ -349,8 +356,8 @@ describe("usePdfPreview Hook", () => {
         expect(result.current.currentPage).toBe(2);
       });
 
-      // THEN - renderPdfPage also called only once (cached)
-      expect(filePreviewApi.renderPdfPage).toHaveBeenCalledTimes(1);
+      // THEN - getFilePreview called twice total (page 1 + page 2, cached reuse)
+      expect(filePreviewApi.getFilePreview).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -366,7 +373,7 @@ describe("usePdfPreview Hook", () => {
         resolvePreview = resolve;
       });
       vi.mocked(filePreviewApi.getFilePreview).mockReturnValue(
-        previewPromise as any
+        previewPromise as any,
       );
 
       // WHEN
@@ -408,8 +415,9 @@ describe("usePdfPreview Hook", () => {
       const page2Promise = new Promise((resolve) => {
         resolvePage2 = resolve;
       });
-      vi.mocked(filePreviewApi.renderPdfPage).mockReturnValue(
-        page2Promise as any
+      // Page 2 uses getFilePreview
+      vi.mocked(filePreviewApi.getFilePreview).mockReturnValue(
+        page2Promise as any,
       );
       vi.mocked(filePreviewApi.createObjectUrl)
         .mockReturnValueOnce(mockObjectUrl)
@@ -436,7 +444,11 @@ describe("usePdfPreview Hook", () => {
       act(() => {
         resolvePage2({
           data: mockBlob,
-          headers: { "content-type": "image/png" },
+          headers: {
+            "x-total-pages": "3",
+            "x-current-page": "2",
+            "content-type": "image/png",
+          },
         });
       });
 
@@ -479,7 +491,8 @@ describe("usePdfPreview Hook", () => {
       });
 
       const mockError = new Error("Page not found");
-      vi.mocked(filePreviewApi.renderPdfPage).mockRejectedValueOnce(mockError);
+      // Page 2 uses getFilePreview
+      vi.mocked(filePreviewApi.getFilePreview).mockRejectedValueOnce(mockError);
 
       // WHEN
       const { result } = renderHook(() => usePdfPreview(mockFileId));
@@ -543,11 +556,16 @@ describe("usePdfPreview Hook", () => {
       });
 
       const mockPage2Url = "blob:http://localhost:3000/page-2";
-      vi.mocked(filePreviewApi.renderPdfPage)
+      // Page 2 uses getFilePreview
+      vi.mocked(filePreviewApi.getFilePreview)
         .mockRejectedValueOnce(new Error("Network error"))
         .mockResolvedValueOnce({
           data: mockBlob,
-          headers: { "content-type": "image/png" },
+          headers: {
+            "x-total-pages": "3",
+            "x-current-page": "2",
+            "content-type": "image/png",
+          },
         });
 
       vi.mocked(filePreviewApi.createObjectUrl)
@@ -603,9 +621,14 @@ describe("usePdfPreview Hook", () => {
         },
       });
 
-      vi.mocked(filePreviewApi.renderPdfPage).mockResolvedValueOnce({
+      // Page 2 uses getFilePreview
+      vi.mocked(filePreviewApi.getFilePreview).mockResolvedValueOnce({
         data: mockBlob,
-        headers: { "content-type": "image/png" },
+        headers: {
+          "x-total-pages": "3",
+          "x-current-page": "2",
+          "content-type": "image/png",
+        },
       });
 
       vi.mocked(filePreviewApi.createObjectUrl)
@@ -656,7 +679,7 @@ describe("usePdfPreview Hook", () => {
       });
 
       vi.mocked(filePreviewApi.createObjectUrl).mockReturnValueOnce(
-        mockPage1Url
+        mockPage1Url,
       );
 
       // WHEN
@@ -749,7 +772,8 @@ describe("usePdfPreview Hook", () => {
 
       // Should still be on page 1
       expect(result.current.currentPage).toBe(1);
-      expect(filePreviewApi.renderPdfPage).not.toHaveBeenCalled();
+      // getFilePreview only called once (no page 2 for single-page)
+      expect(filePreviewApi.getFilePreview).toHaveBeenCalledTimes(1);
     });
 
     /**
@@ -775,9 +799,13 @@ describe("usePdfPreview Hook", () => {
       });
 
       // Navigate to page 2
-      vi.mocked(filePreviewApi.renderPdfPage).mockResolvedValueOnce({
+      vi.mocked(filePreviewApi.getFilePreview).mockResolvedValueOnce({
         data: mockBlob,
-        headers: { "content-type": "image/png" },
+        headers: {
+          "x-total-pages": "3",
+          "x-current-page": "2",
+          "content-type": "image/png",
+        },
       });
 
       act(() => {
@@ -786,10 +814,9 @@ describe("usePdfPreview Hook", () => {
 
       await waitFor(() => {
         expect(result.current.currentPage).toBe(2);
-        expect(filePreviewApi.renderPdfPage).toHaveBeenCalledWith({
+        expect(filePreviewApi.getFilePreview).toHaveBeenCalledWith({
           fileId: mockFileId,
-          pageNumber: 2,
-          dpi: 300,
+          page: 2,
         });
       });
     });
@@ -817,12 +844,16 @@ describe("usePdfPreview Hook", () => {
 
       // Navigate to page 2
       const mockPage2Url = "blob:http://localhost:3000/page-2";
-      vi.mocked(filePreviewApi.renderPdfPage).mockResolvedValueOnce({
+      vi.mocked(filePreviewApi.getFilePreview).mockResolvedValueOnce({
         data: mockBlob,
-        headers: { "content-type": "image/png" },
+        headers: {
+          "x-total-pages": "5",
+          "x-current-page": "2",
+          "content-type": "image/png",
+        },
       });
       vi.mocked(filePreviewApi.createObjectUrl).mockReturnValueOnce(
-        mockPage2Url
+        mockPage2Url,
       );
 
       act(() => {
@@ -843,8 +874,8 @@ describe("usePdfPreview Hook", () => {
         expect(result.current.imageUrl).toBe(mockObjectUrl); // Original cached URL
       });
 
-      // renderPdfPage should not be called for page 1 (cached)
-      expect(filePreviewApi.renderPdfPage).toHaveBeenCalledTimes(1); // Only for page 2
+      // getFilePreview called twice total (page 1 + page 2, then cache)
+      expect(filePreviewApi.getFilePreview).toHaveBeenCalledTimes(2);
     });
 
     /**
@@ -875,7 +906,8 @@ describe("usePdfPreview Hook", () => {
       });
 
       expect(result.current.currentPage).toBe(1); // Still on page 1
-      expect(filePreviewApi.renderPdfPage).not.toHaveBeenCalled();
+      // getFilePreview only called once (no page 2 for single-page)
+      expect(filePreviewApi.getFilePreview).toHaveBeenCalledTimes(1);
     });
   });
 });

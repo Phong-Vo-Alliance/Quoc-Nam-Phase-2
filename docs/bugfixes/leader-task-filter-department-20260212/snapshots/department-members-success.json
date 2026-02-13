@@ -1,0 +1,17 @@
+{
+  "_comment": "⚠️ HUMAN: Paste actual API response here",
+  "_instruction": "Gọi GET /departments/{id}/members và paste response vào đây",
+  "_example_structure": {
+    "data": [
+      {
+        "id": "string",
+        "userId": "string",
+        "name": "string",
+        "fullName": "string",
+        "email": "string",
+        "departmentId": "string",
+        "departmentName": "string"
+      }
+    ]
+  }
+}

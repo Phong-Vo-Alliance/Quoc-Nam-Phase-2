@@ -26,6 +26,23 @@ const getSignalRHubUrl = (): string => {
 
 const HUB_URL = getSignalRHubUrl();
 
+// Get Task SignalR Hub URL based on environment
+const getTaskSignalRHubUrl = (): string => {
+  const isDev = import.meta.env.DEV;
+  const taskApiUrl = isDev
+    ? import.meta.env.VITE_DEV_TASK_API_URL
+    : import.meta.env.VITE_PROD_TASK_API_URL;
+
+  if (!taskApiUrl) {
+    console.warn("Task API URL not configured");
+    return "";
+  }
+
+  return `${taskApiUrl}/hubs/tasks`;
+};
+
+const TASK_HUB_URL = getTaskSignalRHubUrl();
+
 // SignalR Event Names (for consistency)
 // Note: Backend uses lowercase event names in some cases
 export const SIGNALR_EVENTS = {
@@ -75,6 +92,9 @@ export const SIGNALR_EVENTS = {
   USER_MENTIONED: "UserMentioned",
   MENTION_READ: "MentionRead",
   MENTIONS_BULK_READ: "MentionsBulkRead",
+
+  // ============= Task Events =============
+  TASKS_UPDATED: "TasksUpdated",
 
   // ============= Error Events =============
   ERROR: "Error",
@@ -132,6 +152,7 @@ export interface MessageReadEvent {
 export interface ConversationCreatedEvent {
   // ConversationDto from backend (matches Swagger schema)
   id: string;
+  conversationId?: string; // 🆕 Added: some events use conversationId instead of id
   type: "DM" | "GRP";
   name: string | null;
   description: string | null;
@@ -144,6 +165,7 @@ export interface ConversationCreatedEvent {
   unreadCount: number;
   lastMessage: any | null;
   categories: Array<{ id: string; name: string }> | null;
+  categoryId?: string | null; // 🆕 Added: backend sends categoryId for GRP conversations
   members?: any[] | null;
 }
 
@@ -192,6 +214,26 @@ export interface CategoryDepartmentLinkedEvent {
   departmentId: string;
   linkedBy: string;
   timestamp: string;
+}
+
+// Task Events
+export interface TaskUpdatePayload {
+  taskId: string;
+  changeType: 'created' | 'updated' | 'status_changed' | 'checklist_item_checked' | 'reassigned' | 'deleted';
+  task: {
+    id: string;
+    title: string;
+    statusCode: string;
+    priorityCode: string;
+    assignToUserId: string;
+    assignFromUserId: string;
+    conversationId?: string;
+    completionPercentage: number;
+    dueDate?: string;
+  };
+  timestamp: string;
+  changedByUserId: string;
+  metadata?: Record<string, any>;
 }
 
 // Typing Indicators
@@ -532,6 +574,41 @@ class ChatHubConnection {
     };
 
     this.connection?.on(event, wrappedCallback);
+  }
+
+  /**
+   * Register an event handler that returns a cleanup function.
+   * Use this when you need to remove only YOUR specific handler without affecting others.
+   *
+   * @param event - SignalR event name
+   * @param callback - Handler function
+   * @param enableLogging - Whether to log events (default: true)
+   * @returns Cleanup function to remove this specific handler
+   *
+   * @example
+   * ```tsx
+   * const cleanup = chatHub.onWithCleanup('MessageSent', (data) => {...});
+   * // Later: cleanup() to remove only this handler
+   * ```
+   */
+  onWithCleanup<T>(
+    event: string,
+    callback: (data: T) => void,
+    enableLogging = true,
+  ): () => void {
+    const wrappedCallback = (data: T) => {
+      if (enableLogging) {
+        const eventTimestamp = new Date().toISOString();
+      }
+      callback(data);
+    };
+
+    this.connection?.on(event, wrappedCallback);
+
+    // Return cleanup function that removes only this specific handler
+    return () => {
+      this.connection?.off(event, wrappedCallback);
+    };
   }
 
   // Generic event unsubscription
@@ -1330,12 +1407,232 @@ export const chatHub = new ChatHubConnection();
 // Initialize SignalR with QueryClient (call from App.tsx)
 export function initializeSignalR(queryClient: QueryClient): void {
   chatHub.setQueryClient(queryClient);
-  console.log("SignalR: QueryClient initialized for auto-refetch");
+  taskHub.setQueryClient(queryClient);
+  console.log("SignalR: QueryClient initialized for Chat and Task hubs");
 }
 
 // Expose to window for debugging
 if (typeof window !== "undefined") {
   (window as any).chatHub = chatHub;
+}
+
+// ============= Task Hub Connection =============
+
+/**
+ * Task Hub Connection Manager
+ * Manages SignalR connection to Task Hub (/hubs/tasks)
+ */
+class TaskHubConnection {
+  private connection: signalR.HubConnection | null = null;
+  private queryClient: QueryClient | null = null;
+  private isConnecting = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+
+  getState(): signalR.HubConnectionState {
+    return this.connection?.state || signalR.HubConnectionState.Disconnected;
+  }
+
+  isConnected(): boolean {
+    return this.connection?.state === signalR.HubConnectionState.Connected;
+  }
+
+  setQueryClient(client: QueryClient): void {
+    this.queryClient = client;
+  }
+
+  async start(taskAccessToken?: string): Promise<void> {
+    if (!TASK_HUB_URL) {
+      console.warn("[TaskHub] Task API URL not configured, skipping connection");
+      return;
+    }
+
+    if (this.connection?.state === signalR.HubConnectionState.Connected) {
+      console.log("[TaskHub] Already connected");
+      return;
+    }
+
+    if (this.isConnecting) {
+      console.log("[TaskHub] Connection already in progress");
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    console.log(`[TaskHub] ${timestamp} | Starting connection...`);
+    this.isConnecting = true;
+
+    try {
+      this.connection = new signalR.HubConnectionBuilder()
+        .withUrl(TASK_HUB_URL, {
+          accessTokenFactory: () =>
+            taskAccessToken || localStorage.getItem("taskAccessToken") || "",
+          skipNegotiation: false,
+          transport:
+            signalR.HttpTransportType.WebSockets |
+            signalR.HttpTransportType.ServerSentEvents |
+            signalR.HttpTransportType.LongPolling,
+        })
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+        .configureLogging(signalR.LogLevel.Information)
+        .build();
+
+      // Connection lifecycle events
+      this.connection.onreconnecting((error) => {
+        const ts = new Date().toISOString();
+        console.warn(
+          `[TaskHub] ${ts} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
+          error
+        );
+        this.reconnectAttempts++;
+      });
+
+      this.connection.onreconnected((connectionId) => {
+        const ts = new Date().toISOString();
+        console.log(`[TaskHub] ${ts} | ✅ Reconnected | ConnectionId: ${connectionId}`);
+        this.reconnectAttempts = 0;
+        
+        // Refetch tasks on reconnection
+        if (this.queryClient) {
+          console.log(`[TaskHub] Auto-refetching tasks after reconnect`);
+          this.queryClient.invalidateQueries({ 
+            queryKey: ["tasks"],
+            refetchType: "active",
+          });
+        }
+      });
+
+      this.connection.onclose((error) => {
+        const ts = new Date().toISOString();
+        
+        // Detailed close reason logging
+        console.group(`[TaskHub] ${ts} | 🔴 CONNECTION CLOSED`);
+        console.log("Reconnect Attempts:", this.reconnectAttempts);
+        console.log("Max Reconnect Attempts:", this.maxReconnectAttempts);
+        console.log("Connection State:", this.connection?.state);
+        
+        if (error) {
+          console.error("Close Error:", {
+            message: error.message || error,
+            name: error.name,
+            stack: error.stack,
+            fullError: error,
+          });
+          
+          // Check for common close reasons
+          if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+            console.error("❌ CLOSE REASON: Authentication failed - taskAccessToken may be invalid");
+          } else if (error.message?.includes("403") || error.message?.includes("Forbidden")) {
+            console.error("❌ CLOSE REASON: Authorization failed - user lacks permission");
+          } else if (error.message?.includes("404")) {
+            console.error("❌ CLOSE REASON: Hub not found - check TASK_HUB_URL:", TASK_HUB_URL);
+          } else if (error.message?.includes("timeout")) {
+            console.error("❌ CLOSE REASON: Connection timeout");
+          } else if (error.message?.includes("abort")) {
+            console.warn("⚠️ CLOSE REASON: Connection aborted by client");
+          } else {
+            console.error("❌ CLOSE REASON: Unknown error");
+          }
+        } else {
+          console.log("ℹ️ CLOSE REASON: Clean disconnect (no error)");
+        }
+        
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          console.error(
+            `❌ Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+          );
+        }
+        
+        console.groupEnd();
+      });
+
+      await this.connection.start();
+      this.reconnectAttempts = 0;
+      const ts = new Date().toISOString();
+
+      // After successful negotiation, save the task access token if it was provided
+      if (taskAccessToken) {
+        try {
+          // Store task token in localStorage for persistence
+          localStorage.setItem("taskAccessToken", taskAccessToken);
+          console.log(`[TaskHub] ${ts} | Task access token saved after negotiation`);
+        } catch (error) {
+          console.warn(`[TaskHub] ${ts} | Failed to save task access token:`, error);
+        }
+      }
+    } catch (error) {
+      const ts = new Date().toISOString();
+      
+      // ❌ FAILURE LOG
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log(
+          `[TaskHub] ${ts} | Connection aborted (likely due to unmount or auth change)`
+        );
+      } else {
+      }
+      throw error;
+    } finally {
+      this.isConnecting = false;
+    }
+  }
+
+  async stop(): Promise<void> {
+    const timestamp = new Date().toISOString();
+    const callStack = new Error().stack;
+    
+    console.group(`[TaskHub] ${timestamp} | Stopping connection...`);
+    console.log("Current State:", this.connection?.state);
+    console.log("Called from:", callStack);
+    console.groupEnd();
+
+    this.isConnecting = false; // Cancel any pending connection
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+        console.log(`[TaskHub] ${timestamp} | Disconnected successfully`);
+      } catch (error) {
+        // Ignore errors during stop
+        console.log(
+          `[TaskHub] ${timestamp} | Stop completed with warning`,
+          error
+        );
+      }
+      this.connection = null;
+    }
+  }
+
+  // Event handlers
+  on(event: string, handler: (...args: any[]) => void): void {
+    console.log(`[TaskHub] Registering handler for event: ${event}`);
+    this.connection?.on(event, handler);
+  }
+
+  off(event: string, handler?: (...args: any[]) => void): void {
+    if (handler) {
+      this.connection?.off(event, handler);
+    } else {
+      this.connection?.off(event);
+    }
+  }
+
+  onTasksUpdated(handler: (payload: TaskUpdatePayload) => void): void {
+    this.connection?.on(SIGNALR_EVENTS.TASKS_UPDATED, handler);
+  }
+
+  offTasksUpdated(): void {
+    this.connection?.off(SIGNALR_EVENTS.TASKS_UPDATED);
+  }
+
+  removeAllListeners(): void {
+    this.offTasksUpdated();
+  }
+}
+
+// Singleton instance
+export const taskHub = new TaskHubConnection();
+
+// Expose to window for debugging
+if (typeof window !== "undefined") {
+  (window as any).taskHub = taskHub;
 }
 
 export default chatHub;

@@ -2,7 +2,7 @@
 // Handles API calls for task management
 // API Base: Vega Task API (https://vega-task-api-dev.allianceitsc.com)
 
-import { taskApiClient } from './taskClient';
+import { taskApiClient } from "./taskClient";
 import type {
   TaskPriorityDto,
   TaskStatusDto,
@@ -10,7 +10,7 @@ import type {
   CreateTaskRequest,
   TaskDetailResponse,
   GetLinkedTasksResult,
-} from '@/types/tasks_api';
+} from "@/types/tasks_api";
 
 /**
  * GET /api/task-config/priorities
@@ -18,7 +18,7 @@ import type {
  */
 export const getTaskPriorities = async (): Promise<TaskPriorityDto[]> => {
   const response = await taskApiClient.get<TaskPriorityDto[]>(
-    '/api/task-config/priorities'
+    "/api/task-config/priorities",
   );
   return response.data;
 };
@@ -29,7 +29,7 @@ export const getTaskPriorities = async (): Promise<TaskPriorityDto[]> => {
  */
 export const getTaskStatuses = async (): Promise<TaskStatusDto[]> => {
   const response = await taskApiClient.get<TaskStatusDto[]>(
-    '/api/task-config/statuses'
+    "/api/task-config/statuses",
   );
   return response.data;
 };
@@ -42,7 +42,7 @@ export const getChecklistTemplates = async (): Promise<
   CheckListTemplateResponse[]
 > => {
   const response = await taskApiClient.get<CheckListTemplateResponse[]>(
-    '/api/checklist-templates'
+    "/api/checklist-templates",
   );
   return response.data;
 };
@@ -50,16 +50,16 @@ export const getChecklistTemplates = async (): Promise<
 /**
  * POST /api/tasks
  * Create a new task
- * 
+ *
  * @param data - Task creation request
  * @returns Created task details
  */
 export const createTask = async (
-  data: CreateTaskRequest
+  data: CreateTaskRequest,
 ): Promise<TaskDetailResponse> => {
   const response = await taskApiClient.post<TaskDetailResponse>(
-    '/api/tasks',
-    data
+    "/api/tasks",
+    data,
   );
   return response.data;
 };
@@ -68,15 +68,15 @@ export const createTask = async (
  * GET /api/conversations/{conversationId}/tasks
  * Get all tasks linked to a specific conversation
  * Used by Chat module to display linked tasks in the right side panel
- * 
+ *
  * @param conversationId - The conversation ID
  * @returns List of linked tasks
  */
 export const getLinkedTasks = async (
-  conversationId: string
+  conversationId: string,
 ): Promise<GetLinkedTasksResult> => {
   const response = await taskApiClient.get<GetLinkedTasksResult>(
-    `/api/conversations/${conversationId}/tasks`
+    `/api/conversations/${conversationId}/tasks`,
   );
   return response.data;
 };
@@ -84,15 +84,15 @@ export const getLinkedTasks = async (
 /**
  * GET /api/tasks/{taskId}
  * Get details of a specific task
- * 
+ *
  * @param taskId - The task ID
  * @returns Task details
  */
 export const getTaskDetails = async (
-  taskId: string
+  taskId: string,
 ): Promise<TaskDetailResponse> => {
   const response = await taskApiClient.get<TaskDetailResponse>(
-    `/api/tasks/${taskId}`
+    `/api/tasks/${taskId}`,
   );
   return response.data;
 };
@@ -100,7 +100,7 @@ export const getTaskDetails = async (
 /**
  * GET /api/tasks
  * Get all tasks with optional filters
- * 
+ *
  * @param params - Query parameters for filtering tasks
  * @param params.userTask - Filter by user relationship: "assigned", "created", or "related"
  * @param params.conversationId - Filter by conversation ID
@@ -108,21 +108,20 @@ export const getTaskDetails = async (
  * @returns Array of task details
  */
 export const getTasks = async (params?: {
-  userTask?: 'assigned' | 'created' | 'related';
+  userTask?: "assigned" | "created" | "related";
   conversationId?: string;
   messageId?: string;
 }): Promise<TaskDetailResponse[]> => {
-  const response = await taskApiClient.get<TaskDetailResponse[]>(
-    '/api/tasks',
-    { params }
-  );
+  const response = await taskApiClient.get<TaskDetailResponse[]>("/api/tasks", {
+    params,
+  });
   return response.data;
 };
 
 /**
  * POST /api/tasks/{id}/check-items
  * Add a new checklist item to a task
- * 
+ *
  * @param taskId - The task ID
  * @param content - The checklist item content
  * @param order - Optional order position
@@ -131,7 +130,7 @@ export const getTasks = async (params?: {
 export const addCheckItem = async (
   taskId: string,
   content: string,
-  order?: number
+  order?: number,
 ): Promise<void> => {
   await taskApiClient.post(`/api/tasks/${taskId}/check-items`, {
     content,
@@ -142,24 +141,24 @@ export const addCheckItem = async (
 /**
  * PATCH /api/tasks/{id}/check-items/{itemId}/toggle
  * Toggle a checklist item's completion status
- * 
+ *
  * @param taskId - The task ID
  * @param itemId - The check item ID
  * @returns void (204 No Content)
  */
 export const toggleCheckItem = async (
   taskId: string,
-  itemId: string
+  itemId: string,
 ): Promise<void> => {
   await taskApiClient.patch(
-    `/api/tasks/${taskId}/check-items/${itemId}/toggle`
+    `/api/tasks/${taskId}/check-items/${itemId}/toggle`,
   );
 };
 
 /**
  * PATCH /api/tasks/{id}/check-items/{itemId}
  * Update a checklist item's content
- * 
+ *
  * @param taskId - The task ID
  * @param itemId - The checklist item ID
  * @param content - New content for the checklist item
@@ -168,42 +167,39 @@ export const toggleCheckItem = async (
 export const updateCheckItem = async (
   taskId: string,
   itemId: string,
-  content: string
+  content: string,
 ): Promise<void> => {
-  await taskApiClient.patch(
-    `/api/tasks/${taskId}/check-items/${itemId}`,
-    { content }
-  );
+  await taskApiClient.patch(`/api/tasks/${taskId}/check-items/${itemId}`, {
+    content,
+  });
 };
 
 /**
  * DELETE /api/tasks/{id}/check-items/{itemId}
  * Remove a checklist item from a task
- * 
+ *
  * @param taskId - The task ID
  * @param itemId - The checklist item ID
  * @returns void (204 No Content)
  */
 export const deleteCheckItem = async (
   taskId: string,
-  itemId: string
+  itemId: string,
 ): Promise<void> => {
-  await taskApiClient.delete(
-    `/api/tasks/${taskId}/check-items/${itemId}`
-  );
+  await taskApiClient.delete(`/api/tasks/${taskId}/check-items/${itemId}`);
 };
 
 /**
  * PATCH /api/tasks/{id}/status
  * Update task status
- * 
+ *
  * @param taskId - The task ID
  * @param status - New status: "todo", "doing", "need_to_verified", or "finished"
  * @returns void (204 No Content)
  */
 export const updateTaskStatus = async (
   taskId: string,
-  status: 'todo' | 'doing' | 'need_to_verified' | 'finished'
+  status: "todo" | "doing" | "need_to_verified" | "finished",
 ): Promise<void> => {
   await taskApiClient.patch(`/api/tasks/${taskId}/status`, {
     status,
@@ -213,26 +209,24 @@ export const updateTaskStatus = async (
 /**
  * POST /api/checklist-templates
  * Create a new checklist template
- * 
+ *
  * @param data - Template creation data
  * @returns Created template details
  */
-export const createChecklistTemplate = async (
-  data: {
-    name: string;
-    description?: string | null;
-    conversationId: string;
-    items: Array<{ content: string; order: number; isRequired: boolean }>;
-  }
-): Promise<any> => {
-  const response = await taskApiClient.post('/api/checklist-templates', data);
+export const createChecklistTemplate = async (data: {
+  name: string;
+  description?: string | null;
+  conversationId: string;
+  items: Array<{ content: string; order: number; isRequired: boolean }>;
+}): Promise<any> => {
+  const response = await taskApiClient.post("/api/checklist-templates", data);
   return response.data;
 };
 
 /**
  * PUT /api/checklist-templates/{id}
  * Update a checklist template (full update)
- * 
+ *
  * @param templateId - The template ID
  * @param data - Complete template update data
  * @returns Updated template
@@ -245,11 +239,11 @@ export const updateChecklistTemplate = async (
     description?: string | null;
     conversationId?: string;
     items?: Array<string>;
-  }
+  },
 ): Promise<any> => {
   const response = await taskApiClient.patch(
     `/api/checklist-templates/${templateId}`,
-    data
+    data,
   );
   return response.data;
 };
@@ -257,9 +251,9 @@ export const updateChecklistTemplate = async (
 /**
  * PATCH /api/checklist-templates/{id}
  * Partially update a checklist template
- * 
+ *
  * @param templateId - The template ID
- * @param data - Partial template update data (name, description, conversationId only)
+ * @param data - Partial template update data (name, description, conversationId, isDefault)
  * @returns Updated template
  */
 export const patchChecklistTemplate = async (
@@ -268,11 +262,12 @@ export const patchChecklistTemplate = async (
     name?: string;
     description?: string | null;
     conversationId?: string;
-  }
+    isDefault?: boolean;
+  },
 ): Promise<any> => {
   const response = await taskApiClient.patch(
     `/api/checklist-templates/${templateId}`,
-    data
+    data,
   );
   return response.data;
 };
@@ -280,12 +275,12 @@ export const patchChecklistTemplate = async (
 /**
  * DELETE /api/checklist-templates/{id}
  * Delete a checklist template
- * 
+ *
  * @param templateId - The template ID
  * @returns void (204 No Content)
  */
 export const deleteChecklistTemplate = async (
-  templateId: string
+  templateId: string,
 ): Promise<void> => {
   await taskApiClient.delete(`/api/checklist-templates/${templateId}`);
 };
@@ -293,7 +288,7 @@ export const deleteChecklistTemplate = async (
 /**
  * PATCH /api/tasks/{id}
  * Update task details
- * 
+ *
  * @param taskId - The task ID
  * @param data - Task update data (title, description, priority, dueDate, conversationId, messageId, assignTo)
  * @returns void (204 No Content)
@@ -308,7 +303,7 @@ export const updateTask = async (
     conversationId?: string | null;
     messageId?: string | null;
     assignTo?: string;
-  }
+  },
 ): Promise<void> => {
   await taskApiClient.patch(`/api/tasks/${taskId}`, data);
 };

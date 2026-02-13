@@ -5,6 +5,54 @@
 
 ---
 
+## [2026-02-13 10:45] Session: Restore Confirmed Info Integration
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s) | Result |
+| --- | ----- | ------ | ------- | ------ |
+| 1   | 10:45 | MODIFY | src/features/conversation-detail/ConversationDetailPanel.tsx | ✅ |
+| 2   | 10:50 | MODIFY | src/features/conversation-detail/components/TasksTab/LeaderMode/LeaderModeContent.tsx | ✅ |
+
+### Commands Executed:
+
+```bash
+# (none)
+```
+
+### Notes:
+
+- Added confirmed info query (`useInformationConfirmed`) to ConversationDetailPanel
+- Added transform logic to convert `InformationConfirmedDto` → `ReceivedInfo`
+- Added handlers for assign task and transfer to another group
+- Passed confirmed info to LeaderModeContent (Tasks tab only)
+- Added ReceivedInfoSection + HintBubble display in LeaderModeContent
+- Added ConfirmedInfoTransferSheet modal to ConversationDetailPanel
+- Removed ReceivedInfoSection from Info tab (per user decision)
+- All confirmed info features now isolated to **Công Việc tab** for **Leader role only**
+
+---
+
+## [2026-02-13 10:30] Session: Restore ReceivedInfoSection
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s) | Result |
+| --- | ----- | ------ | ------- | ------ |
+| 1   | 10:30 | MODIFY | src/features/portal/workspace/ConversationDetailPanel.tsx | ✅ |
+
+### Commands Executed:
+
+```bash
+# (none)
+```
+
+### Notes:
+
+- Reused `ReceivedInfoSection` from the conversation-detail feature barrel export.
+
+---
+
 ## [2026-02-05 17:00] Session: Direct Message Notifications - Implementation Complete
 
 ### Actions Performed:

@@ -6,7 +6,7 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Zap, Star, ListTodo, RefreshCw, MessageCircle } from "lucide-react";
+import { Zap, Star, ListTodo, RefreshCw, MessageCircle, X } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime";
@@ -810,7 +810,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Tìm kiếm..."
-              className="w-full rounded-full bg-gray-100 pl-9 pr-3 py-2 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              className="w-full rounded-full bg-gray-100 pl-9 pr-9 py-2 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-300"
             />
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500"
@@ -826,6 +826,14 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                 d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 105.5 5.5a7.5 7.5 0 0011.15 11.15z"
               />
             </svg>
+            {q && (
+              <button
+                onClick={() => setQ("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-transparent p-0 border-none hover:border-none"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Title + more */}
@@ -950,12 +958,22 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
             </div>
           </div>
           <div className="mt-2">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Tìm nhóm hoặc đồng nghiệp…"
-              className={`w-full ${inputCls}`}
-            />
+            <div className="relative">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Tìm nhóm hoặc đồng nghiệp…"
+                className={`w-full ${inputCls} pr-9`}
+              />
+              {q && (
+                <button
+                  onClick={() => setQ("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-transparent p-0 border-none hover:border-none"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

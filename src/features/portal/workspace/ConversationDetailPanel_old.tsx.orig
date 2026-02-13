@@ -1,0 +1,3057 @@
+import React from "react";
+import { hasLeaderPermissions, hasStaffPermissions } from "@/utils/roleUtils";
+import { RightAccordion } from "../components";
+import { LinkedTasksPanel } from "../components/LinkedTasksPanel";
+import { ViewAllTasksModal } from "../components/ViewAllTasksModal";
+import { SegmentedTabs } from "../components/SegmentedTabs";
+import { AddMemberDialog } from "./AddMemberDialog";
+import type {
+  FileManagerPhase1AProps,
+  MessageLike,
+} from "../components/FileManagerPhase1A";
+import type {
+  Task,
+  ReceivedInfo,
+  ChecklistItem,
+  ChecklistTemplateMap,
+  ChecklistTemplateItem,
+  TaskLogMessage,
+  ChecklistVariant,
+} from "../types";
+import type { StarredMessageDto } from "@/types/pinned_and_starred";
+import { ChecklistTemplatePanel } from "../components/ChecklistTemplatePanel";
+import {
+  TaskChecklistEditor,
+  TaskChecklistViewer,
+} from "../components/TaskChecklist";
+import { ChecklistTemplateSlideOver } from "../components/ChecklistTemplateSlideOver";
+import { useAllTasks } from "@/hooks/queries/useTasks";
+import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
+import { transformTemplatesToMap } from "@/utils/checklistTemplateTransform";
+import {
+  useAddCheckItem,
+  useToggleCheckItem,
+  useUpdateCheckItem,
+  useDeleteCheckItem,
+  useUpdateTaskStatus,
+} from "@/hooks/mutations";
+import { useInformationConfirmed } from "@/hooks/queries/useInformationConfirmed";
+import type { InformationConfirmedDto } from "@/types/information_confirmed";
+import { ConfirmedInfoTransferSheet } from "@/components/sheet/ConfirmedInfoTransferSheet";
+import { sendMessage } from "@/api/messages.api";
+import {
+  createInformationConfirmed,
+  updateInformationConfirmed,
+} from "@/api/information_confirmed.api";
+import { toast } from "sonner";
+
+import {
+  Users,
+  FolderPlus,
+  Plus,
+  Folder as FolderIcon,
+  FileText,
+  Image as ImageIcon,
+  MoveRight,
+  Edit2,
+  Trash2,
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  Check,
+  ClipboardList,
+  SquarePen,
+  ListTodo,
+  UserIcon,
+  Loader2,
+} from "lucide-react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+import { Button } from "@/components/ui/button";
+import { HintBubble } from "../components/HintBubble";
+import { useAuthStore } from "@/stores/authStore";
+import { useConversationStore } from "@/stores";
+import { isDirectConversation } from "@/types/conversations";
+import { useFilteredAssignees } from "@/hooks/useFilteredAssignees";
+import { FileNode } from "../components/FileManager";
+import { FileManagerPhase1A } from "../components/FileManagerPhase1A";
+import { group } from "console";
+import { set } from "date-fns";
+
+export const formatTime = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const btn = (active = false) =>
+  `rounded-lg border px-3 py-1 transition ${
+    active
+      ? "bg-brand-600 text-white border-brand-600 shadow-sm"
+      : "bg-white text-brand-700 border-brand-200 hover:bg-brand-50"
+  }`;
+
+/* =============== Types =============== */
+type ViewMode = "lead" | "staff";
+
+type MinimalMember = { id: string; name: string; role?: "Leader" | "Member" };
+
+type FolderAttribute = {
+  id: string;
+  key: string; // tên thuộc tính
+  value: string; // giá trị thuộc tính
+};
+
+const FileIcon: React.FC<{ n: FileNode }> = ({ n }) => {
+  if (n.type === "folder")
+    return <FolderIcon className="h-5 w-5 text-gray-600" />;
+  if (n.ext === "pdf") return <FileText className="h-5 w-5 text-rose-600" />;
+  if (n.ext === "jpg" || n.ext === "png")
+    return <ImageIcon className="h-5 w-5 text-sky-600" />;
+  return <FileText className="h-5 w-5 text-gray-600" />;
+};
+
+/* =============== Helpers =============== */
+const StatusBadge: React.FC<{ s: Task["status"] }> = ({ s }) => {
+  // Use the label and color from API response
+  const label = s.label || "Unknown";
+  const color = s.color || "#gray";
+
+  // Map status codes to CSS classes (fallback for styling)
+  const styleMap: Record<string, string> = {
+    todo: "bg-amber-200 text-brand-700 border-gray-200",
+    doing: "bg-sky-50 text-sky-700 border-sky-200",
+    need_to_verified: "bg-amber-50 text-amber-700 border-amber-200",
+    finished: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  };
+
+  const cls = styleMap[s.code] || "bg-gray-50 text-gray-700 border-gray-200";
+
+  return (
+    <span
+      className={`
+        inline-flex items-center
+        rounded-md px-2 py-0.5 text-[10px] font-medium
+        border border-gray-200 bg-gray-50 text-gray-600
+        shadow-sm
+        ${cls}
+      `}
+    >
+      {label}
+    </span>
+  );
+};
+
+const truncateMessageTitle = (t?: string) =>
+  (t || "").length > 80 ? (t || "").slice(0, 77) + "…" : t || "";
+
+/* =============== Components =============== */
+const TaskCard: React.FC<{
+  t: Task;
+  members: MinimalMember[];
+  viewMode: ViewMode;
+  isLeaderOwnTask?: boolean; // Flag when leader is task owner
+  groupName?: string; // Group/conversation name to display
+  checklistVariants?: ChecklistVariant[]; // Available checklist variants to look up template name
+  assigneeOptions?: MinimalMember[]; // 🆕 Filtered assignees for Leader mode (department scope)
+  onChangeStatus?: (id: string, next: Task["status"]) => void;
+  onReassign?: (id: string, assignTo: string) => void;
+  onToggleChecklist?: (taskId: string, itemId: string, done: boolean) => void;
+  onUpdateTaskChecklist?: (taskId: string, next: ChecklistItem[]) => void;
+  taskLogs?: Record<string, TaskLogMessage[]>;
+  onOpenTaskLog?: (taskId: string) => void;
+  onClickTitle?: (messageDto: StarredMessageDto | null) => void;
+  messages?: MessageLike[]; // Messages array to build StarredMessageDto
+}> = ({
+  t,
+  members,
+  viewMode,
+  isLeaderOwnTask = false,
+  groupName,
+  checklistVariants,
+  assigneeOptions, // 🆕 Filtered assignees for dropdown
+  onChangeStatus,
+  onReassign,
+  onToggleChecklist,
+  onUpdateTaskChecklist,
+  taskLogs,
+  onOpenTaskLog,
+  onClickTitle,
+  messages = [],
+}) => {
+  const [open, setOpen] = React.useState(false);
+  const assigneeName =
+    members.find((m) => m.id === t.assignTo)?.name ?? t.assignTo;
+  const [editingItem, setEditingItem] = React.useState<ChecklistItem | null>(
+    null,
+  );
+  const [newLabel, setNewLabel] = React.useState("");
+
+  // Mutation hooks for API calls
+  const addCheckItemMutation = useAddCheckItem();
+  const toggleCheckItemMutation = useToggleCheckItem();
+  const updateCheckItemMutation = useUpdateCheckItem();
+  const deleteCheckItemMutation = useDeleteCheckItem();
+  const updateStatusMutation = useUpdateTaskStatus();
+
+  const total = t.checklist?.length ?? 0;
+  const doneCount = t.checklist?.filter((c) => c.done).length ?? 0;
+  const progress = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  const displayLabel = groupName || "không xác định";
+  // Look up template name from checklistTemplateId
+  console.log("t.checklistTemplateId", t.checklistTemplateId);
+  console.log("checklistVariants", checklistVariants);
+  const templateName = t.checklistTemplateId
+    ? checklistVariants?.find((v) => v.id === t.checklistTemplateId)?.name
+    : null;
+  const progressText =
+    t.progressText ??
+    (total ? `${doneCount}/${total} mục` : "Không có checklist");
+
+  const [editChecklist, setEditChecklist] = React.useState(false);
+  const canEditStructure = hasLeaderPermissions() && t.status.code === "todo";
+
+  // Get permissions from task (from API)
+  const permissions = t.permissions;
+  return (
+    <>
+      {/* Checklist Edit Dialog */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-4 w-[300px] shadow-xl">
+            <div className="text-sm font-semibold mb-2">
+              {editingItem?.id === "new" ? "Thêm mục" : "Chỉnh sửa mục"}
+            </div>
+
+            <input
+              className="w-full rounded border px-2 py-1 text-sm"
+              value={newLabel}
+              autoFocus
+              onChange={(e) => setNewLabel(e.target.value)}
+            />
+
+            <div className="flex justify-end gap-2 mt-3">
+              <button
+                className="text-xs px-2 py-1 rounded bg-gray-100"
+                onClick={() => setEditingItem(null)}
+              >
+                Huỷ
+              </button>
+              <button
+                className="text-xs px-3 py-1 rounded bg-emerald-600 text-white"
+                disabled={
+                  addCheckItemMutation.isPending ||
+                  updateCheckItemMutation.isPending ||
+                  !newLabel.trim()
+                }
+                onClick={async () => {
+                  if (!newLabel.trim()) return;
+
+                  if (editingItem.id === "new") {
+                    // Call API to add new checklist item
+                    try {
+                      await addCheckItemMutation.mutateAsync({
+                        taskId: t.id,
+                        content: newLabel.trim(),
+                      });
+                      setEditingItem(null);
+                      setNewLabel("");
+                      setOpen(true); // Keep checklist open
+                    } catch (error) {
+                      console.error("Failed to add checklist item:", error);
+                      // Optionally show error message to user
+                    }
+                  } else {
+                    // Call API to update existing checklist item
+                    try {
+                      await updateCheckItemMutation.mutateAsync({
+                        taskId: t.id,
+                        itemId: editingItem.id,
+                        content: newLabel.trim(),
+                      });
+                      setEditingItem(null);
+                      setNewLabel("");
+                      setOpen(true); // Keep checklist open
+                    } catch (error) {
+                      console.error("Failed to update checklist item:", error);
+                      // Optionally show error message to user
+                    }
+                  }
+                }}
+              >
+                {addCheckItemMutation.isPending ||
+                updateCheckItemMutation.isPending
+                  ? "Đang lưu..."
+                  : "Lưu"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div
+        className="
+          relative
+          rounded-xl
+          bg-white/80
+          border border-emerald-100
+          p-4
+          shadow-[0_2px_3px_rgba(15,23,42,0.10)]
+          hover:shadow-[0_6px_8px_rgba(15,23,42,0.16)]
+          transition-all
+          duration-200
+          hover:-translate-y-[1px]
+        "
+        data-testid={`task-item-${t.id}`}
+      >
+        {/* Floating status badge góc phải trên */}
+        <div className="absolute -top-3 right-2" data-testid="task-status">
+          <StatusBadge s={t.status} />
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div className="min-w-0 flex-1">
+            {/* Title */}
+            <div className="text-[13px] font-semibold leading-snug truncate">
+              {/* ✅ UPDATED:  Clickable Title */}
+              <a
+                href={t.messageId ? `#msg-${t.messageId}` : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (!t.messageId) {
+                    return;
+                  }
+                  // Build StarredMessageDto object (same pattern as PinnedMessagesPanel)
+                  console.log("messages", messages);
+                  const messageDto: StarredMessageDto = {
+                    messageId: t.messageId,
+                    starredAt: t.createdAt || new Date().toISOString(),
+                    message: {
+                      id: t.messageId,
+                      conversationId: t.workTypeId || "",
+                      senderId: "", // MessageLike doesn't have senderId
+                      senderName: t.assignFrom || "Không xác định",
+                      senderIdentifier: null,
+                      senderFullName: t.assignFrom || null,
+                      senderRoles: null,
+                      parentMessageId: null,
+                      quoteMessageId: null,
+                      content: t.title || t.description || "", // MessageLike doesn't store content separately
+                      contentType: "TXT",
+                      sentAt: t.createdAt || new Date().toISOString(),
+                      editedAt: null,
+                      linkedTaskId: t.id,
+                      reactions: [],
+                      attachments: (t.attachments || []).map((att) => ({
+                        id: att.id || "",
+                        fileId: att.id || "",
+                        fileName: att.fileName || null,
+                        fileSize: att.fileSize || 0,
+                        contentType: att.contentType || null,
+                        createdAt: t.createdAt || new Date().toISOString(),
+                      })),
+                      replyCount: 0,
+                      isStarred: false,
+                      isPinned: false,
+                      threadPreview: null,
+                      mentions: [],
+                    },
+                  };
+
+                  // Switch to chat tab and scroll to message
+                  onClickTitle?.(messageDto);
+                }}
+                className={`
+                  block w-full text-left
+                  text-[13px] font-semibold leading-snug
+                  truncate
+                  transition-colors duration-200
+                  ${
+                    t.messageId
+                      ? `
+                      text-gray-800 
+                      hover:text-brand-600 
+                      hover:underline 
+                      hover:decoration-brand-500
+                      hover:decoration-2
+                      cursor-pointer
+                      focus:outline-none 
+                      focus:ring-2 
+                      focus:ring-brand-500/20 
+                      focus:ring-offset-1
+                      rounded-sm
+                    `
+                      : "text-gray-400 cursor-not-allowed no-underline"
+                  }
+                `}
+                title={
+                  t.messageId
+                    ? "📌 Nhấn để xem tin nhắn gốc"
+                    : "⚠️ Không có tin nhắn nguồn"
+                }
+                aria-disabled={!t.messageId}
+                data-testid="task-title"
+              >
+                {truncateMessageTitle(t.title || t.description || "")}
+              </a>
+            </div>
+
+            {/* Meta: group name, progress, assignee */}
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
+              <span className="inline-flex items-center gap-1">
+                <span>Nhóm:</span>
+
+                {/* Group/Conversation name */}
+                <span className="font-medium text-gray-700">
+                  {displayLabel}
+                </span>
+              </span>
+
+              {/* CHIP template name */}
+              {templateName && (
+                <span
+                  className="
+                      inline-flex items-center px-1.5 py-0.5
+                      rounded-md text-[10px] font-semibold
+                      bg-emerald-50 text-emerald-700 border border-emerald-200
+                      shadow-sm
+                    "
+                >
+                  {templateName}
+                </span>
+              )}
+              {/* {total > 0 && (
+                <>
+                  <span>•</span>
+                  <span>
+                    Checklist:{" "}
+                    <span className="font-medium text-gray-700">
+                      {progressText}
+                    </span>
+                  </span>
+                </>
+              )} */}
+
+              {hasLeaderPermissions() && (
+                <>
+                  <span>•</span>
+                  {t.status.code !== "need_to_verified" ? (
+                    <span>
+                      Giao cho:{" "}
+                      <span className="font-medium text-gray-700">
+                        <select
+                          className="mt-1 rounded-md border px-2 py-0.5 text-[11px] bg-white"
+                          value={t.assignTo}
+                          onChange={(e) => onReassign?.(t.id, e.target.value)}
+                        >
+                          {(assigneeOptions || members).map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                    </span>
+                  ) : (
+                    "Giao cho:" +
+                    (assigneeOptions || members).find(
+                      (m) => m.id === t.assignTo,
+                    )?.name
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Progress bar */}
+            {total > 0 && (
+              <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  className="
+                    h-full rounded-full
+                    bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600
+                    transition-all duration-300
+                  "
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
+
+            {/* Checklist */}
+            {t.checklist?.length ? (
+              <div className="mt-2">
+                {/* Toggle */}
+                <div className="flex items-center justify-between pr-1">
+                  {/* Checklist toggle */}
+                  <div
+                    className="
+                    inline-flex items-center gap-1 
+                    text-[11px] font-medium 
+                    text-emerald-700 
+                    cursor-pointer 
+                    hover:text-emerald-800 hover:underline
+                    select-none
+                  "
+                    onClick={() => setOpen((v) => !v)}
+                  >
+                    {open ? (
+                      <ChevronDown className="w-3 h-3" />
+                    ) : (
+                      <ChevronRight className="w-3 h-3" />
+                    )}
+                    Checklist ({doneCount}/{total})
+                  </div>
+
+                  {/* + Thêm (only when lead + todo) */}
+                  {canEditStructure && (
+                    <span
+                      className="
+                      text-[11px] text-emerald-700 
+                      cursor-pointer hover:underline select-none
+                    "
+                      // onClick={() => {
+                      //   const newItem = {
+                      //     id: "chk_" + Math.random().toString(36).slice(2),
+                      //     label: "",
+                      //     done: false,
+                      //   };
+                      //   onUpdateTaskChecklist?.(t.id, [...(t.checklist ?? []), newItem]);
+                      //   setOpen(true);
+                      // }}
+                      onClick={() => {
+                        setEditingItem({ id: "new", label: "", done: false });
+                        setNewLabel("");
+                        setOpen(true);
+                      }}
+                    >
+                      + Thêm
+                    </span>
+                  )}
+                </div>
+
+                {/* Items */}
+                {open && (
+                  <ul className="mt-2 space-y-1">
+                    {t.checklist.map((c) => (
+                      <li
+                        key={c.id}
+                        className="group flex items-center gap-2 text-[12px] leading-snug rounded-md px-2 py-1 hover:bg-gray-50 transition-all"
+                      >
+                        {/* Checkbox */}
+                        <button
+                          type="button"
+                          className={`
+                            h-4 w-4 shrink-0 rounded-full
+                            transition flex items-center justify-center
+                            ${
+                              c.done
+                                ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer checklist-btn"
+                                : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
+                            }
+                          `}
+                          disabled={toggleCheckItemMutation.isPending}
+                          onClick={async () => {
+                            try {
+                              await toggleCheckItemMutation.mutateAsync({
+                                taskId: t.id,
+                                itemId: c.id,
+                              });
+                            } catch (error) {
+                              console.error(
+                                "Failed to toggle checklist item:",
+                                error,
+                              );
+                            }
+                          }}
+                          title={
+                            c.done ? "Nhấn để bỏ chọn" : "Nhấn để hoàn thành"
+                          }
+                        >
+                          {c.done && <Check className="w-3 h-3" />}
+                        </button>
+
+                        {/* Label */}
+                        <span
+                          className={
+                            c.done
+                              ? "text-gray-400 line-through flex-1"
+                              : "text-gray-700 flex-1"
+                          }
+                        >
+                          {c.label}
+                        </span>
+
+                        {/* Actions when editable */}
+                        {canEditStructure && (
+                          <div className="flex gap-1 ml-auto opacity-0 group-hover:opacity-100 transition">
+                            {/* Edit */}
+                            <Edit2
+                              className="w-3.5 h-3.5 text-gray-500 cursor-pointer hover:text-emerald-600"
+                              onClick={() => {
+                                setEditingItem(c);
+                                setNewLabel(c.label);
+                              }}
+                            />
+
+                            {/* Delete */}
+                            {deleteCheckItemMutation.isPending ? (
+                              <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
+                            ) : (
+                              <Trash2
+                                className="w-3.5 h-3.5 text-rose-500 cursor-pointer hover:text-rose-600"
+                                onClick={async () => {
+                                  if (!confirm(`Xóa mục "${c.label}"?`)) return;
+                                  try {
+                                    await deleteCheckItemMutation.mutateAsync({
+                                      taskId: t.id,
+                                      itemId: c.id,
+                                    });
+                                  } catch (error) {
+                                    console.error(
+                                      "Failed to delete checklist item:",
+                                      error,
+                                    );
+                                  }
+                                }}
+                              />
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 text-[11px] text-gray-400">
+                Không có checklist.
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-2">
+            {/* BÊN TRÁI: thời gian tạo task dd/MM HH:mm */}
+            <div className="text-[11px] text-gray-400 whitespace-nowrap">
+              {t.createdAt && (
+                <>
+                  {new Date(t.createdAt).toLocaleDateString("vi-VN", {
+                    day: "2-digit",
+                    month: "2-digit",
+                  })}{" "}
+                  {formatTime(t.createdAt)}
+                </>
+              )}
+            </div>
+
+            {/* BÊN PHẢI:  action buttons */}
+            <div className="flex items-center gap-2">
+              {/* NÚT NHẬT KÝ – luôn enable */}
+              <button
+                onClick={() => onOpenTaskLog?.(t.id)}
+                className="
+                  px-2 py-1 rounded-md border text-[11px]
+                  border-emerald-300 text-emerald-700 hover: bg-emerald-50
+                "
+              >
+                Nhật ký
+              </button>
+
+              {/* Status transition buttons based on permissions */}
+              {permissions?.canChangeToDoing && t.status.code === "todo" && (
+                <button
+                  disabled={updateStatusMutation.isPending}
+                  onClick={async () => {
+                    try {
+                      await updateStatusMutation.mutateAsync({
+                        taskId: t.id,
+                        status: "doing",
+                      });
+                    } catch (error) {
+                      console.error("Failed to update status:", error);
+                    }
+                  }}
+                  className="rounded-md border px-2 py-0.5 text-[11px] hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  {updateStatusMutation.isPending ? "..." : "Bắt đầu"}
+                </button>
+              )}
+
+              {permissions?.canChangeToNeedVerify &&
+                t.status.code === "doing" &&
+                !permissions?.canChangeToFinished && (
+                  <button
+                    disabled={updateStatusMutation.isPending}
+                    onClick={async () => {
+                      try {
+                        // Validate: All checklist items must be checked (100%)
+                        const totalItems = t.checklist?.length || 0;
+                        const checkedItems =
+                          t.checklist?.filter((c) => c.done).length || 0;
+
+                        if (totalItems > 0 && checkedItems < totalItems) {
+                          const percentage = Math.round(
+                            (checkedItems / totalItems) * 100
+                          );
+                          toast.error(
+                            `Không thể hoàn thành công việc! Vui lòng hoàn thành tất cả checklist items (${percentage}% / 100%)`,
+                            {
+                              duration: 4000,
+                            }
+                          );
+                          return; // Prevent status change
+                        }
+
+                        await updateStatusMutation.mutateAsync({
+                          taskId: t.id,
+                          status: "need_to_verified",
+                        });
+                      } catch (error) {
+                        console.error("Failed to update status:", error);
+                      }
+                    }}
+                    className="rounded-md border px-2 py-0.5 text-[11px] hover:bg-emerald-50 disabled:opacity-50"
+                  >
+                    {updateStatusMutation.isPending ? "..." : "Hoàn tất"}
+                  </button>
+                )}
+
+              {permissions?.canChangeToFinished &&
+                (t.status.code === "doing" ||
+                  t.status.code === "need_to_verified") && (
+                  <button
+                    disabled={
+                      updateStatusMutation.isPending ||
+                      toggleCheckItemMutation.isPending
+                    }
+                    onClick={async () => {
+                      try {
+                        // Validate: All checklist items must be checked (100%)
+                        const totalItems = t.checklist?.length || 0;
+                        const checkedItems =
+                          t.checklist?.filter((c) => c.done).length || 0;
+
+                        if (totalItems > 0 && checkedItems < totalItems) {
+                          const percentage = Math.round(
+                            (checkedItems / totalItems) * 100
+                          );
+                          toast.error(
+                            `Không thể hoàn thành công việc! Vui lòng hoàn thành tất cả checklist items (${percentage}% / 100%)`,
+                            {
+                              duration: 4000,
+                            }
+                          );
+                          return; // Prevent status change
+                        }
+
+                        // All checklist items are checked (or no checklist) - proceed to finish
+                        await updateStatusMutation.mutateAsync({
+                          taskId: t.id,
+                          status: "finished",
+                        });
+                      } catch (error) {
+                        console.error("Failed to update status:", error);
+                      }
+                    }}
+                    className="rounded-md border px-2 py-0.5 text-[11px] hover:bg-emerald-50 disabled:opacity-50"
+                  >
+                    {updateStatusMutation.isPending ||
+                    toggleCheckItemMutation.isPending
+                      ? "..."
+                      : "Hoàn tất"}
+                  </button>
+                )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        {`
+        @keyframes fade-in {
+          from { opacity: 0; transform: scale(0.96); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.18s ease-out;
+        }
+      `}
+      </style>
+    </>
+  );
+};
+
+/* ===============================
+   RECEIVED INFO SECTION (NEW)
+   =============================== */
+const ReceivedInfoSection: React.FC<{
+  items: ReceivedInfo[];
+  onAssignInfo?: (info: ReceivedInfo) => void;
+  //onTransferInfo?: (infoId: string, dept: string) => void;
+  onOpenGroupTransfer?: (info: ReceivedInfo) => void;
+}> = ({ items, onAssignInfo, onOpenGroupTransfer }) => {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className="premium-accordion-wrapper">
+      <RightAccordion
+        icon={<ListTodo className="h-4 w-4 text-amber-500" />}
+        title={
+          <div className="flex items-center gap-2">
+            <span>Thông tin đã tiếp nhận</span>
+
+            {/* BADGE — số lượng "waiting" */}
+            {items.filter((i) => i.status === "waiting").length > 0 && (
+              <span
+                className="inline-flex items-center justify-center text-[10px] px-2 py-0.5 
+                         rounded-full bg-amber-100 text-amber-700 font-bold border border-amber-300"
+              >
+                {items.filter((i) => i.status === "waiting").length}
+              </span>
+            )}
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {items.map((info) => {
+            const isTransferred = info.status === "transferred";
+            const isAssigned = info.status === "assigned";
+
+            return (
+              <div
+                key={info.id}
+                className="rounded-lg border px-3 py-2 shadow-sm hover:shadow-md transition bg-white"
+              >
+                <div className="font-medium text-sm truncate">{info.title}</div>
+
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Từ: <span className="font-semibold">{info.sender}</span> •
+                  Tiếp nhận lúc: {formatTime(info.createdAt)}
+                </div>
+
+                {/* Status */}
+                {isTransferred && (
+                  <div className="text-[11px] text-amber-700 mt-1">
+                    ➜ Đã chuyển sang nhóm:{" "}
+                    <span className="font-semibold">
+                      {info.transferredToGroupName}
+                    </span>
+                    {info.transferredWorkTypeName && (
+                      <>
+                        {" "}
+                        • Loại việc:{" "}
+                        <span className="font-semibold">
+                          {info.transferredWorkTypeName}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {isAssigned && (
+                  <div className="text-[11px] text-emerald-700 mt-1">
+                    ✓ Đã giao task
+                  </div>
+                )}
+
+                {/* Buttons */}
+                {info.status === "waiting" && (
+                  <div className="flex gap-2 mt-2">
+                    <Button size="sm" onClick={() => onAssignInfo?.(info)}>
+                      Giao Task
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onOpenGroupTransfer?.(info)}
+                    >
+                      Chuyển nhóm
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </RightAccordion>
+    </div>
+  );
+};
+
+/* =============== ConversationDetailPanel =============== */
+export const ConversationDetailPanel: React.FC<{
+  // Tabs
+  tab: "info" | "order" | "tasks" | "chat";
+  setTab: (v: "info" | "order" | "tasks" | "chat") => void;
+
+  // Context
+  viewMode?: ViewMode; // 'lead' | 'staff'
+  groupId?: string;
+  workTypeName?: string;
+  // Note: groupName and categoryName removed - now from store
+
+  // Members (for "Thành viên" accordion)
+  members?: MinimalMember[];
+  onAddMember?: () => void;
+
+  // Tasks
+  tasks?: Task[];
+  selectedWorkTypeId?: string;
+  currentUserId?: string;
+  onChangeTaskStatus?: (id: string, next: Task["status"]) => void;
+  onReassignTask?: (id: string, assignTo: string) => void;
+  onToggleChecklist?: (taskId: string, itemId: string, done: boolean) => void;
+  receivedInfos?: ReceivedInfo[];
+  onTransferInfo?: (infoId: string, departmentId: string) => void;
+  onAssignInfo?: (info: ReceivedInfo) => void;
+  onOpenGroupTransfer?: (info: ReceivedInfo) => void;
+  onUpdateTaskChecklist?: (taskId: string, next: ChecklistItem[]) => void;
+  checklistTemplates?: ChecklistTemplateMap;
+  setChecklistTemplates?: React.Dispatch<
+    React.SetStateAction<ChecklistTemplateMap>
+  >;
+  applyTemplateToTasks?: (
+    workTypeId: string,
+    template: ChecklistTemplateItem[],
+  ) => void;
+  taskLogs?: Record<string, TaskLogMessage[]>;
+  onOpenTaskLog?: (taskId: string) => void;
+  onOpenSourceMessage?: (messageDto: StarredMessageDto | null) => void;
+  checklistVariants?: ChecklistVariant[];
+  messages?: MessageLike[]; // Messages from chat to extract files from
+
+  /** Phase 2: Messages query object for auto-loading older messages */
+  messagesQuery?: {
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    fetchNextPage: () => Promise<unknown>;
+  };
+}> = ({
+  tab,
+  setTab,
+  viewMode = "staff",
+  groupId,
+  workTypeName = "—",
+  // categoryName and groupName removed from props
+  members = [],
+  onAddMember,
+  tasks = [],
+  selectedWorkTypeId,
+  currentUserId,
+  onChangeTaskStatus,
+  onReassignTask,
+  onToggleChecklist,
+  receivedInfos = [],
+  onTransferInfo,
+  onAssignInfo,
+  onOpenGroupTransfer,
+  onUpdateTaskChecklist,
+  checklistTemplates = {},
+  setChecklistTemplates,
+  applyTemplateToTasks,
+  taskLogs,
+  onOpenTaskLog,
+  onOpenSourceMessage,
+  checklistVariants,
+  messages = [],
+  messagesQuery, // Phase 2: For auto-loading older messages
+}) => {
+  // Read conversation data from store
+  const categoryName = useConversationStore((s) => s.getConversationCategory());
+  const groupName =
+    useConversationStore((s) => s.getConversationName()) || "đội";
+
+  // 🆕 NEW: Fetch confirmed information for this conversation (leader only)
+  const { data: confirmedInfoData } = useInformationConfirmed(
+    {
+      conversationId: groupId,
+      isFinished: false, // Only show unfinished confirmed info
+    },
+    { enabled: !!groupId && hasLeaderPermissions() }
+  );
+
+  const confirmedInfos = confirmedInfoData?.data || [];
+
+  // 🆕 NEW: Transform confirmed info to ReceivedInfo format for display
+  const transformedConfirmedInfos: ReceivedInfo[] = confirmedInfos.map((info) => ({
+    id: info.id,
+    messageId: info.messageId,
+    groupId: info.conversationId,
+    title: info.content?.substring(0, 60) || "Không có nội dung",
+    sender: "Đã xác nhận",
+    createdAt: info.createdAt,
+    status: "waiting", // Always waiting since we filter isFinished=false
+  }));
+
+  // 🆕 NEW: State for confirmed info transfer sheet
+  const [confirmedInfoTransferSheet, setConfirmedInfoTransferSheet] = React.useState<{
+    open: boolean;
+    confirmedInfo?: InformationConfirmedDto;
+  }>({ open: false });
+
+  // 🆕 NEW: Handler for confirmed info assign task
+  const handleConfirmedInfoAssign = (info: ReceivedInfo) => {
+    // Find original confirmed info to pass correct message ID and full content
+    const confirmedInfo = confirmedInfos.find((ci) => ci.id === info.id);
+    if (!confirmedInfo) return;
+
+    // Open assign sheet with confirmed info data (with FULL content, not truncated)
+    // Pass confirmed info ID so it can be marked as finished when task is created
+    onAssignInfo?.({
+      ...info,
+      messageId: confirmedInfo.messageId,
+      title: confirmedInfo.content || "Không có nội dung", // Full content for task name
+    });
+  };
+
+  // 🆕 NEW: Handler for confirmed info transfer to another group
+  const handleConfirmedInfoTransfer = (info: ReceivedInfo) => {
+    const confirmedInfo = confirmedInfos.find((ci) => ci.id === info.id);
+    if (!confirmedInfo) return;
+
+    setConfirmedInfoTransferSheet({
+      open: true,
+      confirmedInfo,
+    });
+  };
+
+  // 🆕 NEW: Handler for confirmed info transfer confirmation
+  const handleConfirmedInfoTransferConfirm = async (payload: {
+    confirmedInfoId: string;
+    toCategoryId: string;
+    toCategoryName: string;
+    toConversationId: string;
+    toConversationName: string;
+    assignTo: string;
+    messageContent: string;
+  }) => {
+    try {
+      // 1. Send message to target conversation
+      const sentMessage = await sendMessage({
+        conversationId: payload.toConversationId,
+        content: payload.messageContent,
+        messageType: "TXT",
+      });
+
+      // 2. Create new confirmed information for the new conversation
+      const user = useAuthStore.getState().user;
+      if (sentMessage && user) {
+        await createInformationConfirmed({
+          conversationId: payload.toConversationId,
+          messageId: sentMessage.id,
+          content: payload.messageContent,
+          statusCode: "pending", // or appropriate status
+          confirmedBy: payload.assignTo,
+        });
+      }
+
+      // 3. Mark old confirmed information as finished
+      await updateInformationConfirmed(payload.confirmedInfoId, {
+        isFinished: true,
+      });
+
+      toast.success(`Đã chuyển thông tin sang ${payload.toConversationName}`);
+
+      // 4. Navigate to target conversation
+      const conversationStore = useConversationStore.getState();
+      conversationStore.setSelectedConversation({
+        type: "group",
+        id: payload.toConversationId,
+        name: payload.toConversationName,
+        categoryId: payload.toCategoryId,
+        category: payload.toCategoryName,
+      });
+
+      // 5. Close sheet
+      setConfirmedInfoTransferSheet({ open: false });
+    } catch (error) {
+      console.error("Failed to transfer confirmed info:", error);
+      toast.error("Không thể chuyển thông tin");
+    }
+  };
+
+  // 🆕 Check if conversation is DM (personal chat) to hide tasks tab
+  // Use activeTabType to handle tab switches even when no conversation selected
+  const selectedConversation = useConversationStore(
+    (s) => s.selectedConversation,
+  );
+  const activeTabType = useConversationStore((s) => s.activeTabType);
+  const isDM = activeTabType === "dm" || selectedConversation?.type === "dm";
+
+  // 🆕 Dynamic tabs based on conversation type
+  const detailTabs = React.useMemo(() => {
+    const baseTabs = [{ key: "info", label: "Thông Tin" }];
+
+    // Only add tasks tab for group chats (not DM)
+    if (!isDM) {
+      baseTabs.push({ key: "order", label: "Công Việc" });
+    }
+
+    return baseTabs;
+  }, [isDM]);
+
+  // 🆕 Auto-switch to "info" tab if DM and currently on "order"
+  React.useEffect(() => {
+    if (isDM && tab === "order") {
+      setTab("info");
+    }
+  }, [isDM, tab, setTab]);
+
+  // State for View All Tasks Modal
+
+  const [showViewAllTasksModal, setShowViewAllTasksModal] =
+    React.useState(false);
+  // State for Add Member Dialog
+  const [showAddMemberDialog, setShowAddMemberDialog] = React.useState(false);
+
+  // Helper: Convert messageId to StarredMessageDto for child components
+  // This allows legacy components (FileManagerPhase1A) that only pass messageId
+  // to still trigger the message scroll functionality
+  const handleOpenSourceMessageById = React.useCallback(
+    (messageId: string) => {
+      // Find the message from messages array
+      const sourceMessage = messages.find((m) => m.id === messageId);
+
+      if (!sourceMessage) {
+        console.warn("Source message not found:", messageId);
+        return;
+      }
+
+      // Build StarredMessageDto object
+      const messageDto: StarredMessageDto = {
+        messageId: sourceMessage.id,
+        starredAt:
+          sourceMessage.createdAt ||
+          sourceMessage.time ||
+          new Date().toISOString(),
+        message: {
+          id: sourceMessage.id,
+          conversationId: sourceMessage.groupId || "",
+          senderId: "",
+          senderName:
+            sourceMessage.senderName || sourceMessage.sender || "Unknown",
+          senderIdentifier: null,
+          senderFullName: sourceMessage.senderName || null,
+          senderRoles: null,
+          parentMessageId: null,
+          quoteMessageId: null,
+          content: "",
+          contentType:
+            sourceMessage.type === "image"
+              ? "IMG"
+              : sourceMessage.type === "file"
+                ? "FILE"
+                : "TXT",
+          sentAt:
+            sourceMessage.createdAt ||
+            sourceMessage.time ||
+            new Date().toISOString(),
+          editedAt: null,
+          linkedTaskId: null,
+          reactions: [],
+          attachments: (sourceMessage.attachments || []).map((att) => ({
+            id: att.fileId || "",
+            fileId: att.fileId || "",
+            fileName: att.fileName || att.name || null,
+            fileSize: att.fileSize || 0,
+            contentType: att.contentType || null,
+            createdAt: sourceMessage.createdAt || new Date().toISOString(),
+          })),
+          replyCount: 0,
+          isStarred: false,
+          isPinned: false,
+          threadPreview: null,
+          mentions: [],
+        },
+      };
+
+      // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+      // User can see highlighted message in current tab
+      // setTab("chat");
+      // Trigger scroll to message
+      onOpenSourceMessage?.(messageDto);
+    },
+    [messages, onOpenSourceMessage, setTab],
+  );
+
+  // Fetch all tasks for conversation (no user task filter)
+  const {
+    data: linkedTasksData,
+    isLoading: linkedTasksLoading,
+    isError: linkedTasksError,
+    error: linkedTasksErrorObj,
+    refetch: refetchLinkedTasks,
+  } = useAllTasks({
+    conversationId: groupId || "",
+    enabled: !!groupId && showViewAllTasksModal,
+  });
+
+  // Fetch checklist templates from API filtered by groupId (conversationId)
+  const {
+    data: checklistTemplatesFromAPI,
+    isLoading: templatesLoading,
+    isError: templatesError,
+  } = useChecklistTemplates(groupId);
+
+  // Transform API templates to local format and merge with prop templates
+  const mergedChecklistTemplates = React.useMemo(() => {
+    if (!checklistTemplatesFromAPI || checklistTemplatesFromAPI.length === 0) {
+      return checklistTemplates || {};
+    }
+
+    // Transform API templates for the current workType
+    const apiTemplatesMap = selectedWorkTypeId
+      ? transformTemplatesToMap(checklistTemplatesFromAPI, selectedWorkTypeId)
+      : {};
+
+    // Merge with prop templates (prop templates take precedence)
+    return {
+      ...apiTemplatesMap,
+      ...checklistTemplates,
+    };
+  }, [checklistTemplatesFromAPI, checklistTemplates, selectedWorkTypeId]);
+
+  // Helper: kiểm tra task có phải của ngày hôm nay không
+  const isToday = (iso?: string) => {
+    if (!iso) return false;
+    const d = new Date(iso);
+    const t = new Date();
+    return (
+      d.getFullYear() === t.getFullYear() &&
+      d.getMonth() === t.getMonth() &&
+      d.getDate() === t.getDate()
+    );
+  };
+
+  // Leader mode toggle state
+  const [leaderMode, setLeaderMode] = React.useState<"team" | "mine">("team");
+
+  // Collapse states for leader own tasks
+  const [showLeaderOwnTodo, setShowLeaderOwnTodo] = React.useState(true);
+  const [showLeaderOwnInProgress, setShowLeaderOwnInProgress] =
+    React.useState(true);
+  const [showLeaderOwnDone, setShowLeaderOwnDone] = React.useState(true);
+
+  // Modal for completed tasks history
+  const [showLeaderOwnCompletedAll, setShowLeaderOwnCompletedAll] =
+    React.useState(false);
+
+  // Toggle cho từng nhóm task ở chế độ lead
+  const [showLeadAwaiting, setShowLeadAwaiting] = React.useState(true);
+  const [showLeadTodo, setShowLeadTodo] = React.useState(false);
+  const [showLeadInProgress, setShowLeadInProgress] = React.useState(false);
+  const [showLeadDone, setShowLeadDone] = React.useState(false);
+
+  // Set highlight cho các nhóm task ở chế độ lead
+  const awaitingOpenedRef = React.useRef(false);
+  // const todoOpenedRef = React.useRef(false);
+  // const inProgressOpenedRef = React.useRef(false);
+
+  const [highlightAwaiting, setHighlightAwaiting] = React.useState(false);
+  // const [highlightTodo, setHighlightTodo] = React.useState(false);
+  // const [highlightInProgress, setHighlightInProgress] = React.useState(false);
+
+  const isTasksTab = tab === "order" || tab === "tasks";
+
+  const [templateOpen, setTemplateOpen] = React.useState(false);
+
+  // Variant hiện tại đang chỉnh trong "Checklist mặc định"
+  const [templateVariantId, setTemplateVariantId] = React.useState<
+    string | undefined
+  >(undefined);
+
+  React.useEffect(() => {
+    if (checklistVariants && checklistVariants.length > 0) {
+      const def =
+        checklistVariants.find((v) => v.isDefault) ?? checklistVariants[0];
+      // Nếu state hiện tại không hợp lệ, reset về default
+      setTemplateVariantId((prev) =>
+        prev && checklistVariants.some((v) => v.id === prev) ? prev : def?.id,
+      );
+    } else {
+      setTemplateVariantId(undefined);
+    }
+  }, [checklistVariants, selectedWorkTypeId]);
+
+  // ====== Files state - Phase 1A ======
+  // Tạm thời không dùng FileManager (folder) trong tab Thông tin.
+  // FileManagerPhase1A sẽ tự có mock data riêng cho Ảnh/Video & Tài liệu.
+
+  // const initialMediaItems: FileNode[] = [
+  //   { id: "fd_img_1", type: "folder", name: "Biên bản" },
+  //   { id: "img_1", type: "file", name: "tem_1.jpg", ext: "jpg" },
+  //   { id: "img_2", type: "file", name: "kien_2.jpg", ext: "jpg" },
+  // ];
+
+  // const initialDocItems: FileNode[] = [
+  //   { id: "fd_doc_1", type: "folder", name: "PO_1246" },
+  //   { id: "pdf_1", type: "file", name: "Phieu_Nhap_PO1246.pdf", ext: "pdf" },
+  //   { id: "xlsx_2", type: "file", name: "Xuat_Kho.xlsx", ext: "xlsx" },
+  //   { id: "w_2", type: "file", name: "Khach_Doi.docx", ext: "docx" },
+  // ];
+
+  // // Default attributes for leader view - Sau này nên load từ API theo từng leader
+  // const [leaderDefaultAttrs, setLeaderDefaultAttrs] = React.useState<FolderAttribute[]>([
+  //   { id: "att_name", key: "Tên sản phẩm", value: "" },
+  //   { id: "att_brand", key: "Thương hiệu", value: "" },
+  //   { id: "att_nsx", key: "NSX", value: "" },
+  //   { id: "att_exp", key: "Hạn dùng", value: "" },
+  //   { id: "att_supplier", key: "NCC", value: "" },
+  // ]);
+
+  // ====== Tasks derived ======
+  // const tasksByWork = React.useMemo(
+  //   () => tasks.filter((t) => !selectedWorkTypeId || t.workTypeId === selectedWorkTypeId),
+  //   [tasks, selectedWorkTypeId]
+  // );
+  // Lọc theo workType trước
+  const tasksByWorkRaw = React.useMemo(
+    () =>
+      tasks.filter(
+        (t) => !selectedWorkTypeId || t.workTypeId === selectedWorkTypeId,
+      ),
+    [tasks, selectedWorkTypeId],
+  );
+
+  // Leader thấy toàn bộ task của hôm nay
+  // Staff chỉ thấy task của mình trong hôm nay
+  const tasksToday = React.useMemo(() => {
+    if (hasLeaderPermissions()) {
+      return tasksByWorkRaw.filter((t) => isToday(t.createdAt));
+    }
+    if (hasStaffPermissions()) {
+      return tasksByWorkRaw.filter(
+        (t) => t.assignTo === currentUserId && isToday(t.createdAt),
+      );
+    }
+    return tasksByWorkRaw;
+  }, [tasksByWorkRaw, currentUserId]);
+  // Get auth user as fallback when currentUserId prop is not provided
+  const authUser = useAuthStore((state) => state.user);
+  const effectiveUserId = authUser?.id;
+
+  // Filter leader's own tasks
+  const leaderOwnTasks = React.useMemo(() => {
+    if (!hasLeaderPermissions() || !effectiveUserId) return [];
+
+    return tasksByWorkRaw.filter((t) => t.assignTo === effectiveUserId);
+  }, [tasksByWorkRaw, viewMode, effectiveUserId]);
+
+  // Group leader own tasks by status
+  const leaderOwnBuckets = React.useMemo(
+    () => ({
+      todo: leaderOwnTasks.filter((t) => t.status.code === "todo"),
+      inProgress: leaderOwnTasks.filter((t) => t.status.code === "doing"),
+      // All done tasks (not just today)
+      doneToday: leaderOwnTasks.filter(
+        (t) =>
+          t.status.code === "need_to_verified" || t.status.code === "finished",
+      ),
+    }),
+    [leaderOwnTasks],
+  );
+
+  // All completed tasks (any date) for modal
+  const leaderOwnAllCompleted = React.useMemo(() => {
+    if (!hasLeaderPermissions() || !effectiveUserId) return [];
+
+    return tasksByWorkRaw
+      .filter(
+        (t) =>
+          t.assignTo === effectiveUserId &&
+          (t.status.code === "need_to_verified" ||
+            t.status.code === "finished") &&
+          (!selectedWorkTypeId || t.workTypeId === selectedWorkTypeId),
+      )
+      .sort((a, b) => {
+        const da = new Date(a.updatedAt || a.createdAt || "");
+        const db = new Date(b.updatedAt || b.createdAt || "");
+        return db.getTime() - da.getTime(); // Newest first
+      });
+  }, [tasksByWorkRaw, viewMode, effectiveUserId, selectedWorkTypeId]);
+  const myTasks = React.useMemo(
+    () =>
+      effectiveUserId
+        ? tasksByWorkRaw.filter((t) => t.assignTo === effectiveUserId)
+        : tasksByWorkRaw,
+    [tasksByWorkRaw, effectiveUserId],
+  );
+
+  const splitByStatus = (list: Task[]) => ({
+    todo: list.filter((t) => t.status.code === "todo"),
+    inProgress: list.filter((t) => t.status.code === "doing"),
+    awaiting: list.filter((t) => t.status.code === "need_to_verified"),
+    done: list.filter((t) => t.status.code === "finished"),
+  });
+  const staffBuckets = splitByStatus(myTasks);
+  const [assigneeFilter, setAssigneeFilter] = React.useState<string>("all");
+
+  // 🆕 Filter assignees for Leader mode (department + conversation intersection)
+  const {
+    filteredMembers,
+    isLoading: isFilteringMembers,
+    isError: isFilterError,
+  } = useFilteredAssignees({
+    conversationId: groupId || "",
+    enabled: hasLeaderPermissions() && leaderMode === "team",
+  });
+
+  // Use filtered members for Leader mode, all members for Staff mode
+  const assigneeOptions = React.useMemo(
+    () =>
+      hasLeaderPermissions() && leaderMode === "team"
+        ? filteredMembers
+        : members,
+    [filteredMembers, members, leaderMode],
+  );
+
+  const leadBuckets = React.useMemo(() => {
+    // When "Tất cả" selected, only show tasks assigned to filtered members (department scope)
+    if (assigneeFilter === "all") {
+      const allowedIds = new Set(assigneeOptions.map((m) => m.id));
+      const base = tasksByWorkRaw.filter((t) => allowedIds.has(t.assignTo));
+      return splitByStatus(base);
+    }
+
+    // When specific assignee selected, filter normally
+    const base = tasksByWorkRaw.filter((t) => t.assignTo === assigneeFilter);
+    return splitByStatus(base);
+  }, [assigneeFilter, tasksByWorkRaw, assigneeOptions]);
+
+  // Toàn bộ task đã hoàn thành (không chỉ hôm nay) cho Leader (lọc theo assigneeFilter + workType)
+  const allLeadDoneTasks = React.useMemo(() => {
+    const base =
+      assigneeFilter === "all"
+        ? tasksByWorkRaw
+        : tasksByWorkRaw.filter((t) => t.assignTo === assigneeFilter);
+
+    return base.filter(
+      (t) =>
+        t.status.code === "finished" || t.status.code === "need_to_verified",
+    );
+  }, [assigneeFilter, tasksByWorkRaw]);
+
+  const [showCompleted, setShowCompleted] = React.useState(false);
+  const [showLeadCompletedAll, setShowLeadCompletedAll] = React.useState(false);
+
+  // Checklist template panel
+  const [showTemplate, setShowTemplate] = React.useState(false);
+
+  const workTypeKey = selectedWorkTypeId ?? "__default__";
+  const activeVariantId =
+    templateVariantId ??
+    checklistVariants?.find((v) => v.isDefault)?.id ??
+    checklistVariants?.[0]?.id ??
+    "__default__";
+
+  const workTypeTemplate =
+    mergedChecklistTemplates?.[workTypeKey]?.[activeVariantId] ?? [];
+  console.log("workTypeTemplate:", workTypeTemplate);
+  return (
+    <aside
+      className="bg-white shadow-sm flex flex-col min-h-0"
+      data-testid="conversation-detail-panel"
+    >
+      {/* Header: chỉ còn Tabs, bỏ dropdown CSKH/THU MUA */}
+      <div
+        className="flex items-center gap-3 border border-gray-300
+        border-b-[2px] border-b-[#38AE3C] rounded-tl-2xl rounded-tr-2xl bg-white p-3 sticky top-0 z-10"
+        data-testid="detail-panel-header"
+      >
+        <SegmentedTabs
+          tabs={detailTabs}
+          active={isTasksTab ? "order" : "info"}
+          onChange={(v) => setTab(v as any)}
+        />
+      </div>
+
+      {/* CONTENT — SCROLLABLE */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto px-0 pt-3"
+        data-testid="detail-panel-content"
+      >
+        {/* INFO TAB */}
+        {!isTasksTab ? (
+          <div className="space-y-4 min-h-0" data-testid="info-tab-content">
+            {/* Group + WorkType - Only show for group chats */}
+            {!isDM && (
+              <div
+                className="rounded-xl border p-6 bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50"
+                data-testid="conversation-info-card"
+              >
+                <div className="flex flex-col items-center text-center gap-1">
+                  <div className="text-sm font-semibold">{categoryName}</div>
+                  <div className="text-xs text-gray-700">
+                    Đang xem thông tin cho{" "}
+                    <span className="font-medium text-brand-600">
+                      Loại việc: {groupName}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Ảnh / Video (GRID) */}
+            <div
+              className="premium-accordion-wrapper"
+              data-testid="media-section"
+            >
+              <div className="premium-light-bar" />
+              <RightAccordion title="Ảnh / Video">
+                <FileManagerPhase1A
+                  mode="media"
+                  groupId={groupId}
+                  selectedWorkTypeId={selectedWorkTypeId}
+                  onOpenSourceMessage={handleOpenSourceMessageById}
+                  onNavigateToChat={() => {
+                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                    // User can see highlighted message in current tab
+                    // setTab("chat");
+                  }}
+                  messages={messages}
+                  messagesQuery={messagesQuery}
+                />
+              </RightAccordion>
+            </div>
+
+            {/* Tài liệu (LIST) - Phase 1A (list file từ chat, không thư mục) */}
+            <div
+              className="premium-accordion-wrapper"
+              data-testid="documents-section"
+            >
+              <div className="premium-light-bar" />
+              <RightAccordion title="Tài liệu">
+                <FileManagerPhase1A
+                  mode="docs"
+                  groupId={groupId}
+                  selectedWorkTypeId={selectedWorkTypeId}
+                  onOpenSourceMessage={handleOpenSourceMessageById}
+                  onNavigateToChat={() => {
+                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                    // User can see highlighted message in current tab
+                    // setTab("chat");
+                  }}
+                  messages={messages}
+                  messagesQuery={messagesQuery}
+                />
+              </RightAccordion>
+            </div>
+
+            {/* Thành viên (Leader only + Group chat only) */}
+            {hasLeaderPermissions() && !isDM && (
+              <div
+                className="premium-accordion-wrapper"
+                data-testid="members-section"
+              >
+                <div className="premium-light-bar" />
+                <RightAccordion title="Thành viên">
+                  <div className="flex items-center justify-between rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-gray-600" />
+                      <div className="text-sm">
+                        {/* <div className="font-medium">Thành viên</div> */}
+                        <div className="text-xs text-gray-500">
+                          {members.length} thành viên
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowAddMemberDialog(true)}
+                      className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs hover:bg-brand-50"
+                      data-testid="add-member-button"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Thêm
+                    </button>
+                  </div>
+                </RightAccordion>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* TASKS TAB */
+          <div className="space-y-4 min-h-0" data-testid="tasks-tab-content">
+            {/* NEW: Linked Tasks Panel - Show for all users */}
+            {/* {groupId && (
+              <LinkedTasksPanel
+                conversationId={groupId}
+                currentUserId={currentUserId}
+                onTaskClick={(taskId) => {
+                  // TODO: Navigate to task detail or open task modal
+                  console.log("Task clicked:", taskId);
+                }}
+                onViewAll={() => setShowViewAllTasksModal(true)}
+              />
+            )} */}
+
+            {hasLeaderPermissions() && (
+              <>
+                {isTasksTab && (
+                  <HintBubble
+                    storageKey="hint-received-info-bubble"
+                    title="Cách hiển thị Thông tin được tiếp nhận"
+                    content={
+                      <>
+                        Chỉ hiển thị thông tin được tiếp nhận chưa giao
+                        task/chuyển nhóm. Các thông tin đã bàn giao chỉ hiển thị
+                        trong ngày.
+                      </>
+                    }
+                    show={(receivedInfos?.length ?? 0) > 0} // 👈 CHỈ HIỂN THỊ KHI CÓ RECEIVED INFO
+                    autoCloseMs={9000}
+                  />
+                )}
+
+                {/* Received Info — thông tin tiếp nhận từ tin nhắn */}
+                <ReceivedInfoSection
+                  items={receivedInfos}
+                  onAssignInfo={(info) => onAssignInfo?.(info)}
+                  //onTransferInfo={(id, dept) => onTransferInfo?.(id, dept)}
+                  onOpenGroupTransfer={onOpenGroupTransfer}
+                />
+
+                {/* 🆕 NEW: Confirmed Information Section */}
+                {transformedConfirmedInfos.length > 0 && (
+                  <ReceivedInfoSection
+                    items={transformedConfirmedInfos}
+                    onAssignInfo={handleConfirmedInfoAssign}
+                    onOpenGroupTransfer={handleConfirmedInfoTransfer}
+                  />
+                )}
+              </>
+            )}
+            {hasStaffPermissions() ? (
+              <>
+                {/* Primary: Chưa xử lý + Đang xử lý */}
+                <div
+                  className="premium-accordion-wrapper"
+                  data-testid="staff-my-tasks-section"
+                >
+                  <RightAccordion
+                    icon={<ClipboardList className="h-4 w-4 text-brand-600" />}
+                    title="Công Việc Của Tôi"
+                  >
+                    <div className="grid grid-cols-1 gap-3">
+                      {staffBuckets.todo.length +
+                        staffBuckets.inProgress.length ===
+                        0 && (
+                        <div className="rounded border p-3 text-xs text-gray-500">
+                          Không có việc cần làm.
+                        </div>
+                      )}
+                      {staffBuckets.todo.map((t) => (
+                        <TaskCard
+                          key={t.id}
+                          t={t}
+                          members={members}
+                          viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
+                          assigneeOptions={assigneeOptions}
+                          onChangeStatus={onChangeTaskStatus}
+                          onReassign={onReassignTask}
+                          onToggleChecklist={onToggleChecklist}
+                          onUpdateTaskChecklist={(taskId, next) => {
+                            onUpdateTaskChecklist?.(taskId, next);
+                          }}
+                          taskLogs={taskLogs}
+                          onClickTitle={(messageDto) => {
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
+                          }}
+                          onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
+                        />
+                      ))}
+                      {staffBuckets.inProgress.map((t) => (
+                        <TaskCard
+                          key={t.id}
+                          t={t}
+                          members={members}
+                          viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
+                          assigneeOptions={assigneeOptions}
+                          onChangeStatus={onChangeTaskStatus}
+                          onReassign={onReassignTask}
+                          onToggleChecklist={onToggleChecklist}
+                          onUpdateTaskChecklist={(taskId, next) => {
+                            onUpdateTaskChecklist?.(taskId, next);
+                          }}
+                          taskLogs={taskLogs}
+                          onClickTitle={(messageDto) => {
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
+                          }}
+                          onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
+                        />
+                      ))}
+                    </div>
+                  </RightAccordion>
+                </div>
+
+                {/* Secondary: Chờ duyệt */}
+                <div
+                  className="premium-accordion-wrapper"
+                  data-testid="staff-awaiting-section"
+                >
+                  <RightAccordion
+                    icon={<SquarePen className="h-4 w-4 text-gray-400" />}
+                    title="Chờ Duyệt"
+                  >
+                    <div className="grid grid-cols-1 gap-3">
+                      {staffBuckets.awaiting.length === 0 && (
+                        <div className="rounded border p-3 text-xs text-gray-500">
+                          Không có việc chờ duyệt.
+                        </div>
+                      )}
+                      {staffBuckets.awaiting.map((t) => (
+                        <TaskCard
+                          key={t.id}
+                          t={t}
+                          members={members}
+                          viewMode="staff"
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
+                          assigneeOptions={assigneeOptions}
+                          onChangeStatus={onChangeTaskStatus}
+                          onReassign={onReassignTask}
+                          onToggleChecklist={onToggleChecklist}
+                          taskLogs={taskLogs}
+                          onClickTitle={(messageDto) => {
+                            // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                            // setTab("chat");
+                            // Trigger scroll to message
+                            onOpenSourceMessage?.(messageDto);
+                          }}
+                          onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-2 text-right">
+                      <button
+                        className="text-xs text-brand-700 hover:underline"
+                        onClick={() => setShowCompleted(true)}
+                        data-testid="staff-view-all-completed-button"
+                      >
+                        Xem tất cả công việc đã hoàn thành
+                      </button>
+                    </div>
+                  </RightAccordion>
+                </div>
+                {showCompleted && (
+                  <div
+                    className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4"
+                    data-testid="staff-completed-modal-backdrop"
+                  >
+                    <div
+                      className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] h-[80vh] overflow-hidden flex flex-col"
+                      data-testid="staff-completed-modal"
+                    >
+                      {/* ============================================
+                            HEADER (consistent với leader modal)
+                            ============================================ */}
+                      <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-brand-50 to-emerald-50">
+                        <div className="flex items-center gap-2">
+                          <ClipboardList className="h-5 w-5 text-brand-600" />
+                          <h3 className="text-sm font-semibold text-gray-900">
+                            Công Việc Đã Hoàn Thành
+                          </h3>
+                        </div>
+                        <button
+                          onClick={() => setShowCompleted(false)}
+                          className="text-gray-400 hover:text-gray-600 transition"
+                        >
+                          <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* ============================================
+                            CONTENT (scrollable với consistent styling)
+                            ============================================ */}
+                      <div className="flex-1 overflow-y-auto px-6 py-4">
+                        {(() => {
+                          // Lọc toàn bộ task đã hoàn thành của user hiện tại, theo workType
+                          const completed = tasks
+                            .filter(
+                              (t) =>
+                                (t.status.code === "finished" ||
+                                  t.status.code === "need_to_verified") &&
+                                t.assignTo === effectiveUserId &&
+                                (!selectedWorkTypeId ||
+                                  t.workTypeId === selectedWorkTypeId),
+                            )
+                            .slice()
+                            .sort((a, b) => {
+                              const da = new Date(
+                                a.updatedAt || a.createdAt || "",
+                              );
+                              const db = new Date(
+                                b.updatedAt || b.createdAt || "",
+                              );
+                              return db.getTime() - da.getTime(); // Newest first
+                            });
+
+                          if (completed.length === 0) {
+                            return (
+                              <div className="text-center py-12 text-sm text-gray-400">
+                                Chưa có công việc nào hoàn thành
+                              </div>
+                            );
+                          }
+
+                          // Group theo ngày (dd/MM/yyyy format)
+                          const grouped: Record<string, typeof completed> = {};
+
+                          completed.forEach((t) => {
+                            const dateStr = t.updatedAt || t.createdAt;
+                            if (!dateStr) return;
+
+                            const date = new Date(dateStr);
+                            const key = date.toLocaleDateString("vi-VN", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            });
+
+                            if (!grouped[key]) grouped[key] = [];
+                            grouped[key].push(t);
+                          });
+
+                          const today = new Date().toLocaleDateString("vi-VN", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                          });
+
+                          return (
+                            <div className="space-y-5">
+                              {Object.entries(grouped).map(
+                                ([dateKey, tasks]) => {
+                                  const isToday = dateKey === today;
+
+                                  return (
+                                    <div key={dateKey}>
+                                      {/* ============================================
+                                          DATE HEADER (consistent với leader)
+                                          ============================================ */}
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <span className="text-xs font-semibold text-gray-600">
+                                          📅{" "}
+                                          {isToday
+                                            ? `Hôm nay - ${dateKey}`
+                                            : dateKey}
+                                        </span>
+                                        <span className="text-xs text-gray-400">
+                                          ({tasks.length})
+                                        </span>
+                                      </div>
+
+                                      {/* ============================================
+                                          TASK CARDS (enhanced styling)
+                                          ============================================ */}
+                                      <div className="space-y-2 ml-4">
+                                        {tasks.map((t) => (
+                                          <div
+                                            key={t.id}
+                                            className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow"
+                                          >
+                                            {/* Title */}
+                                            <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
+                                              {truncateMessageTitle(
+                                                t.title || t.description || "",
+                                              )}
+                                            </div>
+
+                                            {/* Meta:  Time + Checklist */}
+                                            <div className="flex items-center justify-between text-xs text-gray-500">
+                                              <span>
+                                                Hoàn tất lúc{" "}
+                                                <span className="font-medium text-gray-700">
+                                                  {t.updatedAt
+                                                    ? new Date(
+                                                        t.updatedAt,
+                                                      ).toLocaleTimeString(
+                                                        "vi-VN",
+                                                        {
+                                                          hour: "2-digit",
+                                                          minute: "2-digit",
+                                                        },
+                                                      )
+                                                    : "--:--"}
+                                                </span>
+                                              </span>
+
+                                              {/* Checklist progress (if any) */}
+                                              {t.checklist &&
+                                                t.checklist.length > 0 && (
+                                                  <span className="text-emerald-600 text-[10px]">
+                                                    ✓{" "}
+                                                    {
+                                                      t.checklist.filter(
+                                                        (c) => c.done,
+                                                      ).length
+                                                    }
+                                                    /{t.checklist.length} mục
+                                                  </span>
+                                                )}
+                                            </div>
+
+                                            {/* WorkType chip */}
+                                            {t.workTypeName && (
+                                              <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
+                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                                  {t.workTypeName}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                },
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* ============================================
+                            FOOTER (consistent với leader)
+                            ============================================ */}
+                      <div className="px-6 py-3 border-t bg-gray-50 text-center">
+                        <button
+                          onClick={() => setShowCompleted(false)}
+                          className="text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          Đóng
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Toggle between Team and Mine */}
+                <div className="mb-4 px-2">
+                  <ToggleGroup
+                    type="single"
+                    value={leaderMode}
+                    onValueChange={(v) =>
+                      v && setLeaderMode(v as "team" | "mine")
+                    }
+                    className="grid w-full grid-cols-2 gap-2"
+                  >
+                    <ToggleGroupItem
+                      value="team"
+                      data-testid="team-filter-button"
+                      className="
+                        flex items-center justify-center gap-2
+                        data-[state=on]:bg-brand-600 data-[state=on]:text-white
+                        data-[state=off]:bg-white data-[state=off]:text-gray-700
+                        border border-brand-200
+                        rounded-lg px-3 py-2 text-sm font-medium
+                        transition-all
+                      "
+                    >
+                      <Users className="h-4 w-4" />
+                      Team
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="mine"
+                      data-testid="personal-filter-button"
+                      className="
+                        flex items-center justify-center gap-2
+                        data-[state=on]:bg-brand-600 data-[state=on]:text-white
+                        data-[state=off]:bg-white data-[state=off]:text-gray-700
+                        border border-brand-200
+                        rounded-lg px-3 py-2 text-sm font-medium
+                        transition-all
+                      "
+                    >
+                      <UserIcon className="h-4 w-4" />
+                      Của tôi
+                      {leaderOwnTasks.filter(
+                        (t) =>
+                          t.status.code !== "need_to_verified" &&
+                          t.status.code !== "finished",
+                      ).length > 0 && (
+                        <span
+                          className="
+                          ml-1 inline-flex min-w-[18px] h-[18px]
+                          items-center justify-center
+                          rounded-full bg-amber-500 text-white
+                          text-[10px] font-bold px-1
+                        "
+                        >
+                          {
+                            leaderOwnTasks.filter(
+                              (t) =>
+                                t.status.code !== "need_to_verified" &&
+                                t.status.code !== "finished",
+                            ).length
+                          }
+                        </span>
+                      )}
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+
+                {/* ============================================
+                    TEAM MODE (existing logic)
+                    ============================================ */}
+                {leaderMode === "team" && (
+                  <>
+                    {/* Lead: lọc theo assignee */}
+                    <div
+                      className="rounded-xl border bg-white p-4 shadow-sm mb-3"
+                      data-testid="leader-team-header"
+                    >
+                      <div className="flex flex-col gap-1">
+                        {/* Title + Group + WorkType */}
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <Users className="h-4 w-4 text-brand-600" />
+                          <span className="text-sm font-semibold">
+                            Công Việc Của Nhóm{" "}
+                            <span className="text-brand-500">
+                              {" "}
+                              {categoryName}
+                            </span>
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            • Loại việc:{" "}
+                            <span className="font-medium text-gray-700">
+                              {groupName}
+                            </span>
+                          </span>
+                        </div>
+
+                        {/* Filter - Select nhân viên */}
+                        <div className="flex justify-between items-center w-full mt-2">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span>Nhân viên:</span>
+                            <select
+                              className="w-full rounded-lg border border-brand-200 px-2 py-1 bg-white"
+                              value={assigneeFilter}
+                              onChange={(e) =>
+                                setAssigneeFilter(e.target.value)
+                              }
+                              disabled={isFilteringMembers}
+                              data-testid="assignee-filter-select"
+                            >
+                              <option value="all">Tất cả</option>
+                              {assigneeOptions.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <button
+                            className="ml-auto mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors group"
+                            onClick={() => setTemplateOpen(true)}
+                            data-testid="default-checklist-link"
+                            title="Xem và chỉnh sửa checklist mặc định"
+                          >
+                            <FileText className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-[11px] text-gray-400">
+                        Đang xem{" "}
+                        <span className="font-semibold text-gray-600">
+                          {leadBuckets.todo.length +
+                            leadBuckets.inProgress.length +
+                            leadBuckets.awaiting.length}
+                        </span>{" "}
+                        công việc •{" "}
+                        <span>{leadBuckets.todo.length} chưa xử lý</span> •{" "}
+                        <span>{leadBuckets.inProgress.length} đang xử lý</span>{" "}
+                        •{" "}
+                        <span className="text-amber-600 font-semibold">
+                          {leadBuckets.awaiting.length} chờ duyệt
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Grouped tasks theo trạng thái */}
+                    {
+                      <div className="space-y-6">
+                        {/* AWAITING REVIEW - Always show */}
+                        <section data-testid="leader-awaiting-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => {
+                              setShowLeadAwaiting((prev) => {
+                                const next = !prev;
+                                if (next && !awaitingOpenedRef.current) {
+                                  awaitingOpenedRef.current = true;
+                                  setHighlightAwaiting(true);
+                                  setTimeout(
+                                    () => setHighlightAwaiting(false),
+                                    700,
+                                  );
+                                }
+                                return next;
+                              });
+                            }}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                            <span>
+                              Chờ duyệt ({leadBuckets.awaiting.length}){" "}
+                              {showLeadAwaiting ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+                          {showLeadAwaiting && (
+                            <div
+                              className={`space-y-3 transition-colors duration-300 ${
+                                highlightAwaiting
+                                  ? "bg-amber-50/80 rounded-lg -mx-2 px-2 py-1"
+                                  : ""
+                              }`}
+                            >
+                              {leadBuckets.awaiting.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // ✅ Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  assigneeOptions={assigneeOptions}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        {/* TODO - Always show */}
+                        <section data-testid="leader-todo-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadTodo((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                            <span>
+                              Chưa xử lý ({leadBuckets.todo.length}){" "}
+                              {showLeadTodo ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+                          {showLeadTodo && (
+                            <div className="space-y-3">
+                              {leadBuckets.todo.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // ✅ Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  assigneeOptions={assigneeOptions}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  onUpdateTaskChecklist={onUpdateTaskChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        {/* IN PROGRESS - Always show */}
+                        <section data-testid="leader-inprogress-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadInProgress((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
+                            <span>
+                              Đang xử lý ({leadBuckets.inProgress.length})
+                              {showLeadInProgress ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+
+                          {showLeadInProgress && (
+                            <div className="space-y-3">
+                              {leadBuckets.inProgress.map((t) => (
+                                <TaskCard
+                                  key={t.id}
+                                  t={t}
+                                  members={members}
+                                  viewMode="lead"
+                                  isLeaderOwnTask={false} // Team task
+                                  groupName={groupName}
+                                  checklistVariants={checklistVariants}
+                                  assigneeOptions={assigneeOptions}
+                                  onChangeStatus={onChangeTaskStatus}
+                                  onReassign={onReassignTask}
+                                  onToggleChecklist={onToggleChecklist}
+                                  taskLogs={taskLogs}
+                                  onClickTitle={(messageDto) => {
+                                    // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                    // setTab("chat");
+                                    // Trigger scroll to message
+                                    onOpenSourceMessage?.(messageDto);
+                                  }}
+                                  onOpenTaskLog={onOpenTaskLog}
+                                  messages={messages}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        {/* DONE TODAY - Always show, filter only today */}
+                        <section data-testid="leader-done-section">
+                          <div
+                            className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                            onClick={() => setShowLeadDone((v) => !v)}
+                          >
+                            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                            <span>
+                              Hoàn thành (
+                              {
+                                leadBuckets.done.filter((t) =>
+                                  isToday(t.updatedAt || t.createdAt),
+                                ).length
+                              }
+                              ) {showLeadDone ? " ▲" : " ▼"}
+                            </span>
+                          </div>
+
+                          {showLeadDone && (
+                            <div className="space-y-3">
+                              {leadBuckets.done
+                                .filter((t) =>
+                                  isToday(t.updatedAt || t.createdAt),
+                                )
+                                .map((t) => (
+                                  <TaskCard
+                                    key={t.id}
+                                    t={t}
+                                    members={members}
+                                    viewMode="lead"
+                                    isLeaderOwnTask={false} // ✅ Team task
+                                    groupName={groupName}
+                                    checklistVariants={checklistVariants}
+                                    assigneeOptions={assigneeOptions}
+                                    onChangeStatus={onChangeTaskStatus}
+                                    onReassign={onReassignTask}
+                                    onToggleChecklist={onToggleChecklist}
+                                    taskLogs={taskLogs}
+                                    onClickTitle={(messageDto) => {
+                                      // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                      // setTab("chat");
+                                      // Trigger scroll to message
+                                      onOpenSourceMessage?.(messageDto);
+                                    }}
+                                    onOpenTaskLog={onOpenTaskLog}
+                                    messages={messages}
+                                  />
+                                ))}
+                            </div>
+                          )}
+
+                          <div className="mt-2 text-right">
+                            <button
+                              className="text-xs text-brand-700 hover:underline"
+                              onClick={() => setShowLeadCompletedAll(true)}
+                              data-testid="leader-view-all-completed-button"
+                            >
+                              Xem tất cả công việc đã hoàn thành
+                            </button>
+                          </div>
+                        </section>
+                      </div>
+                    }
+
+                    {/* Modal:  All completed tasks */}
+                    {showLeadCompletedAll && (
+                      <div
+                        className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4"
+                        data-testid="leader-team-completed-modal-backdrop"
+                      >
+                        <div
+                          className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] h-[80vh] overflow-hidden flex flex-col"
+                          data-testid="leader-team-completed-modal"
+                        >
+                          {/* Header */}
+                          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-brand-50 to-emerald-50">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-5 w-5 text-brand-600" />
+                              <h3 className="text-sm font-semibold text-gray-900">
+                                Công Việc Đã Hoàn Thành (Team)
+                              </h3>
+                            </div>
+                            <button
+                              onClick={() => setShowLeadCompletedAll(false)}
+                              className="text-gray-400 hover:text-gray-600 transition"
+                            >
+                              <svg
+                                className="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M6 18L18 6M6 6l12 12"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 overflow-y-auto px-6 py-4">
+                            {allLeadDoneTasks.length === 0 ? (
+                              <div className="text-center py-12 text-sm text-gray-400">
+                                Chưa có công việc nào hoàn thành
+                              </div>
+                            ) : (
+                              <div className="space-y-5">
+                                {(() => {
+                                  // Group by date
+                                  const grouped: Record<
+                                    string,
+                                    typeof allLeadDoneTasks
+                                  > = {};
+
+                                  allLeadDoneTasks.forEach((t) => {
+                                    const dateStr = t.updatedAt || t.createdAt;
+                                    if (!dateStr) return;
+
+                                    const date = new Date(dateStr);
+                                    const key = date.toLocaleDateString(
+                                      "vi-VN",
+                                      {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                      },
+                                    );
+
+                                    if (!grouped[key]) grouped[key] = [];
+                                    grouped[key].push(t);
+                                  });
+
+                                  const today = new Date().toLocaleDateString(
+                                    "vi-VN",
+                                    {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                    },
+                                  );
+
+                                  return Object.entries(grouped).map(
+                                    ([dateKey, tasks]) => {
+                                      const isToday = dateKey === today;
+
+                                      return (
+                                        <div key={dateKey}>
+                                          <div className="flex items-center gap-2 mb-3">
+                                            <span className="text-xs font-semibold text-gray-600">
+                                              📅{" "}
+                                              {isToday
+                                                ? `Hôm nay - ${dateKey}`
+                                                : dateKey}
+                                            </span>
+                                            <span className="text-xs text-gray-400">
+                                              ({tasks.length})
+                                            </span>
+                                          </div>
+
+                                          <div className="space-y-2 ml-4">
+                                            {tasks.map((t) => (
+                                              <div
+                                                key={t.id}
+                                                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow"
+                                              >
+                                                <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
+                                                  {truncateMessageTitle(
+                                                    t.title ||
+                                                      t.description ||
+                                                      "",
+                                                  )}
+                                                </div>
+
+                                                <div className="flex items-center justify-between text-xs text-gray-500">
+                                                  <span>
+                                                    Hoàn tất lúc{" "}
+                                                    <span className="font-medium text-gray-700">
+                                                      {t.updatedAt
+                                                        ? new Date(
+                                                            t.updatedAt,
+                                                          ).toLocaleTimeString(
+                                                            "vi-VN",
+                                                            {
+                                                              hour: "2-digit",
+                                                              minute: "2-digit",
+                                                            },
+                                                          )
+                                                        : "--:--"}
+                                                    </span>
+                                                  </span>
+
+                                                  {/* Assignee name */}
+                                                  <span>
+                                                    <span className="font-medium text-gray-700">
+                                                      {members.find(
+                                                        (m) =>
+                                                          m.id === t.assignTo,
+                                                      )?.name ?? t.assignTo}
+                                                    </span>
+                                                  </span>
+                                                </div>
+
+                                                {t.checklist &&
+                                                  t.checklist.length > 0 && (
+                                                    <div className="mt-1 text-[10px] text-emerald-600">
+                                                      ✓{" "}
+                                                      {
+                                                        t.checklist.filter(
+                                                          (c) => c.done,
+                                                        ).length
+                                                      }
+                                                      /{t.checklist.length} mục
+                                                    </div>
+                                                  )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    },
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Footer */}
+                          <div className="px-6 py-3 border-t bg-gray-50 text-center">
+                            <button
+                              onClick={() => setShowLeadCompletedAll(false)}
+                              className="text-xs text-gray-500 hover:text-gray-700"
+                            >
+                              Đóng
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* ============================================
+                    MINE MODE (NEW)
+                    ============================================ */}
+                {leaderMode === "mine" && (
+                  <div
+                    className="space-y-4"
+                    data-testid="leader-mine-mode-content"
+                  >
+                    {/* Summary card */}
+                    <div
+                      className="rounded-xl border bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50 p-4 shadow-sm"
+                      data-testid="leader-mine-summary-card"
+                    >
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <UserIcon className="h-5 w-5 text-brand-600" />
+                        <span className="text-sm font-semibold text-gray-900">
+                          Công Việc Của Tôi
+                        </span>
+                      </div>
+
+                      <div className="text-center text-xs text-gray-600">
+                        {leaderOwnTasks.filter(
+                          (t) =>
+                            t.status.code !== "need_to_verified" &&
+                            t.status.code !== "finished",
+                        ).length > 0 ? (
+                          <>
+                            <span className="font-semibold text-brand-700">
+                              {
+                                leaderOwnTasks.filter(
+                                  (t) =>
+                                    t.status.code !== "need_to_verified" &&
+                                    t.status.code !== "finished",
+                                ).length
+                              }
+                            </span>{" "}
+                            công việc đang thực hiện •{" "}
+                            <span>
+                              {leaderOwnBuckets.todo.length} chưa xử lý
+                            </span>{" "}
+                            •{" "}
+                            <span>
+                              {leaderOwnBuckets.inProgress.length} đang xử lý
+                            </span>
+                            {leaderOwnBuckets.doneToday.length > 0 && (
+                              <>
+                                {" "}
+                                •{" "}
+                                <span className="text-emerald-600">
+                                  {leaderOwnBuckets.doneToday.length} hoàn thành
+                                  hôm nay
+                                </span>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-emerald-600">
+                            ✓ Đã hoàn thành hết công việc hôm nay
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Empty state */}
+                    {leaderOwnTasks.filter(
+                      (t) =>
+                        t.status.code !== "need_to_verified" &&
+                        t.status.code !== "finished",
+                    ).length === 0 &&
+                      leaderOwnBuckets.doneToday.length === 0 && (
+                        <div
+                          className="rounded-xl border border-dashed bg-white/60 p-8 text-center"
+                          data-testid="leader-mine-empty-state"
+                        >
+                          <UserIcon className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                          <p className="text-sm text-gray-500 font-medium mb-1">
+                            Bạn chưa có công việc nào cần làm
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Các công việc được giao sẽ xuất hiện ở đây
+                          </p>
+                        </div>
+                      )}
+
+                    {/* ============================================
+                            TODO SECTION (Collapsible)
+                            ============================================ */}
+                    {leaderOwnBuckets.todo.length > 0 && (
+                      <section data-testid="leader-mine-todo-section">
+                        <div
+                          className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
+                          onClick={() => setShowLeaderOwnTodo((v) => !v)}
+                        >
+                          <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                          <span>
+                            Chưa xử lý ({leaderOwnBuckets.todo.length})
+                          </span>
+                          <span className="ml-1 text-gray-400">
+                            {showLeaderOwnTodo ? "▲" : "▼"}
+                          </span>
+                        </div>
+
+                        {showLeaderOwnTodo && (
+                          <div
+                            className={`
+                                    space-y-3
+                                    transition-all duration-300 ease-out
+                                    overflow-hidden
+                                    ${
+                                      showLeaderOwnTodo
+                                        ? "max-h-[2000px] opacity-100"
+                                        : "max-h-0 opacity-0"
+                                    }
+                                  `}
+                          >
+                            {leaderOwnBuckets.todo.map((t) => (
+                              <TaskCard
+                                key={t.id}
+                                t={t}
+                                members={members}
+                                viewMode="lead"
+                                isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
+                                assigneeOptions={assigneeOptions}
+                                onChangeStatus={onChangeTaskStatus}
+                                onReassign={onReassignTask}
+                                onToggleChecklist={onToggleChecklist}
+                                onUpdateTaskChecklist={onUpdateTaskChecklist}
+                                taskLogs={taskLogs}
+                                onClickTitle={(messageDto) => {
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
+                                }}
+                                onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {/* ============================================
+                            IN_PROGRESS SECTION (Collapsible)
+                            ============================================ */}
+                    {leaderOwnBuckets.inProgress.length > 0 && (
+                      <section data-testid="leader-mine-inprogress-section">
+                        <div
+                          className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
+                          onClick={() => setShowLeaderOwnInProgress((v) => !v)}
+                        >
+                          <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
+                          <span>
+                            Đang xử lý ({leaderOwnBuckets.inProgress.length})
+                          </span>
+                          <span className="ml-1 text-gray-400">
+                            {showLeaderOwnInProgress ? "▲" : "▼"}
+                          </span>
+                        </div>
+
+                        {showLeaderOwnInProgress && (
+                          <div className="space-y-3">
+                            {leaderOwnBuckets.inProgress.map((t) => (
+                              <TaskCard
+                                key={t.id}
+                                t={t}
+                                members={members}
+                                viewMode="lead"
+                                isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
+                                assigneeOptions={assigneeOptions}
+                                onChangeStatus={onChangeTaskStatus}
+                                onReassign={onReassignTask}
+                                onToggleChecklist={onToggleChecklist}
+                                onUpdateTaskChecklist={onUpdateTaskChecklist}
+                                taskLogs={taskLogs}
+                                onClickTitle={(messageDto) => {
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
+                                }}
+                                onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {/* ============================================
+                            DONE TODAY SECTION (Collapsible)
+                            ============================================ */}
+                    {leaderOwnBuckets.doneToday.length > 0 && (
+                      <section data-testid="leader-mine-done-section">
+                        <div
+                          className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
+                          onClick={() => setShowLeaderOwnDone((v) => !v)}
+                        >
+                          <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                          <span>
+                            Hoàn thành hôm nay (
+                            {leaderOwnBuckets.doneToday.length})
+                          </span>
+                          <span className="ml-1 text-gray-400">
+                            {showLeaderOwnDone ? "▲" : "▼"}
+                          </span>
+                        </div>
+
+                        {showLeaderOwnDone && (
+                          <div className="space-y-3">
+                            {leaderOwnBuckets.doneToday.map((t) => (
+                              <TaskCard
+                                key={t.id}
+                                t={t}
+                                members={members}
+                                viewMode="lead"
+                                isLeaderOwnTask={true}
+                                groupName={groupName}
+                                checklistVariants={checklistVariants}
+                                assigneeOptions={assigneeOptions}
+                                onChangeStatus={onChangeTaskStatus}
+                                onReassign={onReassignTask}
+                                onToggleChecklist={onToggleChecklist}
+                                onUpdateTaskChecklist={onUpdateTaskChecklist}
+                                taskLogs={taskLogs}
+                                onClickTitle={(messageDto) => {
+                                  // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                                  // setTab("chat");
+                                  // Trigger scroll to message
+                                  onOpenSourceMessage?.(messageDto);
+                                }}
+                                onOpenTaskLog={onOpenTaskLog}
+                                messages={messages}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {/* ============================================
+                            LINK TO ALL COMPLETED TASKS
+                            ============================================ */}
+                    {leaderOwnAllCompleted.length > 0 && (
+                      <div className="text-center pt-2">
+                        <button
+                          className="text-xs text-brand-700 hover:text-brand-800 hover:underline font-medium"
+                          onClick={() => setShowLeaderOwnCompletedAll(true)}
+                          data-testid="leader-mine-view-all-completed-button"
+                        >
+                          Xem tất cả công việc đã hoàn thành (
+                          {leaderOwnAllCompleted.length}) →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ============================================
+                        MODAL:  All Completed Tasks (Leader Own)
+                        ============================================ */}
+                {showLeaderOwnCompletedAll && (
+                  <div
+                    className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4"
+                    data-testid="leader-mine-completed-modal-backdrop"
+                  >
+                    <div
+                      className="rounded-xl bg-white shadow-2xl w-full max-w-[560px] h-[80vh] overflow-hidden flex flex-col"
+                      data-testid="leader-mine-completed-modal"
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-brand-50 to-emerald-50">
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-5 w-5 text-brand-600" />
+                          <h3 className="text-sm font-semibold text-gray-900">
+                            Công Việc Đã Hoàn Thành
+                          </h3>
+                        </div>
+                        <button
+                          onClick={() => setShowLeaderOwnCompletedAll(false)}
+                          className="text-gray-400 hover:text-gray-600 transition"
+                        >
+                          <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 overflow-y-auto px-6 py-4">
+                        {leaderOwnAllCompleted.length === 0 ? (
+                          <div className="text-center py-12 text-sm text-gray-400">
+                            Chưa có công việc nào hoàn thành
+                          </div>
+                        ) : (
+                          <div className="space-y-5">
+                            {(() => {
+                              // Group by date
+                              const grouped: Record<
+                                string,
+                                typeof leaderOwnAllCompleted
+                              > = {};
+
+                              leaderOwnAllCompleted.forEach((t) => {
+                                const dateStr = t.updatedAt || t.createdAt;
+                                if (!dateStr) return;
+
+                                const date = new Date(dateStr);
+                                const key = date.toLocaleDateString("vi-VN", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                });
+
+                                if (!grouped[key]) grouped[key] = [];
+                                grouped[key].push(t);
+                              });
+
+                              const today = new Date().toLocaleDateString(
+                                "vi-VN",
+                                {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                },
+                              );
+
+                              return Object.entries(grouped).map(
+                                ([dateKey, tasks]) => {
+                                  const isToday = dateKey === today;
+
+                                  return (
+                                    <div key={dateKey}>
+                                      {/* Date header */}
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <span className="text-xs font-semibold text-gray-600">
+                                          📅{" "}
+                                          {isToday
+                                            ? `Hôm nay - ${dateKey}`
+                                            : dateKey}
+                                        </span>
+                                        <span className="text-xs text-gray-400">
+                                          ({tasks.length})
+                                        </span>
+                                      </div>
+
+                                      {/* Tasks */}
+                                      <div className="space-y-2 ml-4">
+                                        {tasks.map((t) => (
+                                          <div
+                                            key={t.id}
+                                            className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow"
+                                          >
+                                            {/* Title */}
+                                            <div className="text-sm font-medium text-gray-800 leading-snug mb-1">
+                                              {truncateMessageTitle(
+                                                t.title || t.description || "",
+                                              )}
+                                            </div>
+
+                                            {/* Meta */}
+                                            <div className="flex items-center justify-between text-xs text-gray-500">
+                                              <span>
+                                                Hoàn tất lúc{" "}
+                                                <span className="font-medium text-gray-700">
+                                                  {t.updatedAt
+                                                    ? new Date(
+                                                        t.updatedAt,
+                                                      ).toLocaleTimeString(
+                                                        "vi-VN",
+                                                        {
+                                                          hour: "2-digit",
+                                                          minute: "2-digit",
+                                                        },
+                                                      )
+                                                    : "--:--"}
+                                                </span>
+                                              </span>
+
+                                              {/* Checklist progress (if any) */}
+                                              {t.checklist &&
+                                                t.checklist.length > 0 && (
+                                                  <span className="text-emerald-600 text-[10px]">
+                                                    ✓{" "}
+                                                    {
+                                                      t.checklist.filter(
+                                                        (c) => c.done,
+                                                      ).length
+                                                    }
+                                                    /{t.checklist.length} mục
+                                                  </span>
+                                                )}
+                                            </div>
+
+                                            {/* WorkType */}
+                                            {t.workTypeName && (
+                                              <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
+                                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                                  {t.workTypeName}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                },
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer */}
+                      <div className="px-6 py-3 border-t bg-gray-50 text-center">
+                        <button
+                          onClick={() => setShowLeaderOwnCompletedAll(false)}
+                          className="text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          Đóng
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        <ChecklistTemplateSlideOver
+          open={templateOpen}
+          onClose={() => setTemplateOpen(false)}
+          workTypeName={workTypeName}
+          template={workTypeTemplate}
+          checklistVariants={checklistVariants}
+          conversationId={groupId ?? ""}
+          activeVariantId={
+            activeVariantId !== "__default__" ? activeVariantId : undefined
+          }
+          onChangeVariant={(variantId) => {
+            setTemplateVariantId(variantId);
+          }}
+          onChange={(next) => {
+            setChecklistTemplates?.((prev) => ({
+              ...prev,
+              [workTypeKey]: {
+                ...(prev[workTypeKey] ?? {}),
+                [activeVariantId]: next,
+              },
+            }));
+          }}
+        />
+      </div>
+
+      {/* View All Tasks Modal */}
+      {groupId && showViewAllTasksModal && (
+        <ViewAllTasksModal
+          isOpen={showViewAllTasksModal}
+          onClose={() => setShowViewAllTasksModal(false)}
+          conversationId={groupId}
+          conversationName={groupName}
+          tasks={(linkedTasksData ?? []).map((t) => ({
+            taskId: t.id,
+            messageId: t.messageId ?? null,
+            task: {
+              id: t.id,
+              title: t.title,
+              status: t.status.code,
+              priority: t.priority.code,
+              assignedTo: {
+                id: t.assignTo,
+                name: null,
+                email: null,
+              },
+            },
+          }))}
+          isLoading={linkedTasksLoading}
+          isError={linkedTasksError}
+          error={linkedTasksErrorObj}
+          onRetry={refetchLinkedTasks}
+        />
+      )}
+      <style>{`
+  /* Smooth collapse animation */
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      max-height: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      max-height: 2000px;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 1;
+      max-height: 2000px;
+    }
+    to {
+      opacity: 0;
+      max-height: 0;
+    }
+  }
+
+  /* Apply to task sections */
+  section > div. space-y-3 {
+    animation: slideDown 0.3s ease-out;
+  }
+    
+  .task-section-enter {
+    max-height: 0;
+    overflow: hidden;
+    transition:  max-height 0.3s ease-out;
+  }
+  . task-section-enter-active {
+    max-height:  2000px;
+  }
+`}</style>
+      {/* Add Member Dialog */}
+      <AddMemberDialog
+        open={showAddMemberDialog}
+        onClose={() => setShowAddMemberDialog(false)}
+        groupId={groupId}
+        conversationId={groupId}
+        existingMemberIds={members.map((m) => m.id)}
+      />
+
+      {/* 🆕 NEW: Confirmed Info Transfer Sheet */}
+      <ConfirmedInfoTransferSheet
+        open={confirmedInfoTransferSheet.open}
+        confirmedInfo={confirmedInfoTransferSheet.confirmedInfo}
+        onClose={() => setConfirmedInfoTransferSheet({ open: false })}
+        onConfirm={handleConfirmedInfoTransferConfirm}
+      />
+    </aside>
+  );
+};

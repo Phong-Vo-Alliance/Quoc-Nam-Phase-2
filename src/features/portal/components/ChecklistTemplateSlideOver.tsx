@@ -41,8 +41,11 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
   onChangeVariant,
 }) => {
   // Fetch templates from API filtered by conversationId
-  const { data: apiTemplates, isLoading: templatesLoading } =
-    useChecklistTemplates();
+  const {
+    data: apiTemplates,
+    isLoading: templatesLoading,
+    refetch: refetchTemplates,
+  } = useChecklistTemplates(conversationId);
 
   // Update template mutation
   const updateTemplateMutation = useUpdateChecklistTemplate();
@@ -62,6 +65,9 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
     activeVariantId ?? checklistVariants?.[0]?.id ?? "",
   );
 
+  // Track if we've refetched for this dialog open session
+  const hasRefetchedRef = React.useRef(false);
+
   // Đồng bộ lại khi props activeVariantId hoặc danh sách variant thay đổi
   React.useEffect(() => {
     setSelectedVariantId((prev) => {
@@ -75,9 +81,47 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
     });
   }, [activeVariantId, checklistVariants]);
 
+  // Reset state and refetch when dialog opens
   React.useEffect(() => {
-    setItems(template);
-  }, [template]);
+    if (open) {
+      // Reset selection to trigger auto-select again
+      setSelectedApiTemplateId("");
+      setSelectedTemplateName("");
+      setSelectedTemplateDescription("");
+      setItems([]);
+
+      // Force refetch once per dialog open to get latest data
+      if (conversationId && !hasRefetchedRef.current) {
+        hasRefetchedRef.current = true;
+        refetchTemplates();
+      }
+    } else {
+      // Reset refetch flag when dialog closes
+      hasRefetchedRef.current = false;
+    }
+  }, [open, conversationId, refetchTemplates]);
+
+  // Auto-select default template after data is loaded
+  React.useEffect(() => {
+    if (
+      open &&
+      apiTemplates &&
+      apiTemplates.length > 0 &&
+      !selectedApiTemplateId &&
+      !templatesLoading
+    ) {
+      // Find default template, or use first template if no default exists
+      const defaultTemplate =
+        apiTemplates.find((t) => t.isDefault) || apiTemplates[0];
+
+      // Load template
+      setSelectedApiTemplateId(defaultTemplate.id);
+      const transformed = transformTemplateItems(defaultTemplate);
+      setItems(transformed);
+      setSelectedTemplateName(defaultTemplate.name ?? "");
+      setSelectedTemplateDescription(defaultTemplate.description || "");
+    }
+  }, [open, apiTemplates, selectedApiTemplateId, templatesLoading]);
 
   // Load template when API template is selected
   const handleLoadApiTemplate = (templateId: string) => {
@@ -136,14 +180,17 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
           payload: {
             id: selectedApiTemplateId,
             name: selectedTemplateName,
-            description: selectedTemplateDescription || null,
-            conversationId: conversationId || null,
+            description: selectedTemplateDescription || undefined,
+            conversationId: conversationId || undefined,
             items:
               transformedItems.length > 0
                 ? transformedItems.map((item) => item.content)
                 : undefined,
           },
         });
+
+        // Mutation will auto-invalidate queries, no need to manual refetch
+        // All components using useChecklistTemplates will auto-refetch
 
         // Notify parent and close
         onChange(items);
@@ -166,15 +213,12 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
   // console.log("Rendering ChecklistTemplateSlideOver with items:", items);
   // console.log("Selected API Template ID:", selectedApiTemplateId);
   if (!open) return null;
-  const _apiTemplates = apiTemplates?.filter((api_template) => {
-    return checklistVariants?.map((_) => _.id).includes(api_template.id);
-  });
-  // console.log(
-  //   "Filtered API Templates for current variants:",
-  //   checklistVariants,
-  // );
-  // console.log(apiTemplates);
-  // console.log(_apiTemplates);
+
+  // Use all templates from API - already filtered by conversationId
+  const _apiTemplates = apiTemplates || [];
+
+  // console.log("API Templates for conversation:", apiTemplates);
+  // console.log("Checklist Variants:", checklistVariants);
 
   return (
     <div className="fixed inset-0 z-[999] flex justify-end bg-black/30">
@@ -191,7 +235,7 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Checklist Mặc Định
+                Checklist mặc định
               </h2>
               <p className="text-xs text-gray-500 mt-1">
                 Áp dụng cho loại việc:{" "}
@@ -220,7 +264,7 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
             {/* Select from existing templates */}
             <div>
               <label className="text-[11px] font-medium text-gray-600 uppercase tracking-wide">
-                Chọn checklist Để Chỉnh Sửa
+                Chọn checklist để chỉnh sửa
               </label>
               <div className="mt-1">
                 <Select
@@ -276,7 +320,9 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
                 >
                   <input
                     ref={(el) => {
-                      // nếu là item cuối thì gán ref
+                      // Gán ref cho tất cả inputs để có thể focus
+                      inputRefs.current[it.id] = el;
+                      // Nếu là item cuối thì cũng gán vào newItemRef
                       if (items[items.length - 1]?.id === it.id) {
                         newItemRef.current = el;
                       }
@@ -293,7 +339,10 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
                       if (e.key === "Enter") {
                         e.preventDefault();
                         const isLast = items[items.length - 1]?.id === it.id;
-                        if (isLast) {
+                        const hasValue = it.label.trim() !== "";
+
+                        // Chỉ thêm mục mới nếu là item cuối và đã có tên
+                        if (isLast && hasValue) {
                           const newId = "tpl_" + Date.now().toString(36);
 
                           setItems((prev) => [
@@ -334,14 +383,18 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
             <div className="text-center py-8 text-gray-400">
               <p className="text-sm">Chưa có mục nào</p>
               <p className="text-xs mt-1">
-                Chọn template từ danh sách hoặc nhấn "Thêm mục" để bắt đầu
+                Chọn checklist từ danh sách phía trên để bắt đầu chỉnh sửa
               </p>
             </div>
           )}
 
           <button
             onClick={add}
-            className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-emerald-700 rounded-full border border-dashed border-emerald-300 px-3 py-1.5 hover:bg-emerald-50 transition"
+            disabled={
+              !selectedApiTemplateId ||
+              items.some((item) => item.label.trim() === "")
+            }
+            className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-emerald-700 rounded-full border border-dashed border-emerald-300 px-3 py-1.5 hover:bg-emerald-50 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
             <Plus className="w-3 h-3" /> Thêm mục
           </button>

@@ -9,7 +9,7 @@
 
 /**
  * Request parameters for file preview API
- * GET /api/Files/{id}/preview
+ * GET /api/Files/{id}/preview-page
  */
 export interface FilePreviewRequest {
   /** File ID (GUID) */
@@ -17,6 +17,9 @@ export interface FilePreviewRequest {
 
   /** Page number to preview (optional, defaults to 1) */
   page?: number;
+
+  /** DPI for rendering quality (optional, defaults to 200) */
+  dpi?: number;
 }
 
 /**

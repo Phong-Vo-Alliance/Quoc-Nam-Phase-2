@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ClipboardPlus,
   Reply,
+  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
@@ -80,6 +81,8 @@ export interface MessageBubbleSimpleProps {
   isMiddleInGroup?: boolean;
   isLastInGroup?: boolean;
   onCreateTask?: (messageId: string) => void;
+  onConfirmInfo?: (messageId: string) => void; // NEW: Confirm information
+  hasConfirmedInfo?: boolean; // NEW: Check if message already has confirmed info
 }
 
 export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
@@ -96,6 +99,8 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   isMiddleInGroup = false,
   isLastInGroup = true,
   onCreateTask,
+  onConfirmInfo,
+  hasConfirmedInfo = false,
 }) => {
   // Quote Reply: Get setReplyTarget from store
   const setReplyTarget = useReplyStore((state) => state.setReplyTarget);
@@ -345,6 +350,20 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         data-testid="create-task-button"
                       >
                         <ClipboardPlus size={14} />
+                      </button>
+                    )}
+                  {hasLeaderPermissions() &&
+                    onConfirmInfo &&
+                    message.contentType !== "SYS" &&
+                    !message.linkedTaskId &&
+                    !hasConfirmedInfo && (
+                      <button
+                        className="p-1.5 rounded transition text-gray-500 hover:text-blue-600"
+                        onClick={() => onConfirmInfo(message.id)}
+                        title="Xác nhận thông tin"
+                        data-testid="confirm-info-button"
+                      >
+                        <CheckCircle2 size={14} />
                       </button>
                     )}
                 </div>

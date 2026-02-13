@@ -10,7 +10,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getFilePreview,
-  renderPdfPage,
   createObjectUrl,
   revokeObjectUrl,
 } from "@/api/filePreview.api";
@@ -61,12 +60,15 @@ export function usePdfPreview(fileId: string | null) {
   // Track mounted state to prevent updates after unmount
   const isMountedRef = useRef(true);
 
+  // Track if fetch is already in progress to prevent double fetch (StrictMode)
+  const isFetchingRef = useRef(false);
+
   /**
    * Generate cache key for a page
    */
   const getCacheKey = useCallback(
     (pageNum: number) => `${fileId}-${pageNum}`,
-    [fileId]
+    [fileId],
   );
 
   /**
@@ -74,6 +76,9 @@ export function usePdfPreview(fileId: string | null) {
    */
   const fetchFirstPage = useCallback(async () => {
     if (!fileId) return;
+
+    // Prevent double fetch in StrictMode
+    if (isFetchingRef.current) return;
 
     const cacheKey = getCacheKey(1);
     const cached = pageCacheRef.current.get(cacheKey);
@@ -91,12 +96,16 @@ export function usePdfPreview(fileId: string | null) {
       return;
     }
 
+    isFetchingRef.current = true;
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const response = await getFilePreview({ fileId });
+      const response = await getFilePreview({ fileId, page: 1 });
 
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current) {
+        isFetchingRef.current = false;
+        return;
+      }
 
       // Parse total pages from header
       const totalPages = parseInt(response.headers["x-total-pages"] || "1", 10);
@@ -121,18 +130,24 @@ export function usePdfPreview(fileId: string | null) {
         error: null,
       });
     } catch (err) {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current) {
+        isFetchingRef.current = false;
+        return;
+      }
 
       setState((prev) => ({
         ...prev,
         isLoading: false,
         error: err instanceof Error ? err : new Error("Lỗi không xác định"),
       }));
+    } finally {
+      isFetchingRef.current = false;
     }
   }, [fileId, getCacheKey]);
 
   /**
    * Fetch a specific page (for pages 2+)
+   * Now uses getFilePreview instead of renderPdfPage
    */
   const fetchPage = useCallback(
     async (pageNumber: number) => {
@@ -164,10 +179,10 @@ export function usePdfPreview(fileId: string | null) {
       }));
 
       try {
-        const response = await renderPdfPage({
+        // Use getFilePreview for all pages (same API, dpi=200 default)
+        const response = await getFilePreview({
           fileId,
-          pageNumber,
-          dpi: 300,
+          page: pageNumber,
         });
 
         if (!isMountedRef.current) return;
@@ -198,7 +213,7 @@ export function usePdfPreview(fileId: string | null) {
         }));
       }
     },
-    [fileId, getCacheKey]
+    [fileId, getCacheKey],
   );
 
   /**
@@ -221,7 +236,7 @@ export function usePdfPreview(fileId: string | null) {
         fetchPage(pageNumber);
       }
     },
-    [state.totalPages, fetchFirstPage, fetchPage]
+    [state.totalPages, fetchFirstPage, fetchPage],
   );
 
   /**

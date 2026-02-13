@@ -20,10 +20,10 @@ export interface ToastMsg {
 
 // ===== Tasks & Checklist =====
 export type TaskStatusCode =
-  | "todo"             // Chưa xử lý
-  | "doing"            // Đang xử lý (API uses "doing" not "in_progress")
+  | "todo" // Chưa xử lý
+  | "doing" // Đang xử lý (API uses "doing" not "in_progress")
   | "need_to_verified" // Chờ duyệt (API uses "need_to_verified" not "awaiting_review")
-  | "finished";        // Hoàn thành (API uses "finished" not "done")
+  | "finished"; // Hoàn thành (API uses "finished" not "done")
 
 export interface TaskStatusObject {
   id: string;
@@ -47,6 +47,7 @@ export interface ChecklistItem {
   done: boolean;
   doneAt?: ISODate;
   doneById?: ID;
+  order?: number; // Order from API
 }
 
 // CheckItemDto from API
@@ -61,8 +62,8 @@ export interface CheckItemDto {
 export interface ChecklistTemplate {
   id: ID;
   name: string;
-  workTypeId?: ID;  // template có thể gắn theo work type
-  items: string[];  // labels
+  workTypeId?: ID; // template có thể gắn theo work type
+  items: string[]; // labels
   createdById: ID;
   createdAt: ISODate;
 }
@@ -89,42 +90,42 @@ export interface TaskPermissions {
 
 export interface Task {
   id: ID;
-  
+
   // Conversation and work type (legacy groupId kept for backward compatibility)
-  groupId?: ID;           // DEPRECATED: use conversationId instead
-  conversationId?: ID;     // From API: conversationId
+  groupId?: ID; // DEPRECATED: use conversationId instead
+  conversationId?: ID; // From API: conversationId
   workTypeId?: ID;
   workTypeName?: string;
-  
+
   // Checklist template reference (API uses checklistTemplateId)
-  checklistTemplateId?: string | null;  // From API
+  checklistTemplateId?: string | null; // From API
   progressText?: string;
 
-  messageId?: ID | null;   // message gốc dùng để tạo task (nullable in API)
+  messageId?: ID | null; // message gốc dùng để tạo task (nullable in API)
   title: string;
   description?: string | null;
 
-  assignTo: ID;              // người được giao (staff)
-  assignFrom: ID;            // leader giao
-  status: TaskStatusObject;  // Status is an object from API, not a simple string
+  assignTo: ID; // người được giao (staff)
+  assignFrom: ID; // leader giao
+  status: TaskStatusObject; // Status is an object from API, not a simple string
 
   priority?: TaskPriorityDto;
-  dueDate?: ISODate | null;  // API uses dueDate, not dueAt
-  dueAt?: ISODate;           // DEPRECATED: kept for backward compatibility
+  dueDate?: ISODate | null; // API uses dueDate, not dueAt
+  dueAt?: ISODate; // DEPRECATED: kept for backward compatibility
 
   // pending: staff muốn để sau 2-3 ngày (not in API)
   isPending?: boolean;
   pendingUntil?: ISODate;
 
   // Checklist items (API response)
-  checkItems?: CheckItemDto[] | null;  // From API: checkItems
-  
+  checkItems?: CheckItemDto[] | null; // From API: checkItems
+
   // Legacy checklist format (kept for backward compatibility)
-  checklist?: ChecklistItem[];   // DEPRECATED: convert from checkItems
-  
+  checklist?: ChecklistItem[]; // DEPRECATED: convert from checkItems
+
   // Completion percentage from API
   completionPercentage?: number;
-  
+
   // Attachments from API
   attachments?: Array<{
     id: string;
@@ -134,8 +135,8 @@ export interface Task {
     contentType: string;
     uploadedAt: string;
   }> | null;
-  
-  history?: TaskEvent[];         // log thay đổi (not in API directly)
+
+  history?: TaskEvent[]; // log thay đổi (not in API directly)
 
   permissions?: TaskPermissions; // permissions từ API
 
@@ -146,9 +147,9 @@ export interface Task {
 export interface LeadThread {
   id: string;
   t: string;
-  type: 'Nội bộ' | 'POS';
+  type: "Nội bộ" | "POS";
   owner: string;
-  st: 'Đang xử lý' | 'Chờ phản hồi' | 'Đã chốt';
+  st: "Đang xử lý" | "Chờ phản hồi" | "Đã chốt";
   at: string;
 }
 
@@ -160,7 +161,7 @@ export interface FileAttachment {
   url: string;
   type: AttachmentType;
   size?: string;
-  id:string;
+  id: string;
 }
 
 /* ---------------- Message Types ---------------- */
@@ -267,9 +268,9 @@ export interface User {
   displayName: string;
   email: string;
 
-  roles: UserRole[];          // quyền toàn cục (admin portal, v.v.)
-  departmentIds: ID[];        // có thể 1 hoặc nhiều (tuỳ doanh nghiệp)
-  primaryDepartmentId?: ID;   // dùng cho Staff trải nghiệm tốt hơn
+  roles: UserRole[]; // quyền toàn cục (admin portal, v.v.)
+  departmentIds: ID[]; // có thể 1 hoặc nhiều (tuỳ doanh nghiệp)
+  primaryDepartmentId?: ID; // dùng cho Staff trải nghiệm tốt hơn
   active: boolean;
   createdAt: ISODate;
 }
@@ -277,25 +278,25 @@ export interface User {
 export interface Department {
   id: ID;
   name: string;
-  leaderId: ID;         // đúng 1 leader/phòng
-  memberIds: ID[];      // gồm cả leader
+  leaderId: ID; // đúng 1 leader/phòng
+  memberIds: ID[]; // gồm cả leader
   createdAt: ISODate;
 }
 
 export interface ChecklistVariant {
-  id: string;            // ví dụ: "nhanHang_kiemDem"
-  name: string;          // ví dụ: "Kiểm đếm"
-  description?: string;  // mô tả thêm nếu cần
-  isDefault?: boolean;   // variant mặc định cho workType
+  id: string; // ví dụ: "nhanHang_kiemDem"
+  name: string; // ví dụ: "Kiểm đếm"
+  description?: string; // mô tả thêm nếu cần
+  isDefault?: boolean; // variant mặc định cho workType
 }
 
 // ===== Group & Work Types =====
 export interface WorkType {
   id: ID;
-  key: string;         // "nhan_hang" | "doi_tra" | ...
-  name: string;        // "Nhận hàng", "Đổi trả", ...
-  icon?: string;       // lucide icon name
-  color?: string;      // brand subcolor cho chip/badge
+  key: string; // "nhan_hang" | "doi_tra" | ...
+  name: string; // "Nhận hàng", "Đổi trả", ...
+  icon?: string; // lucide icon name
+  color?: string; // brand subcolor cho chip/badge
 
   /** Danh sách các dạng checklist con (Kiểm đếm / Lưu trữ / Thanh toán / ...) */
   checklistVariants?: ChecklistVariant[];
@@ -306,21 +307,21 @@ export interface GroupMember {
   role: "leader" | "staff";
   isAutoJoined?: boolean; // true nếu là leader của phòng ban liên kết
   joinedAt: ISODate;
-  addedById?: ID;         // ai thêm vào (admin/leader), nếu không auto
+  addedById?: ID; // ai thêm vào (admin/leader), nếu không auto
 }
 
 export interface GroupChat {
   id: ID;
-  name: string;               // "Vận Hành - Kho"
+  name: string; // "Vận Hành - Kho"
   description?: string;
-  departmentIds: ID[];        // 2-3 phòng ban
-  members: GroupMember[];     // leaders auto + staff do leader assign
-  workTypes: WorkType[];      // loại việc được cấu hình riêng cho group
-  defaultWorkTypeId?: ID;     // filter mặc định khi vào group
-  lastSender?: string;   // "Huyền"
-  lastMessage?: string;  // text | "[hình ảnh]" | "[pdf]"
-  lastTime?: string;     // "09:45"
-  unreadCount?: number;  // 0 | 1 | 2...
+  departmentIds: ID[]; // 2-3 phòng ban
+  members: GroupMember[]; // leaders auto + staff do leader assign
+  workTypes: WorkType[]; // loại việc được cấu hình riêng cho group
+  defaultWorkTypeId?: ID; // filter mặc định khi vào group
+  lastSender?: string; // "Huyền"
+  lastMessage?: string; // text | "[hình ảnh]" | "[pdf]"
+  lastTime?: string; // "09:45"
+  unreadCount?: number; // 0 | 1 | 2...
   createdAt: ISODate;
 
   // Phase 4: Conversation metadata
@@ -338,29 +339,29 @@ export interface GroupChat {
 // }
 
 export interface PinnedMessage {
-  id: string;                     // id của pinned entry
-  chatId: string;                 // group id nơi message xuất hiện
-  groupName: string;              // tên nhóm chat (category name)
-  groupId?: string;               // category id
-  workTypeName?: string;          // tên loại việc (conversation/worktype name)
-  workTypeId?: string;            // conversation/worktype id
+  id: string; // id của pinned entry
+  chatId: string; // group id nơi message xuất hiện
+  groupName: string; // tên nhóm chat (category name)
+  groupId?: string; // category id
+  workTypeName?: string; // tên loại việc (conversation/worktype name)
+  workTypeId?: string; // conversation/worktype id
 
-  sender: string;                 // tên người gửi
+  sender: string; // tên người gửi
   type: "text" | "image" | "file";
 
-  content?: string;               // nội dung text (nếu là text)
-  preview?: string;               // preview rút gọn để hiển thị list
+  content?: string; // nội dung text (nếu là text)
+  preview?: string; // preview rút gọn để hiển thị list
 
-  fileInfo?: FileAttachment;      // thumbnail hoặc file info (image/pdf/etc)
+  fileInfo?: FileAttachment; // thumbnail hoặc file info (image/pdf/etc)
 
-  time: string;                   // thời gian gửi tin nhắn (ISO), dùng để group
+  time: string; // thời gian gửi tin nhắn (ISO), dùng để group
 }
 
 // ===== Preferences (per user per group) =====
 export interface GroupUserPreference {
   userId: ID;
   groupId: ID;
-  defaultWorkTypeId?: ID;  // nhớ filter mặc định của user trong group
+  defaultWorkTypeId?: ID; // nhớ filter mặc định của user trong group
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -390,21 +391,21 @@ export interface ReceivedInfo {
   sender: string;
   createdAt: string;
   status: "waiting" | "assigned" | "transferred";
-  transferredTo?: string;  // departmentId
+  transferredTo?: string; // departmentId
   transferredToGroupName?: string;
   transferredWorkTypeName?: string;
 }
 
 // ===== Checklist task Template Item =====
 export type ChecklistTemplateItem = {
-  id: string;        // id template
-  label: string;     // tên checklist mặc định
+  id: string; // id template
+  label: string; // tên checklist mặc định
 };
 
 export type ChecklistTemplateMap = Record<
-  string,               // workTypeId
+  string, // workTypeId
   Record<
-    string,             // checklistVariantId
+    string, // checklistVariantId
     ChecklistTemplateItem[]
   >
 >;
@@ -420,6 +421,7 @@ export function convertCheckItemToLegacy(item: CheckItemDto): ChecklistItem {
     label: item.content || "",
     done: item.isCompleted,
     doneAt: item.completedAt || undefined,
+    order: item.order,
   };
 }
 
@@ -441,25 +443,30 @@ export function convertLegacyToCheckItem(item: ChecklistItem): CheckItemDto {
  * This ensures backward compatibility with existing UI code
  */
 export function normalizeTaskFromAPI(task: Task): Task {
-  return {
+  const normalized = {
     ...task,
     // Ensure conversationId is set (API uses conversationId)
     conversationId: task.conversationId || task.groupId,
     groupId: task.conversationId || task.groupId, // Backward compatibility
-    
+
     // Convert checkItems to legacy checklist format
-    checklist: task.checkItems?.map(convertCheckItemToLegacy) || task.checklist || [],
-    
+    checklist:
+      task.checkItems?.map(convertCheckItemToLegacy) || task.checklist || [],
+
     // Calculate progressText from checkItems if not present
-    progressText: task.progressText || (task.checkItems && task.checkItems.length > 0
-      ? `${task.checkItems.filter(i => i.isCompleted).length}/${task.checkItems.length} mục`
-      : "Không có checklist"),
-    
+    progressText:
+      task.progressText ||
+      (task.checkItems && task.checkItems.length > 0
+        ? `${task.checkItems.filter((i) => i.isCompleted).length}/${task.checkItems.length} mục`
+        : "Không có checklist"),
+
     // Support both dueDate (API) and dueAt (legacy)
     dueDate: task.dueDate || task.dueAt || null,
     dueAt: task.dueDate || task.dueAt,
-    
+
     // Ensure messageId is handled properly (API allows null)
     messageId: task.messageId || undefined,
   };
+
+  return normalized;
 }

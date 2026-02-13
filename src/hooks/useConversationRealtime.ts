@@ -2,7 +2,11 @@
 
 import { useEffect, useCallback, useRef } from "react";
 import { useQueryClient, InfiniteData } from "@tanstack/react-query";
-import { chatHub, SIGNALR_EVENTS, type ConversationCreatedEvent } from "@/lib/signalr";
+import {
+  chatHub,
+  SIGNALR_EVENTS,
+  type ConversationCreatedEvent,
+} from "@/lib/signalr";
 import { useSignalRConnection } from "@/providers/SignalRProvider";
 import { useCategories, categoriesKeys } from "./queries/useCategories"; // 🆕 To get ALL conversations
 import { conversationKeys } from "./queries/keys/conversationKeys";
@@ -12,7 +16,10 @@ import type {
   GroupConversation,
   DirectConversation,
 } from "@/types/conversations";
-import type { CategoryWithUnread, ConversationInfoDto } from "@/types/categories";
+import type {
+  CategoryWithUnread,
+  ConversationInfoDto,
+} from "@/types/categories";
 
 // Use API response structure (items, not data)
 type ConversationPage = {
@@ -74,6 +81,9 @@ export function useConversationRealtime(
       // Determine if it's a group or direct message
       const isGroupConversation = event.type === "GRP";
 
+      // Get conversation ID (backend sends either 'id' or 'conversationId')
+      const conversationId = event.id || event.conversationId;
+
       // 🆕 NEW: Show toast notification for DM conversations
       if (!isGroupConversation && event.createdByName) {
         toast.info(`${event.createdByName} wants to chat with you`, {
@@ -84,28 +94,36 @@ export function useConversationRealtime(
 
       if (isGroupConversation) {
         // For group conversations: Add to categories cache
-        // Note: The event includes categories array showing which category it belongs to
         const categoriesData = queryClient.getQueryData<CategoryWithUnread[]>(
           categoriesKeys.list(),
         );
 
-        if (categoriesData && event.categories && event.categories.length > 0) {
+        // Determine categoryId from event (backend sends either 'categories' array or 'categoryId')
+        const targetCategoryId = event.categories?.[0]?.id || event.categoryId;
+
+        if (categoriesData && targetCategoryId) {
           // Create ConversationInfoDto from event
           const newConversation: ConversationInfoDto = {
-            conversationId: event.id,
+            conversationId: conversationId!,
             conversationName: event.name || "Unnamed Conversation",
             memberCount: event.memberCount,
             lastMessage: event.lastMessage,
           };
 
-          // Update each category that contains this conversation
-          const updatedCategories = categoriesData.map((category) => {
-            // Check if this conversation belongs to this category
-            const belongsToCategory = event.categories!.some(
-              (cat) => cat.id === category.id,
-            );
+          // Check if conversation already exists in any category
+          const alreadyExists = categoriesData.some((category) =>
+            category.conversations.some(
+              (conv) => conv.conversationId === conversationId,
+            ),
+          );
 
-            if (belongsToCategory) {
+          if (alreadyExists) {
+            return;
+          }
+
+          // Update the target category
+          const updatedCategories = categoriesData.map((category) => {
+            if (category.id === targetCategoryId) {
               // Add conversation to category with unreadCount = 0
               return {
                 ...category,
@@ -119,24 +137,20 @@ export function useConversationRealtime(
           });
 
           // Update cache
-          queryClient.setQueryData(
-            categoriesKeys.list(),
-            updatedCategories,
-          );
+          queryClient.setQueryData(categoriesKeys.list(), updatedCategories);
 
           console.log(
-            `✅ [Realtime] Added group conversation ${event.id} to categories`,
+            `✅ [Realtime] Added group conversation ${conversationId} to category ${targetCategoryId}`,
           );
         } else {
           // If no categories data or conversation has no category, refetch
           queryClient.invalidateQueries({ queryKey: categoriesKeys.all });
           console.log(
-            `🔄 [Realtime] Invalidating categories for new conversation ${event.id}`,
+            `🔄 [Realtime] Invalidating categories for new conversation ${conversationId}`,
           );
         }
       } else {
         // For direct messages: Add to directs cache
-        console.log(`[Realtime] Handling new direct conversation ${event.id}...`);
         const directsData = queryClient.getQueryData<
           InfiniteData<ConversationPage>
         >(conversationKeys.directs());
@@ -144,13 +158,11 @@ export function useConversationRealtime(
         if (directsData) {
           try {
             // 🆕 Fetch members from API for accurate member information
-            console.log(`[Realtime] Fetching members for conversation ${event.id}...`);
-            const members = await getConversationMembers(event.id);
-            console.log(`[Realtime] Fetched ${members.length} members for conversation ${event.id}`);
+            const members = await getConversationMembers(conversationId!);
 
             // Create DirectConversation from event with fetched members
             const newDirectConversation: DirectConversation = {
-              id: event.id,
+              id: conversationId!,
               type: "DM",
               name: event.name || "Direct Message",
               description: event.description,
@@ -164,7 +176,7 @@ export function useConversationRealtime(
               lastMessage: event.lastMessage
                 ? {
                     id: event.lastMessage.id || event.lastMessage.messageId,
-                    conversationId: event.id,
+                    conversationId: conversationId!,
                     senderId: event.lastMessage.senderId,
                     senderName: event.lastMessage.senderName,
                     parentMessageId: event.lastMessage.parentMessageId || null,
@@ -201,21 +213,25 @@ export function useConversationRealtime(
             });
 
             console.log(
-              `✅ [Realtime] Added direct conversation ${event.id} to directs list with ${members.length} members`,
+              `✅ [Realtime] Added direct conversation ${conversationId} to directs list with ${members.length} members`,
             );
           } catch (error) {
             console.error(
-              `❌ [Realtime] Failed to fetch members for conversation ${event.id}:`,
+              `❌ [Realtime] Failed to fetch members for conversation ${conversationId}:`,
               error,
             );
             // Fallback: invalidate queries to force refetch
-            queryClient.invalidateQueries({ queryKey: conversationKeys.directs() });
+            queryClient.invalidateQueries({
+              queryKey: conversationKeys.directs(),
+            });
           }
         } else {
           // If no directs data, refetch
-          queryClient.invalidateQueries({ queryKey: conversationKeys.directs() });
+          queryClient.invalidateQueries({
+            queryKey: conversationKeys.directs(),
+          });
           console.log(
-            `🔄 [Realtime] Invalidating directs for new conversation ${event.id}`,
+            `🔄 [Realtime] Invalidating directs for new conversation ${conversationId}`,
           );
         }
       }
@@ -324,7 +340,12 @@ export function useConversationRealtime(
         handleConversationCreated as any,
       );
     };
-  }, [handleMessageRead, handleConversationUpdated, handleConversationCreated, isConnected]);
+  }, [
+    handleMessageRead,
+    handleConversationUpdated,
+    handleConversationCreated,
+    isConnected,
+  ]);
 
   // Join all conversations in the list to receive realtime updates
   useEffect(() => {

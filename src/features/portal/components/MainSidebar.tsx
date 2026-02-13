@@ -57,7 +57,7 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   viewMode,
   pendingTasks: initialPending = [],
   showPinnedToast,
-  currentUserName = "Diễm My",
+  currentUserName = "",
   onOpenWorkTypeManager,
 }) => {
   const [openTools, setOpenTools] = React.useState(false);

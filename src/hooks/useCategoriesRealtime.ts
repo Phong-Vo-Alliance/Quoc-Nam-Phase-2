@@ -5,7 +5,7 @@
 
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { chatHub } from "@/lib/signalr";
+import { chatHub, SIGNALR_EVENTS } from "@/lib/signalr";
 import { categoriesKeys } from "@/hooks/queries/useCategories";
 import { useAuthStore } from "@/stores/authStore";
 import { useSignalRConnection } from "@/providers/SignalRProvider";
@@ -125,9 +125,10 @@ export function useCategoriesRealtime(
     }
 
     const handleMessageSent = (data: any) => {
-      const { message } = data;
-      if (!message) {
-        console.error(`[CategoryRealtime] No message in event data`);
+      // Handle both wrapped { message: {...} } and direct {...} formats
+      const message = "message" in data && data.message ? data.message : data;
+
+      if (!message || !message.conversationId) {
         return;
       }
 
@@ -189,12 +190,15 @@ export function useCategoriesRealtime(
       // The setTimeout trick was causing race conditions where MessageRead could be overwritten
     };
 
-    // Register event listener
-    chatHub.onMessageSent(handleMessageSent);
+    // ✅ FIX: Use onWithCleanup to register handler and get cleanup function
+    // This ensures we only remove OUR handler, not handlers from SignalRProvider
+    const cleanup = chatHub.onWithCleanup(
+      SIGNALR_EVENTS.MESSAGE_SENT,
+      handleMessageSent,
+      false, // Disable logging here since SignalRProvider already logs
+    );
 
-    return () => {
-      chatHub.offMessageSent();
-    };
+    return cleanup;
   }, [queryClient, currentUserId, isConnected]);
 
   // ────────────────────────────────────────────────────────
@@ -232,12 +236,15 @@ export function useCategoriesRealtime(
       // Invalidating would refetch from API and overwrite our client-side unread counts
     };
 
-    // Register event listener
-    chatHub.onMessageRead(handleMessageRead);
+    // ✅ FIX: Use onWithCleanup to register handler and get cleanup function
+    // This ensures we only remove OUR handler, not handlers from SignalRProvider
+    const cleanup = chatHub.onWithCleanup(
+      SIGNALR_EVENTS.MESSAGE_READ,
+      handleMessageRead,
+      false, // Disable logging here since SignalRProvider already logs
+    );
 
-    return () => {
-      chatHub.offMessageRead();
-    };
+    return cleanup;
   }, [queryClient, currentUserId, isConnected]);
 
   // ────────────────────────────────────────────────────────
@@ -251,7 +258,7 @@ export function useCategoriesRealtime(
 
     const handleMemberAdded = async (data: any) => {
       const { conversationId, userId } = data;
-      
+
       console.log("[CategoryRealtime] MemberAdded received:", {
         conversationId,
         userId,
@@ -267,9 +274,9 @@ export function useCategoriesRealtime(
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Get updated categories from cache
-        const updatedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
-          categoriesKeys.list(),
-        );
+        const updatedCategories = queryClient.getQueryData<
+          CategoryWithUnread[]
+        >(categoriesKeys.list());
 
         if (!updatedCategories) {
           console.error("[CategoryRealtime] No updated categories found");
@@ -317,12 +324,13 @@ export function useCategoriesRealtime(
       }
     };
 
-    // Register event listener
-    chatHub.onMemberAdded(handleMemberAdded);
+    // ✅ FIX: Use onWithCleanup to register handler and get cleanup function
+    const cleanup = chatHub.onWithCleanup(
+      SIGNALR_EVENTS.MEMBER_ADDED,
+      handleMemberAdded,
+    );
 
-    return () => {
-      chatHub.offMemberAdded();
-    };
+    return cleanup;
   }, [queryClient, isConnected]);
 
   // ────────────────────────────────────────────────────────
@@ -336,7 +344,7 @@ export function useCategoriesRealtime(
 
     const handleCategoryDepartmentLinked = async (data: any) => {
       const { categoryId, categoryName, departmentId } = data;
-      
+
       console.log("[CategoryRealtime] CategoryDepartmentLinked received:", {
         categoryId,
         categoryName,
@@ -371,12 +379,14 @@ export function useCategoriesRealtime(
           (dept) => dept.departmentId === departmentId,
         );
 
-        const departmentName = categoryName.replace(department?.departmentName || departmentId,"").trim().replace(/^-/, "").trim();
+        const departmentName = categoryName
+          .replace(department?.departmentName || departmentId, "")
+          .trim()
+          .replace(/^-/, "")
+          .trim();
 
         // Show toast notification
-        toast.info(
-          `Nhóm của bạn đã được kết nối với ${departmentName}`,
-        );
+        toast.info(`Nhóm của bạn đã được kết nối với ${departmentName}`);
       } catch (error) {
         console.error(
           "[CategoryRealtime] Error handling CategoryDepartmentLinked:",
@@ -385,11 +395,12 @@ export function useCategoriesRealtime(
       }
     };
 
-    // Register event listener
-    chatHub.onCategoryDepartmentLinked(handleCategoryDepartmentLinked);
+    // ✅ FIX: Use onWithCleanup to register handler and get cleanup function
+    const cleanup = chatHub.onWithCleanup(
+      SIGNALR_EVENTS.CATEGORY_DEPARTMENT_LINKED,
+      handleCategoryDepartmentLinked,
+    );
 
-    return () => {
-      chatHub.offCategoryDepartmentLinked();
-    };
+    return cleanup;
   }, [queryClient, isConnected]);
 }

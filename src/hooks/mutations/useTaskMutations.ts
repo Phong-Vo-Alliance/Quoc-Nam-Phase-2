@@ -1,9 +1,9 @@
 // Task mutation hooks for creating, updating, and deleting tasks and checklist items
 // Uses TanStack Query mutations with optimistic updates and cache invalidation
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  addCheckItem, 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  addCheckItem,
   toggleCheckItem,
   updateCheckItem,
   deleteCheckItem,
@@ -12,9 +12,9 @@ import {
   createChecklistTemplate,
   updateChecklistTemplate,
   patchChecklistTemplate,
-  deleteChecklistTemplate
-} from '@/api/tasks.api';
-import { checklistTemplateKeys } from '../queries/useChecklistTemplates';
+  deleteChecklistTemplate,
+} from "@/api/tasks.api";
+import { checklistTemplateKeys } from "../queries/useChecklistTemplates";
 
 /**
  * Hook to add a checklist item to a task
@@ -24,15 +24,19 @@ export function useAddCheckItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, content, order }: { 
-      taskId: string; 
-      content: string; 
-      order?: number 
+    mutationFn: ({
+      taskId,
+      content,
+      order,
+    }: {
+      taskId: string;
+      content: string;
+      order?: number;
     }) => addCheckItem(taskId, content, order),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedTasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
     },
   });
 }
@@ -45,14 +49,12 @@ export function useToggleCheckItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, itemId }: { 
-      taskId: string; 
-      itemId: string 
-    }) => toggleCheckItem(taskId, itemId),
+    mutationFn: ({ taskId, itemId }: { taskId: string; itemId: string }) =>
+      toggleCheckItem(taskId, itemId),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedTasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
     },
   });
 }
@@ -65,15 +67,19 @@ export function useUpdateCheckItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, itemId, content }: { 
-      taskId: string; 
+    mutationFn: ({
+      taskId,
+      itemId,
+      content,
+    }: {
+      taskId: string;
       itemId: string;
       content: string;
     }) => updateCheckItem(taskId, itemId, content),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedTasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
     },
   });
 }
@@ -86,14 +92,12 @@ export function useDeleteCheckItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, itemId }: { 
-      taskId: string; 
-      itemId: string;
-    }) => deleteCheckItem(taskId, itemId),
+    mutationFn: ({ taskId, itemId }: { taskId: string; itemId: string }) =>
+      deleteCheckItem(taskId, itemId),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedTasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
     },
   });
 }
@@ -106,14 +110,17 @@ export function useUpdateTaskStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, status }: { 
-      taskId: string; 
-      status: 'todo' | 'doing' | 'need_to_verified' | 'finished' 
+    mutationFn: ({
+      taskId,
+      status,
+    }: {
+      taskId: string;
+      status: "todo" | "doing" | "need_to_verified" | "finished";
     }) => updateTaskStatus(taskId, status),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedTasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
     },
   });
 }
@@ -126,11 +133,11 @@ export function useUpdateTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ 
-      taskId, 
-      data 
-    }: { 
-      taskId: string; 
+    mutationFn: ({
+      taskId,
+      data,
+    }: {
+      taskId: string;
       data: {
         title: string;
         description?: string | null;
@@ -143,8 +150,8 @@ export function useUpdateTask() {
     }) => updateTask(taskId, data),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedTasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
     },
   });
 }
@@ -166,10 +173,13 @@ export function useCreateChecklistTemplate() {
       description?: string | null;
       conversationId: string;
       items: Array<{ content: string; order: number; isRequired: boolean }>;
+      isDefault?: boolean;
     }) => createChecklistTemplate(data),
-    onSuccess: () => {
-      // Invalidate all checklist templates queries
-      queryClient.invalidateQueries({ queryKey: checklistTemplateKeys.all });
+    onSuccess: (_data, variables) => {
+      // Only invalidate queries for the specific conversation
+      queryClient.invalidateQueries({
+        queryKey: checklistTemplateKeys.list(variables.conversationId),
+      });
     },
   });
 }
@@ -182,10 +192,10 @@ export function useUpdateChecklistTemplate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ 
+    mutationFn: ({
       templateId,
-      payload
-    }: { 
+      payload,
+    }: {
       templateId: string;
       payload: {
         id: string;
@@ -195,9 +205,20 @@ export function useUpdateChecklistTemplate() {
         items?: Array<string>;
       };
     }) => updateChecklistTemplate(templateId, payload),
-    onSuccess: () => {
-      // Invalidate all checklist templates queries
-      queryClient.invalidateQueries({ queryKey: checklistTemplateKeys.all });
+    onSuccess: (_data, variables) => {
+      // Only invalidate queries for the specific conversation if provided
+      if (variables.payload.conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: checklistTemplateKeys.list(
+            variables.payload.conversationId,
+          ),
+        });
+      } else {
+        // Fallback: invalidate all lists if conversationId not provided
+        queryClient.invalidateQueries({
+          queryKey: checklistTemplateKeys.lists(),
+        });
+      }
     },
   });
 }
@@ -211,20 +232,32 @@ export function usePatchChecklistTemplate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ 
+    mutationFn: ({
       templateId,
-      payload
-    }: { 
+      payload,
+    }: {
       templateId: string;
       payload: {
         name?: string;
         description?: string | null;
         conversationId?: string;
+        isDefault?: boolean;
       };
     }) => patchChecklistTemplate(templateId, payload),
-    onSuccess: () => {
-      // Invalidate all checklist templates queries
-      queryClient.invalidateQueries({ queryKey: checklistTemplateKeys.all });
+    onSuccess: (_data, variables) => {
+      // Only invalidate queries for the specific conversation if provided
+      if (variables.payload.conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: checklistTemplateKeys.list(
+            variables.payload.conversationId,
+          ),
+        });
+      } else {
+        // Fallback: invalidate all lists if conversationId not provided
+        queryClient.invalidateQueries({
+          queryKey: checklistTemplateKeys.lists(),
+        });
+      }
     },
   });
 }
@@ -237,11 +270,24 @@ export function useDeleteChecklistTemplate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ templateId }: { templateId: string }) => 
-      deleteChecklistTemplate(templateId),
-    onSuccess: () => {
-      // Invalidate all checklist templates queries
-      queryClient.invalidateQueries({ queryKey: checklistTemplateKeys.all });
+    mutationFn: ({
+      templateId,
+    }: {
+      templateId: string;
+      conversationId?: string;
+    }) => deleteChecklistTemplate(templateId),
+    onSuccess: (_data, variables) => {
+      // Only invalidate queries for the specific conversation if provided
+      if (variables.conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: checklistTemplateKeys.list(variables.conversationId),
+        });
+      } else {
+        // Fallback: invalidate all lists if conversationId not provided
+        queryClient.invalidateQueries({
+          queryKey: checklistTemplateKeys.lists(),
+        });
+      }
     },
   });
 }

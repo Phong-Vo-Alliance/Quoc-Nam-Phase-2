@@ -101,8 +101,8 @@ export function useMarkConversationAsRead() {
       return { previousDirects, previousCategories };
     },
 
-    // 🆕 NEW: Rollback on error
-    onError: (_err, { conversationId }, context) => {
+    // Rollback on error
+    onError: (_err, _variables, context) => {
       // Rollback directs
       if (context?.previousDirects) {
         queryClient.setQueryData(

@@ -3,7 +3,7 @@
  * Handles fetching categories and category conversations
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { categoriesApi } from "@/api/categories.api";
 import type {
   CategoryDto,
@@ -26,7 +26,10 @@ export const categoriesKeys = {
 
 /**
  * Fetch all categories for the authenticated user
- * Transforms API response to add unreadCount = 0 for client-side tracking
+ * Transforms API response to add unreadCount.
+ *
+ * IMPORTANT: Preserves existing unread counts from cache when refetching.
+ * This prevents losing SignalR-tracked unread counts during invalidation.
  *
  * @returns Query result with categories array (CategoryWithUnread[])
  *
@@ -42,17 +45,38 @@ export const categoriesKeys = {
  * ```
  */
 export function useCategories() {
+  const queryClient = useQueryClient();
+
   return useQuery<CategoryWithUnread[], Error>({
     queryKey: categoriesKeys.list(),
     queryFn: async () => {
+      // ✅ FIX: Get existing unread counts from cache BEFORE fetching new data
+      // This preserves SignalR-tracked unread counts during refetch/invalidation
+      const existingData = queryClient.getQueryData<CategoryWithUnread[]>(
+        categoriesKeys.list(),
+      );
+
+      // Create a map of conversationId -> unreadCount from existing cache
+      const existingUnreadCounts = new Map<string, number>();
+      if (existingData) {
+        existingData.forEach((category) => {
+          category.conversations.forEach((conv) => {
+            existingUnreadCounts.set(conv.conversationId, conv.unreadCount || 0);
+          });
+        });
+      }
+
+      // Fetch fresh data from API
       const data = await categoriesApi.getCategories();
-      // Transform ONCE when fetching from API: Add unreadCount = 0
+
+      // Transform: Merge with existing unread counts OR initialize to 0
       return data.map((category) => ({
         ...category,
         conversations: category.conversations.map(
           (conv): ConversationWithUnread => ({
             ...conv,
-            unreadCount: 0, // Initialize with 0, SignalR will update
+            // ✅ Preserve existing unread count, or initialize to 0 for new conversations
+            unreadCount: existingUnreadCounts.get(conv.conversationId) ?? 0,
           }),
         ),
       }));
