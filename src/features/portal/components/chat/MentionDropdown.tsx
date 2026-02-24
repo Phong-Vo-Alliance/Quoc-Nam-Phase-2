@@ -1,7 +1,7 @@
 // MentionDropdown - Dropdown component for user mentions autocomplete
 // Shows list of users when "@" is typed in chat input
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/features/portal/components/Avatar";
 import { cn } from "@/lib/utils";
 import type { ConversationMember } from "@/types/conversations";
@@ -31,13 +31,13 @@ export interface MentionDropdownProps {
 
 /**
  * Dropdown component for mentions autocomplete
- * 
+ *
  * Features:
  * - Displays user list with avatar, name, and identifier (email/phone)
  * - Keyboard navigation support (arrow keys, Enter)
  * - Auto-scroll to selected item
  * - Click to select
- * 
+ *
  * @example
  * ```tsx
  * <MentionDropdown
@@ -58,6 +58,9 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
 
+  // 🔧 FIX: Add dynamic positioning to prevent overlap
+  const [calculatedPosition, setCalculatedPosition] = useState(position);
+
   // Auto-scroll to selected item
   useEffect(() => {
     if (selectedItemRef.current) {
@@ -68,12 +71,31 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
     }
   }, [selectedIndex]);
 
+  // 🔧 FIX: Dynamic positioning based on available space
+  useEffect(() => {
+    if (!dropdownRef.current || !position) return;
+
+    const dropdown = dropdownRef.current;
+    const rect = dropdown.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+
+    // Check if dropdown would be cut off at bottom
+    if (rect.bottom > viewportHeight) {
+      setCalculatedPosition({
+        ...position,
+        top: position.top - rect.height - 40, // Position above input
+      });
+    } else {
+      setCalculatedPosition(position);
+    }
+  }, [position]);
+
   if (members.length === 0) {
     return (
       <div
         ref={dropdownRef}
-        className="absolute z-50 w-80 rounded-lg border border-gray-200 bg-white shadow-lg"
-        style={position}
+        className="absolute z-[100] w-80 rounded-lg border border-gray-200 bg-white shadow-lg"
+        style={calculatedPosition}
         data-testid="mention-dropdown"
       >
         <div className="p-4 text-center text-sm text-gray-500">
@@ -86,8 +108,8 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
   return (
     <div
       ref={dropdownRef}
-      className="absolute z-50 w-80 max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg bottom-0"
-      style={position}
+      className="absolute z-[100] w-80 max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg bottom-0"
+      style={calculatedPosition}
       data-testid="mention-dropdown"
     >
       {members.map((member, index) => {

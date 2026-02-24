@@ -9,7 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import type { WorkType } from "../../types";
 
 interface AddEditWorkTypeDialogProps {
@@ -17,7 +17,7 @@ interface AddEditWorkTypeDialogProps {
   onOpenChange: (open: boolean) => void;
   workType: WorkType | null; // null = add new
   existingNames: string[];
-  onSave: (name: string) => void;
+  onSave: (name: string) => Promise<void>;
 }
 
 export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
@@ -29,11 +29,13 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
 }) => {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(workType?.name ?? "");
       setError("");
+      setIsSubmitting(false);
     }
   }, [open, workType]);
 
@@ -62,29 +64,43 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
     return null;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSubmitting) return;
+
     const validationError = validate(name);
     if (validationError) {
       setError(validationError);
       return;
     }
 
-    onSave(name.trim());
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      await onSave(name.trim());
+      // Dialog will be closed by parent after success
+    } catch (err: any) {
+      setError(err?.message || "Có lỗi xảy ra, vui lòng thử lại");
+      setIsSubmitting(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !isSubmitting) {
       e.preventDefault();
       handleSave();
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(open) => !isSubmitting && onOpenChange(open)}
+    >
       <DialogContent className="max-w-[450px]">
         <DialogHeader>
           <DialogTitle>
-            {workType ? "Chỉnh sửa Loại Việc" : "Thêm Loại Việc"}
+            {workType ? "Chỉnh sửa loại việc" : "Thêm loại việc"}
           </DialogTitle>
         </DialogHeader>
 
@@ -104,6 +120,7 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
               placeholder="Nhập tên loại việc..."
               autoFocus
               maxLength={51} // Allow 51 to show error
+              disabled={isSubmitting}
             />
             <p className="text-xs text-gray-500 mt-1">
               {name.trim().length}/50 ký tự
@@ -143,11 +160,22 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
             Hủy
           </Button>
-          <Button onClick={handleSave} disabled={!name.trim()}>
-            Lưu
+          <Button onClick={handleSave} disabled={!name.trim() || isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Đang lưu...
+              </>
+            ) : (
+              "Lưu"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -88,6 +88,7 @@ import { useUploadFiles } from "@/hooks/mutations/useUploadFiles";
 import { useUploadFilesBatch } from "@/hooks/mutations/useUploadFilesBatch";
 import { formatAttachment } from "@/utils/formatAttachment";
 import { getFileUrl } from "@/utils/fileUrl";
+import { hasLeaderPermissions } from "@/utils/roleUtils"; // 🆕 Permission check for confirmed info API
 import { toast } from "sonner";
 import { MentionInputInline } from "./MentionInputInline";
 import MessageImage from "@/features/portal/workspace/MessageImage";
@@ -256,12 +257,18 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   });
 
   // 🐛 FIX: Sync prop changes to internal state (when user clicks category in sidebar)
+  // Also clear internal state when switching away from group chat
   useEffect(() => {
-    if (
-      selectedCategoryId &&
-      selectedCategoryId !== internalSelectedCategoryId
-    ) {
-      setInternalSelectedCategoryId(selectedCategoryId);
+    if (selectedCategoryId) {
+      // Sync prop to internal state when category is selected
+      if (selectedCategoryId !== internalSelectedCategoryId) {
+        setInternalSelectedCategoryId(selectedCategoryId);
+      }
+    } else {
+      // Clear internal state when no category (e.g., switched to DM tab or cleared selection)
+      if (internalSelectedCategoryId) {
+        setInternalSelectedCategoryId(undefined);
+      }
     }
   }, [selectedCategoryId]);
 
@@ -498,12 +505,12 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   });
   // console.log(allStarredMessages);
 
-  // 🆕 NEW: Fetch confirmed information for this conversation
+  // 🆕 NEW: Fetch confirmed information for this conversation (leader only)
   const { data: confirmedInfoData } = useInformationConfirmed(
     {
       conversationId,
     },
-    { enabled: !!conversationId },
+    { enabled: !!conversationId && hasLeaderPermissions() },
   );
 
   // 🆕 NEW: Create Set of message IDs that have confirmed information
@@ -1163,12 +1170,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       try {
         if (selectedFiles.length === 0) {
           // Case 1: Text-only message (no files)
-          await sendMessageMutation.mutateAsync({
+          const requestPayload = {
             conversationId,
             content: messageContent,
             mentions: mentions || null, // 🆕 NEW: Mentions support
             quoteMessageId: replyTarget?.id || null, // 🆕 NEW: Quote reply support (2026-02-04)
-          });
+          };
+
+          await sendMessageMutation.mutateAsync(requestPayload);
         } else if (selectedFiles.length === 1) {
           // Case 2: Single file upload (Phase 1 API)
           const result = await uploadFilesMutation.mutateAsync({

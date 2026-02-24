@@ -33,7 +33,7 @@ export const getMessages = async ({
 
   const response = await apiClient.get<GetMessagesResponse>(
     `/api/conversations/${conversationId}/messages`,
-    { params }
+    { params },
   );
   return response.data;
 };
@@ -51,12 +51,12 @@ export const getMessages = async ({
  */
 export const sendMessage = async (
   data: SendChatMessageRequest,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal },
 ): Promise<SendChatMessageResponse> => {
   const response = await apiClient.post<SendChatMessageResponse>(
     `/api/messages`,
     data,
-    options
+    options,
   );
   return response.data;
 };
@@ -67,7 +67,7 @@ export const sendMessage = async (
  */
 export const uploadAttachment = async (
   conversationId: string,
-  file: File
+  file: File,
 ): Promise<{ id: string; url: string }> => {
   const formData = new FormData();
   formData.append("file", file);
@@ -79,7 +79,7 @@ export const uploadAttachment = async (
       headers: {
         "Content-Type": "multipart/form-data",
       },
-    }
+    },
   );
   return response.data;
 };
@@ -90,7 +90,7 @@ export const uploadAttachment = async (
  */
 export const deleteMessage = async (
   _conversationId: string,
-  messageId: string
+  messageId: string,
 ): Promise<void> => {
   await apiClient.delete(`/api/messages/${messageId}`);
 };
@@ -102,11 +102,11 @@ export const deleteMessage = async (
 export const editMessage = async (
   _conversationId: string,
   messageId: string,
-  content: string
+  content: string,
 ): Promise<SendChatMessageResponse> => {
   const response = await apiClient.put<SendChatMessageResponse>(
     `/api/messages/${messageId}`,
-    { content }
+    { content },
   );
   return response.data;
 };
@@ -117,7 +117,7 @@ export const editMessage = async (
  */
 export const linkTaskToMessage = async (
   messageId: string,
-  taskId: string
+  taskId: string,
 ): Promise<LinkTaskToMessageResponse> => {
   const payload: LinkTaskToMessageRequest = { taskId };
   console.log("API: Calling PATCH /api/messages/{messageId}/link-task", {
@@ -127,7 +127,7 @@ export const linkTaskToMessage = async (
   });
   const response = await apiClient.patch<LinkTaskToMessageResponse>(
     `/api/messages/${messageId}/link-task`,
-    payload
+    payload,
   );
   console.log("API: Response from link-task:", response.data);
   return response.data;
@@ -137,7 +137,7 @@ export const linkTaskToMessage = async (
  * GET /api/conversations/{guid}/messages?aroundMessageId={messageId}
  * Fetch messages around a specific message (for jump-to-message functionality)
  * Returns approximately equal messages before and after the target message
- * 
+ *
  * @param conversationId - UUID of the conversation
  * @param aroundMessageId - UUID of the target message to fetch around
  * @param limit - Number of messages to fetch (default: 50)
@@ -149,7 +149,7 @@ export const getMessagesAround = async (params: {
   limit?: number;
 }): Promise<GetMessagesResponse> => {
   const { conversationId, aroundMessageId, limit = 50 } = params;
-  
+
   const response = await apiClient.get<GetMessagesResponse>(
     `/api/conversations/${conversationId}/messages`,
     {
@@ -157,9 +157,9 @@ export const getMessagesAround = async (params: {
         aroundMessageId,
         limit,
       },
-    }
+    },
   );
-  
+
   return response.data;
 };
 
@@ -167,7 +167,7 @@ export const getMessagesAround = async (params: {
  * GET /api/conversations/{guid}/messages?afterMessageId={messageId}
  * Fetch messages after a specific message (for scroll-down pagination)
  * Returns messages that are newer than the specified message
- * 
+ *
  * @param conversationId - UUID of the conversation
  * @param afterMessageId - UUID of the message to fetch after
  * @param limit - Number of messages to fetch (default: 50)
@@ -179,7 +179,7 @@ export const getMessagesAfter = async (params: {
   limit?: number;
 }): Promise<GetMessagesResponse> => {
   const { conversationId, afterMessageId, limit = 50 } = params;
-  
+
   const response = await apiClient.get<GetMessagesResponse>(
     `/api/conversations/${conversationId}/messages`,
     {
@@ -187,8 +187,8 @@ export const getMessagesAfter = async (params: {
         afterMessageId,
         limit,
       },
-    }
+    },
   );
-  
+
   return response.data;
 };

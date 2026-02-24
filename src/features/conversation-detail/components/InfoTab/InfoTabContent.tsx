@@ -21,6 +21,8 @@ interface InfoTabContentProps {
   };
   members: MinimalMember[];
   setShowAddMemberDialog: (show: boolean) => void;
+  /** When true, the info card is hidden (chat/categories loading) */
+  isLoading?: boolean;
 }
 
 export const InfoTabContent: React.FC<InfoTabContentProps> = ({
@@ -34,6 +36,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
   messagesQuery,
   members,
   setShowAddMemberDialog,
+  isLoading = false,
 }) => {
   return (
     <div className="space-y-4 min-h-0" data-testid="info-tab-content">
@@ -43,15 +46,22 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
           className="rounded-xl border p-6 bg-gradient-to-r from-brand-50 via-emerald-50 to-cyan-50"
           data-testid="conversation-info-card"
         >
-          <div className="flex flex-col items-center text-center gap-1">
-            <div className="text-sm font-semibold">{categoryName}</div>
-            <div className="text-xs text-gray-700">
-              Đang xem thông tin cho{" "}
-              <span className="font-medium text-brand-600">
-                Loại việc: {groupName}
-              </span>
+          {isLoading ? (
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+              <div className="h-3 w-40 bg-gray-200 rounded animate-pulse" />
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center text-center gap-1">
+              <div className="text-sm font-semibold">{categoryName}</div>
+              <div className="text-xs text-gray-700">
+                Đang xem thông tin cho{" "}
+                <span className="font-medium text-brand-600">
+                  Loại việc: {groupName}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -59,18 +69,29 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
       <div className="premium-accordion-wrapper" data-testid="media-section">
         <div className="premium-light-bar" />
         <RightAccordion title="Ảnh / Video">
-          <FileManagerPhase1A
-            mode="media"
-            groupId={groupId}
-            selectedWorkTypeId={selectedWorkTypeId}
-            onOpenSourceMessage={handleOpenSourceMessageById}
-            onNavigateToChat={() => {
-              // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
-              // User can see highlighted message in current tab
-            }}
-            messages={messages}
-            messagesQuery={messagesQuery}
-          />
+          {isLoading ? (
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="aspect-square bg-gray-200 rounded animate-pulse"
+                />
+              ))}
+            </div>
+          ) : (
+            <FileManagerPhase1A
+              mode="media"
+              groupId={groupId}
+              selectedWorkTypeId={selectedWorkTypeId}
+              onOpenSourceMessage={handleOpenSourceMessageById}
+              onNavigateToChat={() => {
+                // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                // User can see highlighted message in current tab
+              }}
+              messages={messages}
+              messagesQuery={messagesQuery}
+            />
+          )}
         </RightAccordion>
       </div>
 
@@ -81,18 +102,32 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
       >
         <div className="premium-light-bar" />
         <RightAccordion title="Tài liệu">
-          <FileManagerPhase1A
-            mode="docs"
-            groupId={groupId}
-            selectedWorkTypeId={selectedWorkTypeId}
-            onOpenSourceMessage={handleOpenSourceMessageById}
-            onNavigateToChat={() => {
-              // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
-              // User can see highlighted message in current tab
-            }}
-            messages={messages}
-            messagesQuery={messagesQuery}
-          />
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="h-8 w-8 bg-gray-200 rounded animate-pulse" />
+                  <div className="flex-1 space-y-1">
+                    <div className="h-3 w-3/4 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-2 w-1/2 bg-gray-200 rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <FileManagerPhase1A
+              mode="docs"
+              groupId={groupId}
+              selectedWorkTypeId={selectedWorkTypeId}
+              onOpenSourceMessage={handleOpenSourceMessageById}
+              onNavigateToChat={() => {
+                // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
+                // User can see highlighted message in current tab
+              }}
+              messages={messages}
+              messagesQuery={messagesQuery}
+            />
+          )}
         </RightAccordion>
       </div>
 
@@ -104,23 +139,33 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
         >
           <div className="premium-light-bar" />
           <RightAccordion title="Thành viên">
-            <div className="flex items-center justify-between rounded-lg">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-gray-600" />
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500">
-                    {members.length} thành viên
+            {isLoading ? (
+              <div className="flex items-center justify-between rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
+                </div>
+                <div className="h-6 w-14 bg-gray-200 rounded animate-pulse" />
+              </div>
+            ) : (
+              <div className="flex items-center justify-between rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-gray-600" />
+                  <div className="text-sm">
+                    <div className="text-xs text-gray-500">
+                      {members.length} thành viên
+                    </div>
                   </div>
                 </div>
+                <button
+                  onClick={() => setShowAddMemberDialog(true)}
+                  className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs hover:bg-brand-50"
+                  data-testid="add-member-button"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Thêm
+                </button>
               </div>
-              <button
-                onClick={() => setShowAddMemberDialog(true)}
-                className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs hover:bg-brand-50"
-                data-testid="add-member-button"
-              >
-                <Plus className="h-3.5 w-3.5" /> Thêm
-              </button>
-            </div>
+            )}
           </RightAccordion>
         </div>
       )}

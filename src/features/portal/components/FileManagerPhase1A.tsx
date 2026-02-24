@@ -377,6 +377,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
           "bg-orange-50/80",
           "transition-all",
           "duration-300",
+          "message-highlighted", // For CSS text color override
         );
 
         setTimeout(() => {
@@ -387,6 +388,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
             "bg-orange-50/80",
             "transition-all",
             "duration-300",
+            "message-highlighted",
           );
         }, 2500);
       };

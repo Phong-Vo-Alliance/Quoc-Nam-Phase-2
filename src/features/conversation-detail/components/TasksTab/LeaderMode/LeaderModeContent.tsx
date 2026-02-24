@@ -14,7 +14,11 @@ import type {
 import type { StarredMessageDto } from "@/types/pinned_and_starred";
 import type { MessageLike } from "@/features/portal/components/FileManagerPhase1A";
 import type { MinimalMember } from "../../../types";
-import { truncateMessageTitle, isToday } from "../../../utils/formatters";
+import {
+  truncateMessageTitle,
+  isToday,
+  abbreviateVietnameseName,
+} from "../../../utils/formatters";
 
 interface LeadBuckets {
   todo: Task[];
@@ -257,8 +261,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
               </div>
 
               {/* Filter - Select nhân viên */}
-              <div className="flex items-center justify-center gap-3 mt-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs whitespace-nowrap">Nhân viên:</span>
                   <select
                     className="rounded-lg border border-brand-200 px-2 py-1 bg-white text-xs max-w-[180px] truncate outline-none focus:border-brand-500 transition-colors [&>option:checked]:bg-brand-100 [&>option:checked]:text-brand-900"
@@ -270,20 +274,20 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                     <option value="all">Tất cả</option>
                     {assigneeOptions.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.name}
+                        {abbreviateVietnameseName(m.name, 20)}
                       </option>
                     ))}
                   </select>
-
-                  <button
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors group flex-shrink-0"
-                    onClick={() => setTemplateOpen(true)}
-                    data-testid="default-checklist-link"
-                    title="Xem và chỉnh sửa checklist mặc định"
-                  >
-                    <FileText className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
-                  </button>
                 </div>
+
+                <button
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors group flex-shrink-0"
+                  onClick={() => setTemplateOpen(true)}
+                  data-testid="default-checklist-link"
+                  title="Xem và chỉnh sửa checklist mặc định"
+                >
+                  <FileText className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
+                </button>
               </div>
             </div>
 

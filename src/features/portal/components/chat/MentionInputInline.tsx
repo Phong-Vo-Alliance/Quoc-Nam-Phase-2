@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { MentionDropdown } from "./MentionDropdown";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useAuthStore } from "@/stores/authStore";
 import type { ConversationMember } from "@/types/conversations";
 import type { MentionInputDto } from "@/types/messages";
 import { cn } from "@/lib/utils";
@@ -35,13 +36,13 @@ export interface MentionInputProps {
 
 /**
  * Chat input component with inline @mentions
- * 
+ *
  * Features:
  * - Displays mentions inline with regular text (styled)
  * - Mentions are single deletable units (cannot split or edit)
  * - Cursor cannot be placed in middle of mention
  * - Supports keyboard navigation for dropdown
- * 
+ *
  * @example
  * ```tsx
  * <MentionInputInline
@@ -76,13 +77,37 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
     const [mentionSearchQuery, setMentionSearchQuery] = useState("");
     const [mentionStartIndex, setMentionStartIndex] = useState(-1);
     const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
-    const [mentions, setMentions] = useState<MentionData[]>([]);
-    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+    const [mentions, setMentionsState] = useState<MentionData[]>([]);
+
+    // Wrapper to sync ref with state - avoids stale closure in handleKeyDown
+    // We update the ref IMMEDIATELY (synchronously) before calling setState
+    const setMentions = useCallback(
+      (updater: MentionData[] | ((prev: MentionData[]) => MentionData[])) => {
+        // Calculate next value synchronously
+        const currentValue = mentionsRef.current;
+        const nextValue =
+          typeof updater === "function" ? updater(currentValue) : updater;
+
+        // Update ref synchronously (BEFORE setState batch processes)
+        mentionsRef.current = nextValue;
+
+        // Also update state for re-renders
+        setMentionsState(nextValue);
+      },
+      [],
+    );
+
+    const [dropdownPosition, setDropdownPosition] = useState({
+      top: 0,
+      left: 0,
+    });
+    const [fixedPosition, setFixedPosition] = useState({ top: 0, left: 0 });
 
     const editorRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const isComposingRef = useRef(false);
     const lastKnownTextRef = useRef<string>("");
+    const mentionsRef = useRef<MentionData[]>([]); // Ref to avoid stale closure
 
     useImperativeHandle(forwardedRef, () => editorRef.current!);
 
@@ -92,36 +117,55 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
       enabled: !!conversationId,
     });
 
-    // Filter members based on search query
+    // Get current user for filtering
+    const { user: currentUser } = useAuthStore();
+
+    // Filter members based on search query and exclude current user
     const filteredMembers = React.useMemo(() => {
-      if (!mentionSearchQuery) return members;
+      // Filter out current user first
+      const otherMembers = members.filter(
+        (member) => member.userId !== currentUser?.id,
+      );
+
+      if (!mentionSearchQuery) return otherMembers;
 
       const query = mentionSearchQuery.toLowerCase();
-      return members.filter((member) => {
+      return otherMembers.filter((member) => {
         const fullName = (
           member.userInfo.fullName || member.userName
         ).toLowerCase();
         const identifier = (member.userInfo.identifier || "").toLowerCase();
         return fullName.includes(query) || identifier.includes(query);
       });
-    }, [members, mentionSearchQuery]);
+    }, [members, mentionSearchQuery, currentUser?.id]);
 
-    // Extract text content from editor
+    // Extract text content from editor (normalize \r\n to \n)
     const getTextContent = useCallback(() => {
       if (!editorRef.current) return "";
-      return editorRef.current.innerText || "";
+      // Normalize Windows line endings to Unix
+      return (editorRef.current.innerText || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n");
     }, []);
 
-    // Get cursor position in text
+    // Get cursor position in text (accounting for <br> as newlines, normalized to \n)
     const getCursorPosition = useCallback(() => {
       const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0 || !editorRef.current) return 0;
+      if (!selection || selection.rangeCount === 0 || !editorRef.current)
+        return 0;
 
       const range = selection.getRangeAt(0);
-      const preCaretRange = range.cloneRange();
+      const preCaretRange = document.createRange();
       preCaretRange.selectNodeContents(editorRef.current);
       preCaretRange.setEnd(range.endContainer, range.endOffset);
-      return preCaretRange.toString().length;
+
+      // Clone to temp container and use innerText to count newlines correctly
+      const tempContainer = document.createElement("div");
+      tempContainer.appendChild(preCaretRange.cloneContents());
+      // Normalize Windows line endings to match getTextContent()
+      return (tempContainer.innerText || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n").length;
     }, []);
 
     // Set cursor position in text
@@ -138,7 +182,7 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
       const walker = document.createTreeWalker(
         editorRef.current,
         NodeFilter.SHOW_TEXT,
-        null
+        null,
       );
 
       while (walker.nextNode()) {
@@ -164,40 +208,44 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
     }, []);
 
     // Insert mention span into the editor at cursor position
-    const insertMentionSpan = useCallback((mention: MentionData, mentionText: string) => {
-      if (!editorRef.current) return;
+    const insertMentionSpan = useCallback(
+      (mention: MentionData, mentionText: string) => {
+        if (!editorRef.current) return;
 
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return;
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
 
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
 
-      // Create mention span
-      const mentionSpan = document.createElement("span");
-      mentionSpan.contentEditable = "false";
-      mentionSpan.className = "inline-block px-1.5 py-0.5 mx-0.5 bg-brand-100 text-brand-700 rounded font-medium cursor-default select-none";
-      mentionSpan.setAttribute("data-mention-id", mention.id);
-      mentionSpan.setAttribute("data-user-id", mention.userId || "");
-      mentionSpan.textContent = mentionText;
+        // Create mention span
+        const mentionSpan = document.createElement("span");
+        mentionSpan.contentEditable = "false";
+        mentionSpan.className =
+          "inline-block px-1.5 py-0.5 mx-0.5 bg-brand-100 text-brand-700 rounded font-medium cursor-default select-none";
+        mentionSpan.setAttribute("data-mention-id", mention.id);
+        mentionSpan.setAttribute("data-user-id", mention.userId || "");
+        mentionSpan.textContent = mentionText;
 
-      // Insert mention span and add space after
-      range.insertNode(mentionSpan);
-      
-      // Move cursor after mention
-      range.setStartAfter(mentionSpan);
-      range.setEndAfter(mentionSpan);
-      selection.removeAllRanges();
-      selection.addRange(range);
+        // Insert mention span and add space after
+        range.insertNode(mentionSpan);
 
-      // Add space after mention
-      const space = document.createTextNode(" ");
-      range.insertNode(space);
-      range.setStartAfter(space);
-      range.setEndAfter(space);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }, []);
+        // Move cursor after mention
+        range.setStartAfter(mentionSpan);
+        range.setEndAfter(mentionSpan);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // Add space after mention
+        const space = document.createTextNode(" ");
+        range.insertNode(space);
+        range.setStartAfter(space);
+        range.setEndAfter(space);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      },
+      [],
+    );
 
     // Get caret coordinates for dropdown positioning
     const getCaretCoordinates = useCallback(() => {
@@ -223,18 +271,58 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
       const text = getTextContent();
       const cursorPos = getCursorPosition();
 
-      // Check for @ mention trigger
-      const textBeforeCursor = text.slice(0, cursorPos);
-      const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+      // 🔧 FIX: Check for @ at different positions to handle cursor lag
+      let textBeforeCursor = text.slice(0, cursorPos);
+      let lastAtIndex = textBeforeCursor.lastIndexOf("@");
+
+      // If @ not found before cursor, check if text ends with @ (cursor lag case)
+      if (
+        lastAtIndex === -1 &&
+        text.endsWith("@") &&
+        cursorPos >= text.length - 1
+      ) {
+        textBeforeCursor = text;
+        lastAtIndex = text.lastIndexOf("@");
+      }
 
       if (lastAtIndex !== -1) {
+        // 🔧 FIX: Improved whitespace detection including newlines
         const charBeforeAt = textBeforeCursor[lastAtIndex - 1];
-        if (lastAtIndex === 0 || /\s/.test(charBeforeAt)) {
+        const isValidAtPosition =
+          lastAtIndex === 0 ||
+          /[\s\n\r\t]/.test(charBeforeAt) ||
+          charBeforeAt === undefined;
+
+        if (isValidAtPosition) {
           const searchQuery = textBeforeCursor.slice(lastAtIndex + 1);
 
-          if (!/\s/.test(searchQuery)) {
+          // Check if query contains whitespace (means @ is not current)
+          if (!/[\s\n\r\t]/.test(searchQuery)) {
             const coords = getCaretCoordinates();
             setDropdownPosition(coords);
+
+            // 🔧 FIX: Calculate fixed position - follow cursor but constrain to viewport
+            if (editorRef.current) {
+              const editorRect = editorRef.current.getBoundingClientRect();
+              const dropdownWidth = 320; // w-80 = 320px
+              const margin = 10;
+
+              // Calculate left position following cursor
+              let leftPos = editorRect.left + coords.left;
+
+              // Constrain to not overflow right edge of viewport
+              const maxLeft = window.innerWidth - dropdownWidth - margin;
+              leftPos = Math.min(leftPos, maxLeft);
+
+              // Constrain to not go past left edge of editor
+              leftPos = Math.max(leftPos, editorRect.left);
+
+              setFixedPosition({
+                top: editorRect.top,
+                left: leftPos,
+              });
+            }
+
             setShowMentionDropdown(true);
             setMentionSearchQuery(searchQuery);
             setMentionStartIndex(lastAtIndex);
@@ -255,95 +343,140 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
         if (mentionStartIndex === -1 || !editorRef.current) return;
 
         const fullName = member.userInfo.fullName || member.userName;
-        const mentionText = `@${fullName}`;
+        const mentionText = `@${fullName}`; // Include @ in display text for styling
 
-        // Find and remove the @query text WITHOUT affecting existing mentions
         const selection = window.getSelection();
         if (!selection) return;
 
-        // Find the text node containing the @query
-        const cursorPos = getCursorPosition();
-        const queryLength = cursorPos - mentionStartIndex;
-        
-        // Walk through text nodes to find and remove @query
+        const mentionId = `mention-${Date.now()}-${Math.random()}`;
+
+        // 🔧 FIX: Find @query by searching text nodes directly (no charOffset needed)
+        const queryToFind = `@${mentionSearchQuery}`;
+        let found = false;
+
+        // Walk through text nodes to find @query
+        // Use filter to SKIP text nodes inside existing mention spans
         const walker = document.createTreeWalker(
           editorRef.current,
           NodeFilter.SHOW_TEXT,
-          null
+          {
+            acceptNode: (node) => {
+              // Skip text nodes that are inside mention spans
+              let parent = node.parentElement;
+              while (parent && parent !== editorRef.current) {
+                if (parent.hasAttribute("data-mention-id")) {
+                  return NodeFilter.FILTER_REJECT;
+                }
+                parent = parent.parentElement;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            },
+          },
         );
 
-        let charCount = 0;
-        let targetNode: Text | null = null;
-        let offsetInNode = 0;
-
         while (walker.nextNode()) {
-          const node = walker.currentNode as Text;
-          const nodeLength = node.textContent?.length || 0;
+          const textNode = walker.currentNode as Text;
+          const nodeText = textNode.textContent || "";
 
-          if (charCount <= mentionStartIndex && charCount + nodeLength > mentionStartIndex) {
-            targetNode = node;
-            offsetInNode = mentionStartIndex - charCount;
+          // Find @query in this text node using simple string search
+          const localIndex = nodeText.lastIndexOf(queryToFind);
+          if (localIndex !== -1) {
+            // Found it! Create range and replace
+            const range = document.createRange();
+            range.setStart(textNode, localIndex);
+            range.setEnd(textNode, localIndex + queryToFind.length);
+            range.deleteContents();
+
+            // Create mention span
+            const mentionSpan = document.createElement("span");
+            mentionSpan.contentEditable = "false";
+            mentionSpan.className =
+              "inline-block px-1.5 py-0.5 mx-0.5 bg-brand-100 text-brand-700 rounded font-medium cursor-default select-none";
+            mentionSpan.setAttribute("data-mention-id", mentionId);
+            mentionSpan.setAttribute("data-user-id", member.userId);
+            mentionSpan.textContent = mentionText;
+
+            // Insert mention span
+            range.insertNode(mentionSpan);
+
+            // Add space after mention
+            const spaceNode = document.createTextNode(" ");
+            if (mentionSpan.nextSibling) {
+              mentionSpan.parentNode?.insertBefore(
+                spaceNode,
+                mentionSpan.nextSibling,
+              );
+            } else {
+              mentionSpan.parentNode?.appendChild(spaceNode);
+            }
+
+            // Set cursor after space
+            const newRange = document.createRange();
+            newRange.setStartAfter(spaceNode);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+
+            found = true;
             break;
           }
-
-          charCount += nodeLength;
         }
 
-        // Remove the @query text from the text node
-        if (targetNode && targetNode.textContent) {
-          const beforeQuery = targetNode.textContent.slice(0, offsetInNode);
-          const afterQuery = targetNode.textContent.slice(offsetInNode + queryLength);
-          targetNode.textContent = beforeQuery + afterQuery;
-
-          // Set cursor position
-          const range = document.createRange();
-          range.setStart(targetNode, offsetInNode);
-          range.collapse(true);
-          selection.removeAllRanges();
-          selection.addRange(range);
+        if (!found) {
+          // Fallback: couldn't find @query, just return
+          console.warn("Could not find @query to replace");
+          setShowMentionDropdown(false);
+          return;
         }
 
-        // Insert mention span
+        // Create mention data
         const newMention: MentionData = {
           userId: member.userId,
           displayName: fullName,
-          id: `mention-${Date.now()}-${Math.random()}`,
+          id: mentionId,
         };
 
-        insertMentionSpan(newMention, mentionText);
+        // Add mention to state (this also updates mentionsRef via our wrapper)
+        setMentions((prev) => [...prev, newMention]);
 
-        // Add mention to state
-        setMentions((prev) => {
-          const updated = [...prev, newMention];
-          
-          // Get final text with mention
-          const finalText = getTextContent();
-          onChange(finalText);
-          
-          // Notify parent
-          if (onMentionsChange) {
-            const mentionsForApi = buildMentionsForApi(finalText, updated);
-            onMentionsChange(mentionsForApi);
-          }
-          
-          return updated;
-        });
-
-        // Hide dropdown
+        // Hide dropdown immediately
         setShowMentionDropdown(false);
         setMentionSearchQuery("");
         setMentionStartIndex(-1);
 
-        // Focus editor
-        editorRef.current?.focus();
+        // 🔧 FIX: Use setTimeout to call onChange after DOM manipulation is complete
+        setTimeout(() => {
+          if (!editorRef.current) return;
+
+          const finalText = getTextContent();
+          onChange(finalText);
+
+          // Notify parent - use mentionsRef.current which is already updated
+          if (onMentionsChange) {
+            const mentionsForApi = buildMentionsForApi(
+              finalText,
+              mentionsRef.current,
+            );
+            onMentionsChange(mentionsForApi);
+          }
+
+          // Ensure focus stays on editor
+          editorRef.current.focus();
+        }, 10);
       },
-      [mentionStartIndex, getTextContent, getCursorPosition, onChange, onMentionsChange, insertMentionSpan]
+      [
+        mentionStartIndex,
+        mentionSearchQuery,
+        getTextContent,
+        onChange,
+        onMentionsChange,
+      ],
     );
 
     // Build API mentions from text and mention data
     const buildMentionsForApi = (
       text: string,
-      currentMentions: MentionData[]
+      currentMentions: MentionData[],
     ): MentionInputDto[] => {
       const mentions = currentMentions
         .map((mention) => {
@@ -360,7 +493,7 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
           };
         })
         .filter((m) => m !== null) as MentionInputDto[];
-      
+
       return mentions;
     };
 
@@ -371,13 +504,21 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
         if (showMentionDropdown) {
           if (e.key === "ArrowDown") {
             e.preventDefault();
+            // Wrap to first item when at the end
             setSelectedMentionIndex((prev) =>
-              prev < filteredMembers.length - 1 ? prev + 1 : prev
+              prev < filteredMembers.length - 1 ? prev + 1 : 0,
             );
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            setSelectedMentionIndex((prev) => (prev > 0 ? prev - 1 : 0));
-          } else if (e.key === "Enter" && filteredMembers.length > 0) {
+            // Wrap to last item when at the start
+            setSelectedMentionIndex((prev) =>
+              prev > 0 ? prev - 1 : filteredMembers.length - 1,
+            );
+          } else if (
+            (e.key === "Enter" || e.key === "Tab") &&
+            filteredMembers.length > 0
+          ) {
+            // 🔧 ADD Tab support
             e.preventDefault();
             handleMentionSelect(filteredMembers[selectedMentionIndex]);
           } else if (e.key === "Escape") {
@@ -392,20 +533,14 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
           e.preventDefault();
           const text = getTextContent();
           if (text.trim()) {
-            const mentionsForApi = buildMentionsForApi(text, mentions);
+            // Use mentionsRef.current to avoid stale closure issue
+            const mentionsForApi = buildMentionsForApi(
+              text,
+              mentionsRef.current,
+            );
             onSend(text, mentionsForApi);
-
-            // Clear state
-            onChange("");
-            setMentions([]);
-            if (onMentionsChange) {
-              onMentionsChange([]);
-            }
-
-            // Clear editor
-            if (editorRef.current) {
-              editorRef.current.innerHTML = "";
-            }
+            // 🔧 FIX: Don't clear here - let parent clear after successful send via value prop
+            // Parent should set value="" after onSend succeeds, which will trigger the sync useEffect
           }
         }
 
@@ -417,7 +552,7 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
           if (!selection || selection.rangeCount === 0) return;
 
           const range = selection.getRangeAt(0);
-          
+
           // Check if we're right after a mention span
           if (range.collapsed) {
             let node = range.startContainer;
@@ -432,21 +567,24 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
                   if (elem.hasAttribute("data-mention-id")) {
                     e.preventDefault();
                     const mentionId = elem.getAttribute("data-mention-id");
-                    
+
                     // Remove from DOM
                     elem.remove();
-                    
+
                     // Remove from state
                     setMentions((prev) => {
                       const updated = prev.filter((m) => m.id !== mentionId);
                       const newText = getTextContent();
                       onChange(newText);
-                      
+
                       if (onMentionsChange) {
-                        const mentionsForApi = buildMentionsForApi(newText, updated);
+                        const mentionsForApi = buildMentionsForApi(
+                          newText,
+                          updated,
+                        );
                         onMentionsChange(mentionsForApi);
                       }
-                      
+
                       return updated;
                     });
                     return;
@@ -459,27 +597,30 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
               const parent = node as HTMLElement;
               const childNodes = Array.from(parent.childNodes);
               const prevNode = offset > 0 ? childNodes[offset - 1] : null;
-              
+
               if (prevNode && prevNode.nodeType === Node.ELEMENT_NODE) {
                 const elem = prevNode as HTMLElement;
                 if (elem.hasAttribute("data-mention-id")) {
                   e.preventDefault();
                   const mentionId = elem.getAttribute("data-mention-id");
-                  
+
                   // Remove from DOM
                   elem.remove();
-                  
+
                   // Remove from state
                   setMentions((prev) => {
                     const updated = prev.filter((m) => m.id !== mentionId);
                     const newText = getTextContent();
                     onChange(newText);
-                    
+
                     if (onMentionsChange) {
-                      const mentionsForApi = buildMentionsForApi(newText, updated);
+                      const mentionsForApi = buildMentionsForApi(
+                        newText,
+                        updated,
+                      );
                       onMentionsChange(mentionsForApi);
                     }
-                    
+
                     return updated;
                   });
                   return;
@@ -499,15 +640,23 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
         onSend,
         onChange,
         onMentionsChange,
-      ]
+      ],
     );
 
-    // Handle paste - strip formatting
-    const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      const text = e.clipboardData.getData("text/plain");
-      document.execCommand("insertText", false, text);
-    }, []);
+    // Handle paste - strip formatting and trigger @ detection
+    const handlePaste = useCallback(
+      (e: React.ClipboardEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData("text/plain");
+        document.execCommand("insertText", false, text);
+
+        // 🔧 FIX: Trigger @ detection after paste with delay
+        setTimeout(() => {
+          handleInput();
+        }, 10);
+      },
+      [handleInput],
+    );
 
     // Click outside to close dropdown
     useEffect(() => {
@@ -523,7 +672,8 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
       };
 
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     // Auto-focus
@@ -533,27 +683,32 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
       }
     }, [autoFocus]);
 
-    // Sync external value changes (e.g., when cleared from parent)
+    // Sync external value changes (e.g., when cleared from parent after successful send)
     useEffect(() => {
       if (editorRef.current && value === "") {
         const currentText = editorRef.current.innerText || "";
         if (currentText !== "") {
           editorRef.current.innerHTML = "";
+          // 🔧 FIX: Also clear mentions state when parent clears value
+          setMentions([]);
+          if (onMentionsChange) {
+            onMentionsChange([]);
+          }
         }
       }
-    }, [value]);
+    }, [value, onMentionsChange]);
 
     return (
       <div className={cn("relative", className)}>
-        {/* Mention Dropdown - Positioned near cursor */}
+        {/* Mention Dropdown - Fixed positioning to avoid clipping */}
         {showMentionDropdown && filteredMembers.length > 0 && (
-          <div 
-            ref={dropdownRef} 
-            className="absolute z-50 w-80"
+          <div
+            ref={dropdownRef}
+            className="fixed z-[9999] w-80"
+            data-testid="mention-dropdown-container"
             style={{
-              bottom: `calc(100% - ${dropdownPosition.top}px)`,
-              left: `${dropdownPosition.left}px`,
-              marginBottom: '8px'
+              bottom: `calc(100vh - ${fixedPosition.top}px + 8px)`,
+              left: `${fixedPosition.left}px`,
             }}
           >
             <MentionDropdown
@@ -584,14 +739,15 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
             "text-sm text-gray-900",
             "whitespace-pre-wrap break-words",
             "empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 empty:before:pointer-events-none",
-            disabled && "opacity-50 cursor-not-allowed bg-gray-50"
+            disabled && "opacity-50 cursor-not-allowed bg-gray-50",
           )}
           data-placeholder={placeholder}
+          data-testid="mention-input"
           suppressContentEditableWarning
         />
       </div>
     );
-  }
+  },
 );
 
 MentionInputInline.displayName = "MentionInputInline";

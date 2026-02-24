@@ -368,7 +368,7 @@ export function AssignTaskSheet({
       >
         <SheetHeader className="pb-3 border-b border-gray-100">
           <SheetTitle className="text-base font-semibold text-gray-900">
-            Giao Công Việc
+            Giao công việc
           </SheetTitle>
           <p className="text-[12px] text-gray-500 mt-0.5">
             Tạo công việc mới cho thành viên trong nhóm

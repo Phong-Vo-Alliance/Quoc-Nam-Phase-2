@@ -65,6 +65,9 @@ export interface ConversationDetailPanelProps {
   groupId?: string;
   workTypeName?: string;
 
+  // Loading state - when true, info card should be hidden
+  isLoading?: boolean;
+
   // Members (for "Thành viên" accordion)
   members?: MinimalMember[];
   onAddMember?: () => void;
@@ -112,6 +115,7 @@ export const ConversationDetailPanel: React.FC<
   viewMode = "staff",
   groupId,
   workTypeName = "—",
+  isLoading = false,
   members = [],
   onAddMember,
   tasks = [],
@@ -226,7 +230,7 @@ export const ConversationDetailPanel: React.FC<
       conversationId: groupId,
       isFinished: false, // Only show unfinished confirmed info
     },
-    { enabled: !!groupId && hasLeaderPermissions() }
+    { enabled: !!groupId && hasLeaderPermissions() },
   );
 
   const confirmedInfos = confirmedInfoData?.data || [];
@@ -387,7 +391,7 @@ export const ConversationDetailPanel: React.FC<
         createdAt: info.createdAt,
         status: "waiting", // Always waiting since we filter isFinished=false
       })),
-    [confirmedInfos]
+    [confirmedInfos],
   );
 
   // Handler for confirmed info assign task
@@ -404,7 +408,7 @@ export const ConversationDetailPanel: React.FC<
         title: confirmedInfo.content || "Không có nội dung", // Full content
       });
     },
-    [confirmedInfos, onAssignInfo]
+    [confirmedInfos, onAssignInfo],
   );
 
   // Handler for confirmed info transfer to another group
@@ -418,7 +422,7 @@ export const ConversationDetailPanel: React.FC<
         confirmedInfo,
       });
     },
-    [confirmedInfos]
+    [confirmedInfos],
   );
 
   // Handler for confirmed info transfer confirmation
@@ -476,7 +480,7 @@ export const ConversationDetailPanel: React.FC<
         toast.error("Không thể chuyển thông tin");
       }
     },
-    []
+    [],
   );
 
   /* =============== Callbacks =============== */
@@ -547,11 +551,17 @@ export const ConversationDetailPanel: React.FC<
     <div className="flex h-full flex-col bg-white">
       {/* Header Tabs */}
       <div className="shrink-0 border-b border-gray-200 px-4 pt-4">
-        <SegmentedTabs
-          tabs={detailTabs}
-          active={tab}
-          onChange={(key: string) => setTab(key as typeof tab)}
-        />
+        <div className={isLoading ? "opacity-50 pointer-events-none" : ""}>
+          <SegmentedTabs
+            tabs={detailTabs}
+            active={tab}
+            onChange={(key: string) => {
+              if (!isLoading) {
+                setTab(key as typeof tab);
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -570,6 +580,7 @@ export const ConversationDetailPanel: React.FC<
               messagesQuery={messagesQuery}
               members={members}
               setShowAddMemberDialog={setShowAddMemberDialog}
+              isLoading={isLoading}
             />
           </>
         )}

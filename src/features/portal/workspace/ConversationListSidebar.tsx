@@ -185,8 +185,11 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   ); // Track previous conversation
   const contactsListRef = React.useRef<HTMLUListElement>(null); // Ref for scrolling contacts list
 
-  // 🆕 Get setActiveTabType from store
+  // 🆕 Get setActiveTabType and clearSelectedConversation from store
   const setActiveTabType = useConversationStore((s) => s.setActiveTabType);
+  const clearSelectedConversation = useConversationStore(
+    (s) => s.clearSelectedConversation,
+  );
 
   const queryClient = useQueryClient();
   const categoriesQuery = useCategories();
@@ -359,6 +362,13 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     useApiData &&
     ((tab === "group" && categoriesQuery.isLoading) ||
       (tab === "dm" && directsQuery.isLoading));
+
+  // Track loading state from any tab to disable tab switching
+  const isAnyTabLoading =
+    useApiData &&
+    (categoriesQuery.isLoading ||
+      directsQuery.isLoading ||
+      departmentMembersQuery.isLoading);
 
   // Determine if error
   const isError =
@@ -704,7 +714,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       // If no saved conversation or saved conversation deleted, auto-select first group
       // 🐛 FIX: Also check hasAutoSelected to prevent race condition when restoring DM
       // 🐛 FIX (category-active-state-empty-20260204): Use strict undefined check to allow empty string
+      // 🐛 FIX: Only auto-select if on "group" tab - don't auto-select group when on "dm" tab
       if (
+        tab === "group" &&
         apiGroups.length > 0 &&
         selectedConversationId === undefined &&
         !hasAutoSelected
@@ -734,6 +746,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     handleGroupSelect,
     categoriesQuery.isLoading,
     directsQuery.isLoading,
+    tab, // 🐛 FIX: Add tab as dependency
   ]);
 
   // Separate effect: Auto-switch tab based on selected conversation type
@@ -791,10 +804,13 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
       // 🔧 Clear internal category selection state
       setInternalSelectedCategoryId(null);
 
+      // 🔧 Clear conversation store selection to hide ConversationDetailPanel info
+      clearSelectedConversation();
+
       onClearSelectedChat?.();
       prevTabRef.current = tab;
     }
-  }, [tab, onClearSelectedChat, setActiveTabType]);
+  }, [tab, onClearSelectedChat, setActiveTabType, clearSelectedConversation]);
 
   return (
     <aside
@@ -808,9 +824,14 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
           <div className="relative">
             <input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => !isAnyTabLoading && setQ(e.target.value)}
               placeholder="Tìm kiếm..."
-              className="w-full rounded-full bg-gray-100 pl-9 pr-9 py-2 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              className={`w-full rounded-full bg-gray-100 pl-9 pr-9 py-2 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-300 ${
+                isAnyTabLoading
+                  ? "opacity-50 cursor-not-allowed pointer-events-none"
+                  : ""
+              }`}
+              disabled={isAnyTabLoading}
             />
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500"
@@ -828,8 +849,13 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
             </svg>
             {q && (
               <button
-                onClick={() => setQ("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-transparent p-0 border-none hover:border-none"
+                onClick={() => !isAnyTabLoading && setQ("")}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-transparent p-0 border-none hover:border-none ${
+                  isAnyTabLoading
+                    ? "opacity-50 cursor-not-allowed pointer-events-none"
+                    : ""
+                }`}
+                disabled={isAnyTabLoading}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -908,14 +934,21 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
           {/* Segmented control Nhóm / Cá Nhân (pill gradient) */}
           <div className="relative w-full">
-            <div className="flex rounded-full bg-gradient-to-r from-brand-200 via-emerald-200 to-teal-200 p-1 shadow-sm">
+            <div
+              className={`flex rounded-full bg-gradient-to-r from-brand-200 via-emerald-200 to-teal-200 p-1 shadow-sm ${
+                isAnyTabLoading ? "opacity-50 pointer-events-none" : ""
+              }`}
+            >
               <ToggleGroup
                 type="single"
                 value={tab}
                 onValueChange={(v) => {
-                  v && setTab(v as "group" | "dm");
+                  if (!isAnyTabLoading && v) {
+                    setTab(v as "group" | "dm");
+                  }
                 }}
                 className="flex w-full gap-1"
+                disabled={isAnyTabLoading}
               >
                 <ToggleGroupItem
                   value="group"
@@ -923,7 +956,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                   data-[state=on]:bg-white data-[state=on]:text-gray-900 data-[state=on]:shadow
                   data-[state=on]:ring-1 data-[state=on]:ring-emerald-300
                   data-[state=off]:text-gray-700
+                  ${isAnyTabLoading ? "cursor-not-allowed" : ""}
                 `}
+                  disabled={isAnyTabLoading}
                 >
                   Nhóm
                 </ToggleGroupItem>
@@ -933,7 +968,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                   data-[state=on]:bg-white data-[state=on]:text-gray-900 data-[state=on]:shadow
                   data-[state=on]:ring-1 data-[state=on]:ring-emerald-300
                   data-[state=off]:text-gray-700
+                  ${isAnyTabLoading ? "cursor-not-allowed" : ""}
                 `}
+                  disabled={isAnyTabLoading}
                 >
                   Cá Nhân
                 </ToggleGroupItem>
@@ -945,14 +982,20 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         <div className="border-b p-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="font-medium">Tin nhắn</div>
-            <div className="text-xs">
+            <div
+              className={`text-xs ${isAnyTabLoading ? "opacity-50 pointer-events-none" : ""}`}
+            >
               <SegmentedTabs
                 tabs={[
                   { key: "group", label: "Nhóm" },
                   { key: "dm", label: "Cá nhân" },
                 ]}
                 active={tab}
-                onChange={(v) => setTab(v as any)}
+                onChange={(v) => {
+                  if (!isAnyTabLoading) {
+                    setTab(v as any);
+                  }
+                }}
                 textClass="text-xs"
               />
             </div>
@@ -961,14 +1004,24 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
             <div className="relative">
               <input
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => !isAnyTabLoading && setQ(e.target.value)}
                 placeholder="Tìm nhóm hoặc đồng nghiệp…"
-                className={`w-full ${inputCls} pr-9`}
+                className={`w-full ${inputCls} pr-9 ${
+                  isAnyTabLoading
+                    ? "opacity-50 cursor-not-allowed pointer-events-none"
+                    : ""
+                }`}
+                disabled={isAnyTabLoading}
               />
               {q && (
                 <button
-                  onClick={() => setQ("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-transparent p-0 border-none hover:border-none"
+                  onClick={() => !isAnyTabLoading && setQ("")}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-transparent p-0 border-none hover:border-none ${
+                    isAnyTabLoading
+                      ? "opacity-50 cursor-not-allowed pointer-events-none"
+                      : ""
+                  }`}
+                  disabled={isAnyTabLoading}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>

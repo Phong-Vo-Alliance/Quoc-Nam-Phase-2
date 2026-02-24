@@ -26,6 +26,10 @@ export function useAddGroupMember() {
       queryClient.invalidateQueries({
         queryKey: categoriesKeys.all,
       });
+      // Also invalidate conversation details to sync member count
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.detail(variables.groupId),
+      });
     },
   });
 }

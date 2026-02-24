@@ -13,6 +13,7 @@ import { getSelectedCategory } from "@/utils/storage";
 import useAuthStore from "@/stores/authStore";
 import { sendMessage } from "@/api/messages.api";
 import type { SendChatMessageRequest } from "@/types/messages";
+import { toast } from "sonner";
 
 interface AddMemberDialogProps {
   open: boolean;
@@ -217,8 +218,11 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
       // All succeeded
       handleClose();
     } else {
-      // Some failed - keep dialog open to show errors
-      setAddingProgress((prev) => (prev ? { ...prev, failed } : null));
+      // Some failed - show error toast and allow closing
+      toast.error("Thêm thất bại, vui lòng thử lại sau.");
+      setAddingProgress((prev) =>
+        prev ? { ...prev, completed: prev.total, failed } : null,
+      );
     }
   };
 
@@ -384,16 +388,19 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
         <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between">
           <div className="text-xs text-gray-500">
             {addingProgress ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Đang thêm {addingProgress.completed}/{addingProgress.total}{" "}
-                thành viên...
-                {addingProgress.failed.length > 0 && (
-                  <span className="text-red-600">
-                    ({addingProgress.failed.length} thất bại)
-                  </span>
-                )}
-              </span>
+              addingProgress.completed < addingProgress.total ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Đang thêm {addingProgress.completed}/{addingProgress.total}{" "}
+                  thành viên...
+                </span>
+              ) : addingProgress.failed.length > 0 ? (
+                <span className="flex items-center gap-2 text-red-600">
+                  <AlertCircle className="h-3 w-3" />
+                  Thêm thất bại {addingProgress.failed.length} thành viên, vui
+                  lòng thử lại sau.
+                </span>
+              ) : null
             ) : selectedUserIds.length > 0 ? (
               <span>Đã chọn {selectedUserIds.length} người</span>
             ) : null}
@@ -401,7 +408,12 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
           <div className="flex gap-2">
             <button
               onClick={handleClose}
-              disabled={!!addingProgress}
+              disabled={
+                !!(
+                  addingProgress &&
+                  addingProgress.completed < addingProgress.total
+                )
+              }
               className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {addingProgress?.failed.length ? "Đóng" : "Hủy"}

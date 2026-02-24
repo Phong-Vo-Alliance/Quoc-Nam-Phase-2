@@ -23,7 +23,11 @@ import type {
 } from "@/features/portal/types";
 import type { StarredMessageDto } from "@/types/pinned_and_starred";
 import type { MessageLike } from "@/features/portal/components/FileManagerPhase1A";
-import { formatTime, truncateMessageTitle } from "../utils/formatters";
+import {
+  formatTime,
+  truncateMessageTitle,
+  abbreviateVietnameseName,
+} from "../utils/formatters";
 import type { MinimalMember, ViewMode } from "../types";
 
 /* =============== Helpers =============== */
@@ -337,14 +341,14 @@ export const TaskCard: React.FC<{
                       <span>Giao cho:</span>
                       <span className="font-medium text-gray-700">
                         <select
-                          className="rounded-md border px-2 py-0.5 text-[11px] bg-white"
+                          className="rounded-md border px-2 py-0.5 text-[11px] bg-white max-w-[180px] truncate"
                           value={t.assignTo}
                           onChange={(e) => onReassign?.(t.id, e.target.value)}
                           data-testid="task-assignee-dropdown"
                         >
                           {(assigneeOptions || members).map((m) => (
                             <option key={m.id} value={m.id}>
-                              {m.name}
+                              {abbreviateVietnameseName(m.name, 20)}
                             </option>
                           ))}
                         </select>
@@ -514,8 +518,21 @@ export const TaskCard: React.FC<{
                 )}
               </div>
             ) : (
-              <div className="mt-2 text-[11px] text-gray-400">
-                Không có checklist.
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[11px] text-gray-400">
+                  Không có checklist.
+                </span>
+                {canEditStructure && (
+                  <span
+                    className="text-[11px] text-emerald-700 cursor-pointer hover:underline select-none"
+                    onClick={() => {
+                      setEditingItem({ id: "new", label: "", done: false });
+                      setNewLabel("");
+                    }}
+                  >
+                    + Thêm
+                  </span>
+                )}
               </div>
             )}
           </div>

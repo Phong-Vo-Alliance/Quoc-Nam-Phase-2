@@ -219,7 +219,13 @@ export interface CategoryDepartmentLinkedEvent {
 // Task Events
 export interface TaskUpdatePayload {
   taskId: string;
-  changeType: 'created' | 'updated' | 'status_changed' | 'checklist_item_checked' | 'reassigned' | 'deleted';
+  changeType:
+    | "created"
+    | "updated"
+    | "status_changed"
+    | "checklist_item_checked"
+    | "reassigned"
+    | "deleted";
   task: {
     id: string;
     title: string;
@@ -552,9 +558,9 @@ class ChatHubConnection {
       return;
     }
     const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] ${timestamp} | Sending typing indicator | GroupId: ${groupId} | IsTyping: ${isTyping}`,
-    );
+    // console.log(
+    //   `[SignalR] ${timestamp} | Sending typing indicator | GroupId: ${groupId} | IsTyping: ${isTyping}`,
+    // );
 
     await this.connection.invoke(SIGNALR_EVENTS.SEND_TYPING, groupId, isTyping);
   }
@@ -1443,7 +1449,9 @@ class TaskHubConnection {
 
   async start(taskAccessToken?: string): Promise<void> {
     if (!TASK_HUB_URL) {
-      console.warn("[TaskHub] Task API URL not configured, skipping connection");
+      console.warn(
+        "[TaskHub] Task API URL not configured, skipping connection",
+      );
       return;
     }
 
@@ -1481,20 +1489,22 @@ class TaskHubConnection {
         const ts = new Date().toISOString();
         console.warn(
           `[TaskHub] ${ts} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
-          error
+          error,
         );
         this.reconnectAttempts++;
       });
 
       this.connection.onreconnected((connectionId) => {
         const ts = new Date().toISOString();
-        console.log(`[TaskHub] ${ts} | ✅ Reconnected | ConnectionId: ${connectionId}`);
+        console.log(
+          `[TaskHub] ${ts} | ✅ Reconnected | ConnectionId: ${connectionId}`,
+        );
         this.reconnectAttempts = 0;
-        
+
         // Refetch tasks on reconnection
         if (this.queryClient) {
           console.log(`[TaskHub] Auto-refetching tasks after reconnect`);
-          this.queryClient.invalidateQueries({ 
+          this.queryClient.invalidateQueries({
             queryKey: ["tasks"],
             refetchType: "active",
           });
@@ -1503,13 +1513,13 @@ class TaskHubConnection {
 
       this.connection.onclose((error) => {
         const ts = new Date().toISOString();
-        
+
         // Detailed close reason logging
         console.group(`[TaskHub] ${ts} | 🔴 CONNECTION CLOSED`);
         console.log("Reconnect Attempts:", this.reconnectAttempts);
         console.log("Max Reconnect Attempts:", this.maxReconnectAttempts);
         console.log("Connection State:", this.connection?.state);
-        
+
         if (error) {
           console.error("Close Error:", {
             message: error.message || error,
@@ -1517,14 +1527,27 @@ class TaskHubConnection {
             stack: error.stack,
             fullError: error,
           });
-          
+
           // Check for common close reasons
-          if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
-            console.error("❌ CLOSE REASON: Authentication failed - taskAccessToken may be invalid");
-          } else if (error.message?.includes("403") || error.message?.includes("Forbidden")) {
-            console.error("❌ CLOSE REASON: Authorization failed - user lacks permission");
+          if (
+            error.message?.includes("401") ||
+            error.message?.includes("Unauthorized")
+          ) {
+            console.error(
+              "❌ CLOSE REASON: Authentication failed - taskAccessToken may be invalid",
+            );
+          } else if (
+            error.message?.includes("403") ||
+            error.message?.includes("Forbidden")
+          ) {
+            console.error(
+              "❌ CLOSE REASON: Authorization failed - user lacks permission",
+            );
           } else if (error.message?.includes("404")) {
-            console.error("❌ CLOSE REASON: Hub not found - check TASK_HUB_URL:", TASK_HUB_URL);
+            console.error(
+              "❌ CLOSE REASON: Hub not found - check TASK_HUB_URL:",
+              TASK_HUB_URL,
+            );
           } else if (error.message?.includes("timeout")) {
             console.error("❌ CLOSE REASON: Connection timeout");
           } else if (error.message?.includes("abort")) {
@@ -1535,13 +1558,13 @@ class TaskHubConnection {
         } else {
           console.log("ℹ️ CLOSE REASON: Clean disconnect (no error)");
         }
-        
+
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
           console.error(
-            `❌ Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+            `❌ Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
           );
         }
-        
+
         console.groupEnd();
       });
 
@@ -1554,18 +1577,23 @@ class TaskHubConnection {
         try {
           // Store task token in localStorage for persistence
           localStorage.setItem("taskAccessToken", taskAccessToken);
-          console.log(`[TaskHub] ${ts} | Task access token saved after negotiation`);
+          console.log(
+            `[TaskHub] ${ts} | Task access token saved after negotiation`,
+          );
         } catch (error) {
-          console.warn(`[TaskHub] ${ts} | Failed to save task access token:`, error);
+          console.warn(
+            `[TaskHub] ${ts} | Failed to save task access token:`,
+            error,
+          );
         }
       }
     } catch (error) {
       const ts = new Date().toISOString();
-      
+
       // ❌ FAILURE LOG
       if (error instanceof Error && error.name === "AbortError") {
         console.log(
-          `[TaskHub] ${ts} | Connection aborted (likely due to unmount or auth change)`
+          `[TaskHub] ${ts} | Connection aborted (likely due to unmount or auth change)`,
         );
       } else {
       }
@@ -1578,7 +1606,7 @@ class TaskHubConnection {
   async stop(): Promise<void> {
     const timestamp = new Date().toISOString();
     const callStack = new Error().stack;
-    
+
     console.group(`[TaskHub] ${timestamp} | Stopping connection...`);
     console.log("Current State:", this.connection?.state);
     console.log("Called from:", callStack);
@@ -1593,7 +1621,7 @@ class TaskHubConnection {
         // Ignore errors during stop
         console.log(
           `[TaskHub] ${timestamp} | Stop completed with warning`,
-          error
+          error,
         );
       }
       this.connection = null;

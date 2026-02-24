@@ -895,6 +895,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 }}
                 messages={chatMessages}
                 messagesQuery={messagesQuery}
+                isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
               />
             </div>
           )}
@@ -1208,6 +1209,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             }}
             messages={chatMessages}
             messagesQuery={messagesQuery}
+            isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
           />
         </div>
       )}

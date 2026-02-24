@@ -12,6 +12,7 @@ import {
   ClipboardPlus,
   Reply,
   CheckCircle2,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
@@ -167,6 +168,16 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           animation: highlight-pulse 2.5s ease-in-out;
         }
 
+        /* Override text colors when highlighted for visibility */
+        .message-highlighted,
+        .message-highlighted p,
+        .message-highlighted span,
+        .message-highlighted .message-bubble,
+        .message-highlighted .message-bubble p,
+        .message-highlighted .message-bubble span {
+          color: rgb(17 24 39) !important; /* gray-900 */
+        }
+
         @keyframes highlight-pulse {
           0%, 100% {
             background-color: inherit;
@@ -184,20 +195,11 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           isLastInGroup && "!mb-3", // Spacing between groups (0.75rem = 12px) - important to override parent space-y
         )}
       >
-        {/* Avatar (only for received messages and first in group) */}
-        {!isOwn && isFirstInGroup ? (
-          <div className="h-8 w-8 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-semibold text-brand-700">
-              {message.senderName.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        ) : !isOwn ? (
-          <div className="w-8 flex-shrink-0" />
-        ) : null}
+        {/* Avatar removed per UI requirement */}
 
         <div
           className={cn(
-            "max-w-[70%] w-fit relative group message-bubble-container",
+            "max-w-[70%] w-fit relative group message-bubble-container flex flex-col",
             isOwn ? "items-end" : "items-start",
           )}
           data-message-id={message.id}
@@ -207,13 +209,13 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             {!isOwn && isFirstInGroup && (
               <div className="flex items-center gap-2 mb-1">
                 <span
-                  className="text-xs text-gray-500"
+                  className="text-[13px] font-medium text-gray-800"
                   data-testid="message-sender"
                 >
                   {message.senderName}
                 </span>
-                <span className="text-xs text-gray-400">•</span>
-                <span className="text-xs text-gray-500">
+                <span className="text-[11px] text-gray-400">•</span>
+                <span className="text-[11px] text-gray-500">
                   {formatTime(message.sentAt)}
                 </span>
                 {message.isPinned && (
@@ -244,7 +246,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             {/* Timestamp for own messages (only first in group) */}
             {isOwn && isFirstInGroup && (
               <div className="flex justify-end mb-1">
-                <span className="text-xs text-gray-500">
+                <span className="text-[11px] text-gray-500">
                   {formatTime(message.sentAt)}
                 </span>
               </div>
@@ -270,7 +272,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
               </div>
             )}
           </div>
-          <div style={{ position: "relative" }}>
+          <div className="relative w-fit">
             {/* Hover action buttons */}
             {
               <div
@@ -358,12 +360,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     !message.linkedTaskId &&
                     !hasConfirmedInfo && (
                       <button
-                        className="p-1.5 rounded transition text-gray-500 hover:text-blue-600"
+                        className="p-1.5 rounded transition text-gray-500 hover:text-brand-600"
                         onClick={() => onConfirmInfo(message.id)}
-                        title="Xác nhận thông tin"
+                        title="Tiếp nhận thông tin"
                         data-testid="confirm-info-button"
                       >
-                        <CheckCircle2 size={14} />
+                        <Inbox size={14} />
                       </button>
                     )}
                 </div>
@@ -448,7 +450,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             message.mentions,
                             isOwn
                               ? "bg-white/20 text-white font-semibold px-1 rounded"
-                              : "bg-brand-100 text-brand-800 font-semibold px-1 rounded"
+                              : "bg-brand-100 text-brand-800 font-semibold px-1 rounded",
                           )}
                         </p>
                       </div>
@@ -719,7 +721,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         <div
                           key={file.fileId}
                           className={cn(
-                            "flex items-center gap-3 cursor-pointer hover:bg-black/5 transition-colors min-w-0 max-w-full",
+                            "flex items-center gap-3 cursor-pointer hover:bg-black/5 transition-colors min-w-0 w-full max-w-[280px]",
                             hasText || hasImages ? "px-4 pb-4" : "px-4 py-4",
                           )}
                           data-testid={`message-file-attachment-${file.fileId}`}
@@ -740,7 +742,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             />
                           </div>
                           <div className="flex-1 min-w-0 overflow-hidden">
-                            <p className="text-sm font-medium truncate">
+                            <p
+                              className={cn(
+                                "text-sm font-medium truncate",
+                                isOwn ? "text-white" : "text-gray-900",
+                              )}
+                            >
                               {file.fileName || "File"}
                             </p>
                             <div
@@ -775,6 +782,65 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
               })()}
             </div>
           </div>
+
+          {/* Indicator for linked task or confirmed info - below bubble with connector */}
+          {(message.linkedTaskId || hasConfirmedInfo) && (
+            <div className="flex items-center gap-1.5 mt-0.5 mb-1.5">
+              {/* Text first for own messages, SVG first for received */}
+              {isOwn && (
+                <div className="flex items-center gap-2">
+                  {message.linkedTaskId && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
+                      <ClipboardPlus size={12} className="text-emerald-600" />
+                      Đã giao việc
+                    </span>
+                  )}
+                  {hasConfirmedInfo && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
+                      <Inbox size={12} className="text-brand-600" />
+                      Đã tiếp nhận thông tin
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Thread curve connector (Google Chat style) */}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 20 20"
+                fill="none"
+                className="text-gray-300 flex-shrink-0"
+                aria-hidden="true"
+                style={{ transform: isOwn ? "scaleX(-1)" : "none" }}
+              >
+                <path
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  d="M15 15C9.477 15 5 10.523 5 5"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {/* Text after SVG for received messages */}
+              {!isOwn && (
+                <div className="flex items-center gap-2">
+                  {message.linkedTaskId && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
+                      <ClipboardPlus size={12} className="text-emerald-600" />
+                      Đã giao việc
+                    </span>
+                  )}
+                  {hasConfirmedInfo && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
+                      <Inbox size={12} className="text-brand-600" />
+                      Đã tiếp nhận thông tin
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {/* Time or Status Indicator (only for last message in group and own messages)
           {isLastInGroup && isOwn && (
             <div className={cn("mt-1.5 mb-1", "flex justify-end")}>

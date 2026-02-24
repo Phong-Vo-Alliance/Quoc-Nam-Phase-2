@@ -31,3 +31,41 @@ export const isToday = (dateString: string): boolean => {
     date.getFullYear() === today.getFullYear()
   );
 };
+
+/**
+ * Abbreviate Vietnamese name to fit within maxWidth
+ * Strategy: Keep họ (first part) and tên (last part), abbreviate middle names progressively
+ * Only abbreviates names with 4 or more words
+ * Example: "Trần Thị Hồng Nhung" -> "Trần T Hồng Nhung" -> "Trần T H Nhung"
+ * @param name Full name
+ * @param maxChars Approximate max characters (default 20 for ~180px)
+ */
+export const abbreviateVietnameseName = (
+  name: string,
+  maxChars: number = 20,
+): string => {
+  if (!name || name.length <= maxChars) return name;
+
+  const parts = name.trim().split(/\s+/);
+  // Only abbreviate if name has 4 or more words
+  if (parts.length < 4) return name;
+
+  const ho = parts[0]; // Họ - first part
+  const ten = parts[parts.length - 1]; // Tên - last part
+  const middleParts = parts.slice(1, -1); // Tên đệm - middle parts
+
+  // Progressively abbreviate middle names from left to right
+  let abbreviated = [...middleParts];
+  for (let i = 0; i < abbreviated.length; i++) {
+    const result = [ho, ...abbreviated, ten].join(" ");
+    if (result.length <= maxChars) {
+      return result;
+    }
+    // Abbreviate this middle name part
+    if (abbreviated[i].length > 1) {
+      abbreviated[i] = abbreviated[i][0].toUpperCase();
+    }
+  }
+
+  return [ho, ...abbreviated, ten].join(" ");
+};

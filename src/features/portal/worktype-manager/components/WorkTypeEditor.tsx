@@ -566,25 +566,20 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
         workType={editingWorkType}
         existingNames={(conversationsWithTemplates || []).map((c) => c.name)}
         onSave={async (name) => {
-          try {
-            // Create new group conversation in this category
-            await createGroupMutation.mutateAsync({
-              name: name,
-              categoryId: categoryId,
-              description: null,
-              memberIds: null,
-            });
+          // Create new group conversation in this category
+          await createGroupMutation.mutateAsync({
+            name: name,
+            categoryId: categoryId,
+            description: null,
+            memberIds: null,
+          });
 
-            // Close dialog
-            setShowAddEdit(false);
-            setEditingWorkType(null);
+          // Close dialog on success
+          setShowAddEdit(false);
+          setEditingWorkType(null);
 
-            // Refetch conversations to show the new one
-            refetchConversations();
-          } catch (error) {
-            console.error("Failed to create conversation:", error);
-            // TODO: Show error toast to user
-          }
+          // Refetch conversations to show the new one
+          refetchConversations();
         }}
       />
     </>
