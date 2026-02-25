@@ -185,6 +185,9 @@ interface ChatMainContainerProps {
   // 🆕 NEW: Scroll to specific message (for navigation from starred/pinned)
   scrollToMessageId?: PinnedMessageDto | StarredMessageDto | null;
   onScrollComplete?: () => void; // Callback after scroll completes
+
+  // 🆕 NEW: Confirm info success callback (for auto-switching to order tab)
+  onConfirmInfoSuccess?: () => void;
 }
 
 /**
@@ -226,6 +229,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // 🆕 NEW: Scroll to message
   scrollToMessageId,
   onScrollComplete,
+
+  // 🆕 NEW: Confirm info success callback
+  onConfirmInfoSuccess,
 }) => {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient(); // 🆕 NEW: For cache manipulation in jump-to-message
@@ -328,6 +334,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // Phase 3.2: Unified file preview for all types (PDF, Word, Excel, PPT, TXT, Images)
   const [filePreviewId, setFilePreviewId] = useState<string | null>(null);
   const [filePreviewName, setFilePreviewName] = useState<string>("");
+  const [confirmingMessageId, setConfirmingMessageId] = useState<string | null>(
+    null,
+  ); // NEW: Track confirming message
   const [showGoToBottom, setShowGoToBottom] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -1592,11 +1601,17 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // 🆕 NEW: Handle confirm information from message
   const handleConfirmInfo = useCallback(
     (messageId: string) => {
+      // Prevent double-click
+      if (confirmingMessageId) return;
+
       // Find the message to get its content
       const message = groupedMessages.find(
         (g) => g.message.id === messageId,
       )?.message;
       if (!message || !user?.id) return;
+
+      // Set loading state
+      setConfirmingMessageId(messageId);
 
       // Build system message content using utility function
       const receiverName =
@@ -1618,12 +1633,22 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         },
         {
           onSuccess: () => {
+            // Clear loading state
+            setConfirmingMessageId(null);
+
             // 🆕 NEW: Send system message after successful confirmation
             sendMessageMutation.mutate({
               conversationId,
               content: systemMessageContent,
               messageType: "SYS",
             });
+
+            // 🆕 NEW: Call success callback (auto switch to order tab)
+            onConfirmInfoSuccess?.();
+          },
+          onError: () => {
+            // Clear loading state on error
+            setConfirmingMessageId(null);
           },
         },
       );
@@ -1632,8 +1657,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       conversationId,
       groupedMessages,
       user,
+      confirmingMessageId,
       createConfirmedInfoMutation,
       sendMessageMutation,
+      onConfirmInfoSuccess,
     ],
   );
 
@@ -1959,6 +1986,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                     onCreateTask={isDirect ? undefined : handleCreateTask}
                     onConfirmInfo={isDirect ? undefined : handleConfirmInfo}
                     hasConfirmedInfo={confirmedMessageIds.has(message.id)}
+                    isConfirming={confirmingMessageId === message.id}
                     onRetry={handleRetry}
                     onScrollToQuoted={handleScrollToQuoted}
                     isFirstInGroup={groupedMsg.isFirstInGroup}

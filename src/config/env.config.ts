@@ -101,20 +101,33 @@ export const FEATURE_FLAGS: FeatureFlags = isProduction
 // ==========================================
 
 interface SecurityFlags {
+  /** Master flag - Tắt toàn bộ protections khi = false */
+  enableAllProtections: boolean;
   enableDevToolsProtection: boolean;
   enableContextMenuProtection: boolean;
   enableContentProtection: boolean;
+  /** Chặn Ctrl+P (Print page) */
+  enablePrintProtection: boolean;
+  /** Chặn Ctrl+S (Save page) */
+  enableSaveProtection: boolean;
   whitelistEmails: string[];
 }
 
 const DEV_SECURITY_FLAGS: SecurityFlags = {
   // Development: Disable protections to allow debugging (opt-out)
+  // Master flag: VITE_DEV_ENABLE_ALL_PROTECTIONS=false to disable all
+  enableAllProtections:
+    import.meta.env.VITE_DEV_ENABLE_ALL_PROTECTIONS !== "false",
   enableDevToolsProtection:
     import.meta.env.VITE_DEV_ENABLE_DEVTOOLS_PROTECTION !== "false",
   enableContextMenuProtection:
     import.meta.env.VITE_DEV_ENABLE_CONTEXT_MENU_PROTECTION !== "false",
   enableContentProtection:
     import.meta.env.VITE_DEV_ENABLE_CONTENT_PROTECTION !== "false",
+  enablePrintProtection:
+    import.meta.env.VITE_DEV_ENABLE_PRINT_PROTECTION !== "false",
+  enableSaveProtection:
+    import.meta.env.VITE_DEV_ENABLE_SAVE_PROTECTION !== "false",
   whitelistEmails:
     import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",")
       .map((e: string) => e.trim())
@@ -123,12 +136,19 @@ const DEV_SECURITY_FLAGS: SecurityFlags = {
 
 const PROD_SECURITY_FLAGS: SecurityFlags = {
   // Production: Enable all protections by default (secure by default)
+  // Master flag: VITE_PROD_ENABLE_ALL_PROTECTIONS=false to disable all
+  enableAllProtections:
+    import.meta.env.VITE_PROD_ENABLE_ALL_PROTECTIONS !== "false",
   enableDevToolsProtection:
     import.meta.env.VITE_PROD_ENABLE_DEVTOOLS_PROTECTION !== "false",
   enableContextMenuProtection:
     import.meta.env.VITE_PROD_ENABLE_CONTEXT_MENU_PROTECTION !== "false",
   enableContentProtection:
     import.meta.env.VITE_PROD_ENABLE_CONTENT_PROTECTION !== "false",
+  enablePrintProtection:
+    import.meta.env.VITE_PROD_ENABLE_PRINT_PROTECTION !== "false",
+  enableSaveProtection:
+    import.meta.env.VITE_PROD_ENABLE_SAVE_PROTECTION !== "false",
   whitelistEmails:
     import.meta.env.VITE_SECURITY_WHITELIST_EMAILS?.split(",")
       .map((e: string) => e.trim())

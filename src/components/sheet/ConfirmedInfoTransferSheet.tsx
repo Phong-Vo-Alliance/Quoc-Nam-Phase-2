@@ -55,13 +55,13 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
 }) => {
   const currentUser = useAuthStore((state) => state.user);
   const [selectedCategoryId, setSelectedCategoryId] = React.useState("");
-  const [selectedConversationId, setSelectedConversationId] = React.useState("");
+  const [selectedConversationId, setSelectedConversationId] =
+    React.useState("");
 
   // Fetch categories
-  const { data: categoriesData, isLoading: categoriesLoading } = useCategories({
-    enabled: open,
-  });
-  
+  const { data: categoriesData, isLoading: categoriesLoading } =
+    useCategories();
+
   const categories = categoriesData || [];
 
   // Fetch conversations for selected category
@@ -79,7 +79,7 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   // Fetch leaders for departments in selected category
   const { data: leadersData, isLoading: leadersLoading } = useDepartmentLeaders(
     departmentIds,
-    { enabled: departmentIds.length > 0 && !!selectedCategoryId && open }
+    { enabled: departmentIds.length > 0 && !!selectedCategoryId && open },
   );
 
   // Get the first leader from any department (if multiple departments, take first available leader)
@@ -99,17 +99,15 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   }, [selectedCategoryId]);
 
   const handleSubmit = () => {
-    if (
-      !confirmedInfo ||
-      !selectedCategoryId ||
-      !selectedConversationId
-    ) {
+    if (!confirmedInfo || !selectedCategoryId || !selectedConversationId) {
       return;
     }
 
-    const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
+    const selectedCategory = categories.find(
+      (c) => c.id === selectedCategoryId,
+    );
     const selectedConversation = conversations.find(
-      (c) => c.id === selectedConversationId
+      (c) => c.id === selectedConversationId,
     );
 
     if (!selectedCategory || !selectedConversation) {
@@ -239,7 +237,7 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
               </div>
             ) : (
               <div className="mt-1 p-2 rounded-md bg-yellow-50 border border-yellow-200 text-sm text-gray-700">
-                {currentUser?.fullName || currentUser?.email || "Người dùng hiện tại"}
+                {currentUser?.fullName || "Người dùng hiện tại"}
                 <p className="text-xs text-yellow-600 mt-1">
                   Chưa có người phụ trách, sẽ giao cho bạn
                 </p>

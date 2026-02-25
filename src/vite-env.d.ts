@@ -25,20 +25,31 @@ interface ImportMetaEnv {
   readonly VITE_PROD_ENABLE_REACT_QUERY_DEVTOOLS: string;
 
   // Security - Development
+  /** Master flag - Tắt toàn bộ protections khi = "false" */
+  readonly VITE_DEV_ENABLE_ALL_PROTECTIONS: string;
   readonly VITE_DEV_ENABLE_DEVTOOLS_PROTECTION: string;
   readonly VITE_DEV_ENABLE_CONTEXT_MENU_PROTECTION: string;
   readonly VITE_DEV_ENABLE_CONTENT_PROTECTION: string;
+  /** Chặn Ctrl+P (Print page) */
+  readonly VITE_DEV_ENABLE_PRINT_PROTECTION: string;
+  /** Chặn Ctrl+S (Save page) */
+  readonly VITE_DEV_ENABLE_SAVE_PROTECTION: string;
 
   // Security - Production
+  /** Master flag - Tắt toàn bộ protections khi = "false" */
+  readonly VITE_PROD_ENABLE_ALL_PROTECTIONS: string;
   readonly VITE_PROD_ENABLE_DEVTOOLS_PROTECTION: string;
   readonly VITE_PROD_ENABLE_CONTEXT_MENU_PROTECTION: string;
   readonly VITE_PROD_ENABLE_CONTENT_PROTECTION: string;
+  /** Chặn Ctrl+P (Print page) */
+  readonly VITE_PROD_ENABLE_PRINT_PROTECTION: string;
+  /** Chặn Ctrl+S (Save page) */
+  readonly VITE_PROD_ENABLE_SAVE_PROTECTION: string;
 
   // Security - Whitelist (shared)
   readonly VITE_SECURITY_WHITELIST_EMAILS: string;
 
   // Security - Other configs
-  readonly VITE_DEVTOOLS_ACTION: "toast" | "modal" | "redirect";
   readonly VITE_CONTENT_PROTECTION_FILE_TYPES: string;
 }
 

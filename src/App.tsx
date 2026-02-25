@@ -12,20 +12,30 @@ export default function App() {
   const { isWhitelisted } = useSecurity();
   const { user, isAuthenticated, setUser } = useAuthStore();
 
-  // Check and update user departments on app initialization/refresh
+  // Check and update user info on app initialization/refresh
   useEffect(() => {
     if (isAuthenticated && user) {
-      // Check if departments are missing or need refreshing
-      if (!user.departments || user.departments.length === 0) {
+      // Check if fullName or departments are missing or need refreshing
+      const needsRefresh =
+        !user.fullName || !user.departments || user.departments.length === 0;
+      if (needsRefresh) {
         getCurrentUser()
-          .then((userWithDepartments) => {
-            if (userWithDepartments.departments && userWithDepartments.departments.length > 0) {
-              setUser(userWithDepartments);
-              console.log('User departments refreshed on app load:', userWithDepartments.departments);
+          .then((userWithFullInfo) => {
+            // Only update if we got new info
+            if (
+              userWithFullInfo.fullName ||
+              (userWithFullInfo.departments &&
+                userWithFullInfo.departments.length > 0)
+            ) {
+              setUser({
+                ...user,
+                fullName: userWithFullInfo.fullName || user.fullName,
+                departments: userWithFullInfo.departments || user.departments,
+              });
             }
           })
           .catch((error) => {
-            console.warn('Failed to refresh user departments on app load:', error);
+            console.warn("Failed to refresh user info on app load:", error);
           });
       }
     }

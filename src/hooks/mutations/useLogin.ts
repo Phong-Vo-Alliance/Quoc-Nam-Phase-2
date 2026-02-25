@@ -34,18 +34,24 @@ export function useLogin(options?: UseLoginOptions) {
       // Update auth store with user and token
       loginSuccess(data.user, data.accessToken);
 
-      // Fetch and update user with departments if missing
+      // Fetch and update user with fullName and departments (login API doesn't return these)
       try {
-        const userWithDepartments = await getCurrentUser();
+        const userWithFullInfo = await getCurrentUser();
+        const currentUser = useAuthStore.getState().user;
         if (
-          userWithDepartments.departments &&
-          userWithDepartments.departments.length > 0
+          currentUser &&
+          (userWithFullInfo.fullName || userWithFullInfo.departments?.length)
         ) {
-          // Update auth store with complete user data including departments
-          useAuthStore.getState().setUser(userWithDepartments);
+          // Update auth store with complete user data including fullName and departments
+          useAuthStore.getState().setUser({
+            ...currentUser,
+            fullName: userWithFullInfo.fullName || currentUser.fullName,
+            departments:
+              userWithFullInfo.departments || currentUser.departments,
+          });
         }
       } catch (error) {
-        console.warn("Failed to fetch user departments after login:", error);
+        console.warn("Failed to fetch user info after login:", error);
       }
 
       options?.onSuccess?.(data);

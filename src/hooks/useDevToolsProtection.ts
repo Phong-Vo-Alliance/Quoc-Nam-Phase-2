@@ -83,24 +83,48 @@ export function useDevToolsProtection(enabled: boolean) {
         toast.warning("Chụp màn hình không được phép");
         return false;
       }
+
+      // Ctrl+P (Print page) - Chặn in trang
+      if (securityConfig.printProtection.enabled) {
+        const isPrintKey = e.key.toLowerCase() === "p";
+        const isCtrlOrCmd =
+          e.ctrlKey ||
+          (securityConfig.printProtection.supportMacCmd && e.metaKey);
+        if (isCtrlOrCmd && !e.shiftKey && !e.altKey && isPrintKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          toast.warning(securityConfig.printProtection.toastMessage);
+          return false;
+        }
+      }
+
+      // Ctrl+S (Save page) - Chặn lưu trang
+      if (securityConfig.saveProtection.enabled) {
+        const isSaveKey = e.key.toLowerCase() === "s";
+        const isCtrlOrCmd =
+          e.ctrlKey ||
+          (securityConfig.saveProtection.supportMacCmd && e.metaKey);
+        if (isCtrlOrCmd && !e.shiftKey && !e.altKey && isSaveKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          toast.warning(securityConfig.saveProtection.toastMessage);
+          return false;
+        }
+      }
     };
 
-    // Detection loop
+    // Detection loop - Always redirect to blocked page when DevTools detected
     const startDetection = () => {
       intervalRef.current = window.setInterval(() => {
+        // Skip detection if already on blocked page to prevent infinite redirect
+        if (window.location.pathname === "/blocked") {
+          return;
+        }
+
         try {
           if (detectDevTools()) {
-            const action = securityConfig.devToolsProtection.action;
-
-            if (action === "toast") {
-              toast.error("Developer Tools không được phép sử dụng");
-            } else if (action === "modal") {
-              // Simple blocking alert for now
-              alert("Developer Tools không được phép sử dụng");
-            } else if (action === "redirect") {
-              window.location.href =
-                securityConfig.devToolsProtection.redirectUrl || "/blocked";
-            }
+            window.location.href =
+              securityConfig.devToolsProtection.redirectUrl || "/blocked";
           }
         } catch (error) {
           console.error("[DevTools Protection] Detection error:", error);

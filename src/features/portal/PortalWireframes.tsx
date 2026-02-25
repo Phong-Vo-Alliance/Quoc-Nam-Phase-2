@@ -242,26 +242,21 @@ export default function PortalWireframes({
   // TODO: Implement useTasks() hook to fetch tasks from API
   const [tasks, setTasks] = React.useState<Task[]>([]);
 
-  /**
-   * Get current user's display name
-   * @returns The display name of the current user
-   * Updated: 2026-02-11 - Use fullName from API instead of identifier
-   */
-  const getCurrentUserName = (): string => {
-    const user = useAuthStore.getState().user;
-    // ✅ Priority: fullName > identifier > fallback
-    if (user?.fullName) {
-      return user.fullName;
-    }
-    if (user?.identifier) {
-      return user.identifier;
-    }
-    // Fallback based on role permissions
-    return hasLeaderPermissions() ? "Trưởng nhóm" : "Nhân viên";
-  };
+  // Subscribe to auth store for reactive updates (fullName may update after login)
+  const authUser = useAuthStore((state) => state.user);
 
   // Dynamic user based on role permissions
-  const currentUser = getCurrentUserName();
+  // Priority: fullName > identifier > fallback
+  const currentUser = React.useMemo(() => {
+    if (authUser?.fullName) {
+      return authUser.fullName;
+    }
+    if (authUser?.identifier) {
+      return authUser.identifier;
+    }
+    return hasLeaderPermissions() ? "Trưởng nhóm" : "Nhân viên";
+  }, [authUser?.fullName, authUser?.identifier]);
+
   const currentUserId = getCurrentUserIdSync();
 
   //const now = new Date().toISOString();

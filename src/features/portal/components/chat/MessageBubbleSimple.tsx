@@ -13,6 +13,7 @@ import {
   Reply,
   CheckCircle2,
   Inbox,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
@@ -84,6 +85,7 @@ export interface MessageBubbleSimpleProps {
   onCreateTask?: (messageId: string) => void;
   onConfirmInfo?: (messageId: string) => void; // NEW: Confirm information
   hasConfirmedInfo?: boolean; // NEW: Check if message already has confirmed info
+  isConfirming?: boolean; // NEW: Loading state when confirming
 }
 
 export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
@@ -102,6 +104,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   onCreateTask,
   onConfirmInfo,
   hasConfirmedInfo = false,
+  isConfirming = false,
 }) => {
   // Quote Reply: Get setReplyTarget from store
   const setReplyTarget = useReplyStore((state) => state.setReplyTarget);
@@ -361,12 +364,28 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     !message.linkedTaskId &&
                     !hasConfirmedInfo && (
                       <button
-                        className="p-1.5 rounded transition text-gray-500 hover:text-brand-600"
-                        onClick={() => onConfirmInfo(message.id)}
-                        title="Tiếp nhận thông tin"
+                        className={cn(
+                          "p-1.5 rounded transition",
+                          isConfirming
+                            ? "text-brand-500 cursor-not-allowed"
+                            : "text-gray-500 hover:text-brand-600",
+                        )}
+                        onClick={() =>
+                          !isConfirming && onConfirmInfo(message.id)
+                        }
+                        title={
+                          isConfirming
+                            ? "Đang tiếp nhận..."
+                            : "Tiếp nhận thông tin"
+                        }
                         data-testid="confirm-info-button"
+                        disabled={isConfirming}
                       >
-                        <Inbox size={14} />
+                        {isConfirming ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Inbox size={14} />
+                        )}
                       </button>
                     )}
                 </div>

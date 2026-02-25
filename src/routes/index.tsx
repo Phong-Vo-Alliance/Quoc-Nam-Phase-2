@@ -9,6 +9,7 @@ import { ProtectedRoute } from "./ProtectedRoute";
 // Import pages/components
 import { LoginPage } from "@/pages/LoginPage";
 import { PortalPage } from "@/pages/PortalPage";
+import { BlockedPage } from "@/pages/BlockedPage";
 
 function NotFoundPage() {
   return (
@@ -52,6 +53,10 @@ const router = createBrowserRouter([
   {
     path: ROUTES.NOT_FOUND,
     element: <NotFoundPage />,
+  },
+  {
+    path: ROUTES.BLOCKED,
+    element: <BlockedPage />,
   },
   {
     path: "*",

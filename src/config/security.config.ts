@@ -7,14 +7,12 @@ import type { SecurityConfig } from "@/types/security";
 import { SECURITY_FLAGS } from "./env.config";
 
 export const securityConfig: SecurityConfig = {
+  // Master flag - Tắt toàn bộ protections khi = false
+  enableAllProtections: SECURITY_FLAGS.enableAllProtections,
+
   devToolsProtection: {
     enabled: SECURITY_FLAGS.enableDevToolsProtection,
     detectionInterval: 1000, // 1 second
-    action:
-      (import.meta.env.VITE_DEVTOOLS_ACTION as
-        | "toast"
-        | "modal"
-        | "redirect") || "toast",
     redirectUrl: "/blocked",
   },
   contextMenuProtection: {
@@ -28,6 +26,16 @@ export const securityConfig: SecurityConfig = {
       ",",
     ) || ["pdf", "docx", "xlsx"],
     showWarning: true, // Show toast when copy is blocked
+  },
+  printProtection: {
+    enabled: SECURITY_FLAGS.enablePrintProtection,
+    toastMessage: "Tính năng in đã bị tắt",
+    supportMacCmd: true, // Chặn cả Cmd+P trên Mac
+  },
+  saveProtection: {
+    enabled: SECURITY_FLAGS.enableSaveProtection,
+    toastMessage: "Tính năng lưu đã bị tắt",
+    supportMacCmd: true, // Chặn cả Cmd+S trên Mac
   },
   whitelist: {
     emails: SECURITY_FLAGS.whitelistEmails,

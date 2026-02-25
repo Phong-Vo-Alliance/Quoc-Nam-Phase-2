@@ -5,6 +5,180 @@
 
 ---
 
+## [2026-02-25 14:30] Session: Security Simplification - Redirect Only + BlockedPage
+
+### Context:
+
+HUMAN yêu cầu:
+
+1. Redirect tới /blocked thay vì toast/modal khi detect DevTools
+2. Tạo BlockedPage với UI đẹp theo brand color (#38AE3C)
+3. Button "Về trang chủ" chỉ enabled khi DevTools đã đóng
+4. Loại bỏ hoàn toàn toast/modal options, giữ redirect only
+5. Cleanup tất cả VITE_DEVTOOLS_ACTION khỏi env files
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                            | Result                                        |
+| --- | ----- | ------ | ---------------------------------- | --------------------------------------------- |
+| 1   | 14:00 | CREATE | src/pages/BlockedPage.tsx          | ✅ UI với brand color, DevTools detection     |
+| 2   | 14:05 | MODIFY | src/pages/index.ts                 | ✅ Export BlockedPage                         |
+| 3   | 14:06 | MODIFY | src/routes/routes.ts               | ✅ Added BLOCKED route                        |
+| 4   | 14:07 | MODIFY | src/routes/index.tsx               | ✅ Added /blocked route                       |
+| 5   | 14:15 | MODIFY | src/hooks/useDevToolsProtection.ts | ✅ Simplified - always redirect to /blocked   |
+| 6   | 14:20 | MODIFY | src/config/security.config.ts      | ✅ Removed action config, hardcoded redirect  |
+| 7   | 14:25 | MODIFY | src/types/security.ts              | ✅ Removed action field, required redirectUrl |
+| 8   | 14:28 | MODIFY | src/vite-env.d.ts                  | ✅ Removed VITE_DEVTOOLS_ACTION               |
+| 9   | 14:30 | MODIFY | .env.development                   | ✅ Removed VITE_DEVTOOLS_ACTION               |
+| 10  | 14:31 | MODIFY | .env.local                         | ✅ Removed VITE_DEVTOOLS_ACTION               |
+| 11  | 14:32 | MODIFY | .env.local.example                 | ✅ Removed VITE_DEVTOOLS_ACTION               |
+
+### Files Created:
+
+| File                        | Description                                              |
+| --------------------------- | -------------------------------------------------------- |
+| `src/pages/BlockedPage.tsx` | Trang hiển thị khi user vi phạm security (DevTools open) |
+
+### Files Modified:
+
+| File                                 | Changes                                               |
+| ------------------------------------ | ----------------------------------------------------- |
+| `src/pages/index.ts`                 | +1 line: Export BlockedPage                           |
+| `src/routes/routes.ts`               | +1 line: BLOCKED constant                             |
+| `src/routes/index.tsx`               | +5 lines: /blocked route                              |
+| `src/hooks/useDevToolsProtection.ts` | Simplified: removed action switch, always redirect    |
+| `src/config/security.config.ts`      | Removed: action config; simplified devToolsProtection |
+| `src/types/security.ts`              | Removed: action field; made redirectUrl required      |
+| `src/vite-env.d.ts`                  | -1 line: Removed VITE_DEVTOOLS_ACTION                 |
+| `.env.development`                   | -2 lines: Removed VITE_DEVTOOLS_ACTION + comment      |
+| `.env.local`                         | -2 lines: Removed VITE_DEVTOOLS_ACTION + comment      |
+| `.env.local.example`                 | -2 lines: Removed VITE_DEVTOOLS_ACTION + comment      |
+
+### Architecture Changes:
+
+**Before:**
+
+```
+DevTools detected → Check config.action → toast|modal|redirect
+```
+
+**After:**
+
+```
+DevTools detected → Always redirect to /blocked
+```
+
+### BlockedPage Features:
+
+- Brand color theme (#38AE3C green)
+- DevTools detection (button disabled if DevTools still open)
+- Responsive design
+- Animation (pulse effect on shield icon)
+- Dark/light text contrast
+
+### Removed Code/Config:
+
+- `action` field from `DevToolsProtectionConfig`
+- `VITE_DEVTOOLS_ACTION` env variable (all files)
+- Toast/modal handling logic in useDevToolsProtection.ts
+
+### Status: ✅ COMPLETED
+
+---
+
+## [2026-02-25 10:30] Session: Security Enhancement - IMPLEMENTATION (Block Ctrl+P, Ctrl+S)
+
+### Context:
+
+HUMAN đã APPROVED tài liệu requirements với các quyết định:
+
+- Toast Ctrl+P: "Tính năng in đã bị tắt"
+- Toast Ctrl+S: "Tính năng lưu đã bị tắt"
+- Mac support: Có (chặn cả Cmd+P/S)
+- Toast debounce: Không debounce
+- Bổ sung: Master flag để tắt toàn bộ protections
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                            | Result                             |
+| --- | ----- | ------ | ---------------------------------- | ---------------------------------- |
+| 1   | 10:30 | MODIFY | src/config/env.config.ts           | ✅ Added master + print/save flags |
+| 2   | 10:32 | MODIFY | src/types/security.ts              | ✅ Added PrintSaveProtectionConfig |
+| 3   | 10:33 | MODIFY | src/config/security.config.ts      | ✅ Added print/save config         |
+| 4   | 10:35 | MODIFY | src/hooks/useDevToolsProtection.ts | ✅ Added Ctrl+P/S handlers         |
+| 5   | 10:36 | MODIFY | src/hooks/useSecurity.ts           | ✅ Added master flag check         |
+| 6   | 10:38 | MODIFY | .env.local.example                 | ✅ Added new env vars docs         |
+
+### Files Modified:
+
+| File                                 | Changes                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `src/config/env.config.ts`           | +20 lines: Added `enableAllProtections`, `enablePrintProtection`, `enableSaveProtection` |
+| `src/types/security.ts`              | +15 lines: Added `PrintSaveProtectionConfig` interface                                   |
+| `src/config/security.config.ts`      | +15 lines: Added `printProtection`, `saveProtection` configs                             |
+| `src/hooks/useDevToolsProtection.ts` | +24 lines: Added Ctrl+P/S + Cmd+P/S handlers                                             |
+| `src/hooks/useSecurity.ts`           | +5 lines: Check `enableAllProtections` master flag                                       |
+| `.env.local.example`                 | +12 lines: Documented new env vars                                                       |
+
+### New Environment Variables:
+
+| Variable                            | Description                           |
+| ----------------------------------- | ------------------------------------- |
+| `VITE_DEV_ENABLE_ALL_PROTECTIONS`   | Master flag - tắt toàn bộ protections |
+| `VITE_PROD_ENABLE_ALL_PROTECTIONS`  | Master flag (production)              |
+| `VITE_DEV_ENABLE_PRINT_PROTECTION`  | Chặn Ctrl+P                           |
+| `VITE_PROD_ENABLE_PRINT_PROTECTION` | Chặn Ctrl+P (production)              |
+| `VITE_DEV_ENABLE_SAVE_PROTECTION`   | Chặn Ctrl+S                           |
+| `VITE_PROD_ENABLE_SAVE_PROTECTION`  | Chặn Ctrl+S (production)              |
+
+### Status: ✅ COMPLETED
+
+HUMAN Signature: **MINH ĐÃ DUYỆT**
+
+---
+
+## [2026-02-25 10:00] Session: Security Enhancement - Block Ctrl+P, Ctrl+S
+
+### Context:
+
+HUMAN yêu cầu bổ sung security features để chặn thêm phím tắt Ctrl+P (Print) và Ctrl+S (Save), bên cạnh các phím đã được chặn (F12, Ctrl+Shift+I/J/C, Ctrl+U, PrintScreen).
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                                                        | Result              |
+| --- | ----- | ------ | ------------------------------------------------------------------------------ | ------------------- |
+| 1   | 10:00 | CREATE | docs/modules/security/features/keyboard-shortcuts-v2/00_README.md              | ✅ Feature overview |
+| 2   | 10:02 | CREATE | docs/modules/security/features/keyboard-shortcuts-v2/01_requirements.md        | ✅ Requirements doc |
+| 3   | 10:05 | CREATE | docs/modules/security/features/keyboard-shortcuts-v2/04_implementation-plan.md | ✅ Impl plan        |
+| 4   | 10:08 | MODIFY | docs/modules/security/README.md                                                | ✅ Updated roadmap  |
+
+### Files Created:
+
+- `docs/modules/security/features/keyboard-shortcuts-v2/00_README.md` - Feature overview
+- `docs/modules/security/features/keyboard-shortcuts-v2/01_requirements.md` - Requirements (⏳ PENDING APPROVAL)
+- `docs/modules/security/features/keyboard-shortcuts-v2/04_implementation-plan.md` - Implementation plan
+
+### Files Modified:
+
+- `docs/modules/security/README.md` - Added v1.1 roadmap, feature link, updated status
+
+### Pending Decisions (HUMAN cần điền):
+
+| #   | Vấn đề                 | Chờ HUMAN quyết định |
+| --- | ---------------------- | -------------------- |
+| 1   | Toast message Ctrl+P   | Chọn 1/2/3           |
+| 2   | Toast message Ctrl+S   | Chọn 1/2/3           |
+| 3   | Mac support (Cmd keys) | Có/Không             |
+| 4   | Toast debounce time    | 0/2/5 giây           |
+
+### Next Steps:
+
+1. HUMAN review và điền PENDING DECISIONS trong `01_requirements.md`
+2. HUMAN tick ✅ APPROVED trong `01_requirements.md`
+3. Sau khi approved → AI tiếp tục implement code
+
+---
+
 ## [2026-02-24 17:30] Session: Fix Receive Info System Message Integration (CHAT-026)
 
 ### Context:

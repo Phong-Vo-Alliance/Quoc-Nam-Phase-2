@@ -19,6 +19,9 @@ export const ROUTES = {
   MOBILE_CHAT_DETAIL: "/mobile/chat/:groupId",
   MOBILE_TASK_LOG: "/mobile/task-log/:taskId",
 
+  // Security
+  BLOCKED: "/blocked",
+
   // Utils
   NOT_FOUND: "/404",
 } as const;

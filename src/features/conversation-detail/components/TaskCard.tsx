@@ -125,6 +125,16 @@ export const TaskCard: React.FC<{
 
   const permissions = t.permissions;
 
+  // Checklist can only be toggled when task has started (not in 'todo' status)
+  const canToggleChecklist = t.status.code !== "todo";
+
+  // Helper: check if label is valid (contains at least one alphanumeric character)
+  const isValidLabel = (text: string) => {
+    const trimmed = text.trim();
+    // Check if has at least one letter or number (not just special chars)
+    return trimmed.length > 0 && /[\p{L}\p{N}]/u.test(trimmed);
+  };
+
   // Sort checklist: unchecked first, then by order field from API
   const sortedChecklist = React.useMemo(() => {
     if (!t.checklist) return [];
@@ -147,35 +157,77 @@ export const TaskCard: React.FC<{
     <>
       {/* Checklist Edit Dialog */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-black/20 flex items-center justify-center z-50 !mt-0"
+          data-testid="checklist-edit-dialog"
+        >
           <div className="bg-white rounded-xl p-4 w-[300px] shadow-xl">
             <div className="text-sm font-semibold mb-2">
               {editingItem?.id === "new" ? "Thêm mục" : "Chỉnh sửa mục"}
             </div>
 
             <input
+              data-testid="checklist-item-input"
               className="w-full rounded border px-2 py-1 text-sm"
               value={newLabel}
               autoFocus
               onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={async (e) => {
+                if (
+                  e.key === "Enter" &&
+                  isValidLabel(newLabel) &&
+                  !addCheckItemMutation.isPending &&
+                  !updateCheckItemMutation.isPending
+                ) {
+                  e.preventDefault();
+                  if (editingItem?.id === "new") {
+                    try {
+                      await addCheckItemMutation.mutateAsync({
+                        taskId: t.id,
+                        content: newLabel.trim(),
+                      });
+                      setEditingItem(null);
+                      setNewLabel("");
+                      setOpen(true);
+                    } catch (error) {
+                      console.error("Failed to add checklist item:", error);
+                    }
+                  } else if (editingItem) {
+                    try {
+                      await updateCheckItemMutation.mutateAsync({
+                        taskId: t.id,
+                        itemId: editingItem.id,
+                        content: newLabel.trim(),
+                      });
+                      setEditingItem(null);
+                      setNewLabel("");
+                      setOpen(true);
+                    } catch (error) {
+                      console.error("Failed to update checklist item:", error);
+                    }
+                  }
+                }
+              }}
             />
 
             <div className="flex justify-end gap-2 mt-3">
               <button
+                data-testid="checklist-cancel-button"
                 className="text-xs px-2 py-1 rounded bg-gray-100"
                 onClick={() => setEditingItem(null)}
               >
                 Huỷ
               </button>
               <button
-                className="text-xs px-3 py-1 rounded bg-emerald-600 text-white"
+                data-testid="checklist-save-button"
+                className="text-xs px-3 py-1 rounded bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={
                   addCheckItemMutation.isPending ||
                   updateCheckItemMutation.isPending ||
-                  !newLabel.trim()
+                  !isValidLabel(newLabel)
                 }
                 onClick={async () => {
-                  if (!newLabel.trim()) return;
+                  if (!isValidLabel(newLabel)) return;
 
                   if (editingItem.id === "new") {
                     try {
@@ -333,7 +385,8 @@ export const TaskCard: React.FC<{
               {hasLeaderPermissions() && (
                 <>
                   <span>•</span>
-                  {t.status.code !== "need_to_verified" ? (
+                  {t.status.code !== "need_to_verified" &&
+                  t.status.code !== "finished" ? (
                     <span
                       className="inline-flex items-center gap-1"
                       data-testid="task-assignee-select"
@@ -388,6 +441,7 @@ export const TaskCard: React.FC<{
               <div className="mt-2">
                 <div className="flex items-center justify-between pr-1">
                   <div
+                    data-testid="checklist-toggle-header"
                     className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 cursor-pointer hover:text-emerald-800 hover:underline select-none"
                     onClick={() => setOpen((v) => !v)}
                   >
@@ -401,6 +455,7 @@ export const TaskCard: React.FC<{
 
                   {canEditStructure && (
                     <span
+                      data-testid="checklist-add-button"
                       className="text-[11px] text-emerald-700 cursor-pointer hover:underline select-none"
                       onClick={() => {
                         setEditingItem({ id: "new", label: "", done: false });
@@ -414,25 +469,33 @@ export const TaskCard: React.FC<{
                 </div>
 
                 {open && (
-                  <ul className="mt-2 space-y-1">
+                  <ul className="mt-2 space-y-1" data-testid="checklist-list">
                     {sortedChecklist.map((c) => (
                       <li
                         key={c.id}
-                        className="group flex items-center gap-2 text-[12px] leading-snug rounded-md px-2 py-1 hover:bg-gray-50 transition-all"
+                        className="group flex items-center gap-2 text-[12px] leading-none rounded-md px-2 py-1.5 hover:bg-gray-50 transition-all"
+                        data-testid={`checklist-item-${c.id}`}
                       >
                         <button
                           type="button"
+                          data-testid={`checklist-toggle-${c.id}`}
                           className={`
-                            h-4 w-4 shrink-0 rounded-full
+                            h-4 w-4 shrink-0 rounded-full p-0
                             transition flex items-center justify-center
                             ${
-                              c.done
-                                ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer checklist-btn"
-                                : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
+                              !canToggleChecklist
+                                ? "border-[1px] border-gray-200 bg-gray-100 cursor-not-allowed opacity-70"
+                                : c.done
+                                  ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer checklist-btn"
+                                  : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
                             }
                           `}
-                          disabled={toggleCheckItemMutation.isPending}
+                          disabled={
+                            !canToggleChecklist ||
+                            toggleCheckItemMutation.isPending
+                          }
                           onClick={async () => {
+                            if (!canToggleChecklist) return;
                             try {
                               await toggleCheckItemMutation.mutateAsync({
                                 taskId: t.id,
@@ -446,20 +509,29 @@ export const TaskCard: React.FC<{
                             }
                           }}
                           title={
-                            c.done ? "Nhấn để bỏ chọn" : "Nhấn để hoàn thành"
+                            !canToggleChecklist
+                              ? "Vui lòng bắt đầu task trước khi check"
+                              : c.done
+                                ? "Nhấn để bỏ chọn"
+                                : "Nhấn để hoàn thành"
                           }
                         >
                           {c.done && <Check className="w-3 h-3" />}
                         </button>
 
                         <span
+                          data-testid={`checklist-label-${c.id}`}
                           className={`
                             ${c.done ? "text-gray-400 line-through" : "text-gray-700"}
-                            flex-1 cursor-pointer select-none
-                            hover:text-emerald-600 transition-colors
+                            flex-1 select-none transition-colors leading-none
+                            ${canToggleChecklist ? "cursor-pointer hover:text-emerald-600" : "cursor-not-allowed"}
                           `}
                           onClick={async () => {
-                            if (toggleCheckItemMutation.isPending) return;
+                            if (
+                              !canToggleChecklist ||
+                              toggleCheckItemMutation.isPending
+                            )
+                              return;
                             try {
                               await toggleCheckItemMutation.mutateAsync({
                                 taskId: t.id,
@@ -473,15 +545,20 @@ export const TaskCard: React.FC<{
                             }
                           }}
                           title={
-                            c.done ? "Nhấn để bỏ chọn" : "Nhấn để hoàn thành"
+                            !canToggleChecklist
+                              ? "Vui lòng bắt đầu task trước khi check"
+                              : c.done
+                                ? "Nhấn để bỏ chọn"
+                                : "Nhấn để hoàn thành"
                           }
                         >
                           {c.label}
                         </span>
 
                         {canEditStructure && (
-                          <div className="flex gap-1 ml-auto opacity-0 group-hover:opacity-100 transition">
+                          <div className="flex gap-1 ml-auto opacity-0 group-hover:opacity-100 transition items-center">
                             <Edit2
+                              data-testid={`checklist-edit-${c.id}`}
                               className="w-3.5 h-3.5 text-gray-500 cursor-pointer hover:text-emerald-600"
                               onClick={() => {
                                 setEditingItem(c);
@@ -493,6 +570,7 @@ export const TaskCard: React.FC<{
                               <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
                             ) : (
                               <Trash2
+                                data-testid={`checklist-delete-${c.id}`}
                                 className="w-3.5 h-3.5 text-rose-500 cursor-pointer hover:text-rose-600"
                                 onClick={async () => {
                                   if (!confirm(`Xóa mục "${c.label}"?`)) return;
@@ -519,11 +597,15 @@ export const TaskCard: React.FC<{
               </div>
             ) : (
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-[11px] text-gray-400">
+                <span
+                  className="text-[11px] text-gray-400"
+                  data-testid="no-checklist-text"
+                >
                   Không có checklist.
                 </span>
                 {canEditStructure && (
                   <span
+                    data-testid="checklist-add-button-empty"
                     className="text-[11px] text-emerald-700 cursor-pointer hover:underline select-none"
                     onClick={() => {
                       setEditingItem({ id: "new", label: "", done: false });
@@ -552,6 +634,7 @@ export const TaskCard: React.FC<{
 
             <div className="flex items-center gap-2">
               <button
+                data-testid="task-log-button"
                 onClick={() => onOpenTaskLog?.(t.id)}
                 className="px-2 py-1 rounded-md border text-[11px] border-emerald-300 text-emerald-700 hover:bg-emerald-50"
               >
@@ -560,6 +643,7 @@ export const TaskCard: React.FC<{
 
               {permissions?.canChangeToDoing && t.status.code === "todo" && (
                 <button
+                  data-testid="task-start-button"
                   disabled={updateStatusMutation.isPending}
                   onClick={async () => {
                     try {
@@ -581,6 +665,7 @@ export const TaskCard: React.FC<{
                 t.status.code === "doing" &&
                 !permissions?.canChangeToFinished && (
                   <button
+                    data-testid="task-complete-button"
                     disabled={
                       updateStatusMutation.isPending ||
                       (t.checklist && t.checklist.some((c) => !c.done))
@@ -610,6 +695,7 @@ export const TaskCard: React.FC<{
                 (t.status.code === "doing" ||
                   t.status.code === "need_to_verified") && (
                   <button
+                    data-testid="task-finish-button"
                     disabled={
                       updateStatusMutation.isPending ||
                       (t.checklist && t.checklist.some((c) => !c.done))

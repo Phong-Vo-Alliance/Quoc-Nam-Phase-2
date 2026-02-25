@@ -23,8 +23,11 @@ export function useSecurity() {
     securityConfig.whitelist.emails,
   );
 
-  // Skip all protections if user is whitelisted
-  const shouldApplyProtection = !isWhitelisted;
+  // Skip all protections if:
+  // 1. User is whitelisted, OR
+  // 2. Master flag enableAllProtections = false
+  const shouldApplyProtection =
+    securityConfig.enableAllProtections && !isWhitelisted;
 
   useDevToolsProtection(
     shouldApplyProtection && securityConfig.devToolsProtection.enabled,
@@ -38,5 +41,7 @@ export function useSecurity() {
     isProtected: shouldApplyProtection,
     /** Whether current user is whitelisted */
     isWhitelisted,
+    /** Whether master protection flag is enabled */
+    isMasterEnabled: securityConfig.enableAllProtections,
   };
 }

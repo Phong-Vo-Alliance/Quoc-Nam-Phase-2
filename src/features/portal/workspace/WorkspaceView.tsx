@@ -851,6 +851,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                           : undefined
                       }
                       onCreateTaskFromMessage={onCreateTaskFromMessage}
+                      onConfirmInfoSuccess={() => {
+                        // Mobile: Switch to work tab
+                        setMobileTab("work");
+                        setTab("order");
+                      }}
                     />
                   ) : (
                     <EmptyChatState isMobile={true} />
@@ -1149,6 +1154,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 : undefined
             }
             onCreateTaskFromMessage={onCreateTaskFromMessage}
+            onConfirmInfoSuccess={() => {
+              // Desktop: Open right panel if closed + switch to order tab
+              setShowRight(true);
+              setTab("order");
+            }}
           />
         ) : (
           <EmptyChatState isMobile={false} />
