@@ -18,6 +18,18 @@
  *
  * 5. "[user] đã rời khỏi nhóm"
  *    → Highlight: user
+ *
+ * 6. "[user] đã xóa [user2] khỏi nhóm"
+ *    → Highlight: user, user2
+ *
+ * 7. "Công việc [tên công việc] đã được tạo và giao cho [user]"
+ *    → Highlight: user
+ *
+ * 8. "[username] ([email]) đã được thêm vào nhóm"
+ *    → Highlight: username (email)
+ *
+ * 9. "[content]" đã được tiếp nhận bởi [username] (without time)
+ *    → Highlight: username
  */
 
 import React from "react";
@@ -61,6 +73,17 @@ export function parseSystemMessageContent(
 
   // Pattern 6: "[user] đã xóa [user2] khỏi nhóm"
   const removeMemberPattern = /^(.+?)\s+đã xóa\s+(.+?)\s+khỏi nhóm$/;
+
+  // Pattern 7: "Công việc [tên] đã được tạo và giao cho [user]" (without creator)
+  const createTaskSimplePattern =
+    /^Công việc\s+"(.+?)"\s+đã được tạo và giao cho\s+(.+)$/;
+
+  // Pattern 8: "[username] ([email]) đã được thêm vào nhóm"
+  const addMemberWithEmailPattern =
+    /^(.+?)\s+\(([^)]+)\)\s+đã được thêm vào nhóm$/;
+
+  // Pattern 9: "[content]" đã được tiếp nhận bởi [username] (without time)
+  const receiveInfoNoTimePattern = /^(.+?)đã được tiếp nhận bởi\s+(.+?)$/;
 
   let match: RegExpMatchArray | null;
 
@@ -122,6 +145,34 @@ export function parseSystemMessageContent(
     parts.push({ type: "text", content: " đã xóa " });
     parts.push({ type: "highlight", content: removedUser });
     parts.push({ type: "text", content: " khỏi nhóm" });
+    return parts;
+  }
+
+  // Try Pattern 7: Create Task Simple (without creator)
+  if ((match = content.match(createTaskSimplePattern))) {
+    const [, taskName, assignee] = match;
+    parts.push({ type: "text", content: 'Công việc "' });
+    parts.push({ type: "task-name", content: taskName });
+    parts.push({ type: "text", content: '" đã được tạo và giao cho ' });
+    parts.push({ type: "highlight", content: assignee });
+    return parts;
+  }
+
+  // Try Pattern 8: Add Member with Email
+  if ((match = content.match(addMemberWithEmailPattern))) {
+    const [, username, email] = match;
+    parts.push({ type: "highlight", content: `${username} (${email})` });
+    parts.push({ type: "text", content: " đã được thêm vào nhóm" });
+    return parts;
+  }
+
+  // Try Pattern 9: Receive Info without time
+  // Note: This must be AFTER Pattern 1 (with time) to avoid matching incorrectly
+  if ((match = content.match(receiveInfoNoTimePattern))) {
+    const [, contentDesc, username] = match;
+    parts.push({ type: "text", content: contentDesc });
+    parts.push({ type: "text", content: "đã được tiếp nhận bởi " });
+    parts.push({ type: "highlight", content: username.trim() });
     return parts;
   }
 

@@ -188,5 +188,5 @@ export function buildReceiveInfoContent(
   const contentDesc = getMessageContentDescription(message);
   const timeStr = formatTime24h(timestamp);
 
-  return `${contentDesc} đã được tiếp nhận bởi ${receiverName} lúc ${timeStr}`;
+  return `${contentDesc} đã được tiếp nhận bởi ${receiverName}`;
 }
