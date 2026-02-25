@@ -117,6 +117,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
     if (!message) return;
     setReplyTarget({
       id: message.id,
+      senderId: message.senderId, // 🆕 v1.3.0 - For "Bạn" display when replying to self
       senderName: message.senderName,
       content: message.content || "",
       sentAt: message.sentAt,
@@ -376,14 +377,14 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             <div
               ref={messageContentRef}
               className={cn(
-                "message-bubble overflow-hidden w-fit max-w-full",
+                "message-bubble overflow-hidden w-fit max-w-full transition-colors",
                 radiusBySide,
                 // Failed state styling
                 message.sendStatus === "failed"
                   ? "bg-red-50/50 border-2 border-red-400"
                   : isOwn
-                    ? "bg-brand-600 text-white"
-                    : "bg-white text-gray-900 shadow-sm",
+                    ? "bg-brand-100 group-hover:bg-brand-200 text-gray-900 border-brand-100 group-hover:border-brand-200"
+                    : "bg-gray-200 group-hover:bg-gray-300 text-gray-900 border-gray-200 group-hover:border-gray-300",
                 // Pin/Star borders (override failed state)
                 message.isPinned && message.sendStatus !== "failed"
                   ? "border-2 border-amber-400"
@@ -423,10 +424,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                   <>
                     {/* Quoted Message Preview - if this is a quote reply */}
                     {message.quotedMessage && (
-                      <div className="px-4 pt-3">
+                      <div className="px-0.5 pt-0.5">
                         <QuotedMessagePreview
                           quotedMessage={message.quotedMessage}
                           variant="message"
+                          isOwn={isOwn}
+                          isFirstInGroup={isFirstInGroup}
                           onClick={
                             onScrollToQuoted
                               ? () =>
@@ -449,8 +452,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             message.content,
                             message.mentions,
                             isOwn
-                              ? "bg-white/20 text-white font-semibold px-1 rounded"
+                              ? "bg-brand-200 text-brand-800 font-semibold px-1 rounded"
                               : "bg-brand-100 text-brand-800 font-semibold px-1 rounded",
+                            true, // enableLinks
+                            isOwn
+                              ? "text-brand-700 underline hover:text-brand-900 cursor-pointer"
+                              : "text-blue-600 hover:text-blue-800 underline hover:no-underline cursor-pointer",
                           )}
                         </p>
                       </div>
@@ -470,9 +477,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         {/* Decision 1A: Dynamic grid layout */}
                         {/* Special case: If has both images and files, use compact 3-col grid */}
                         {hasFiles ? (
-                          // Mixed attachments: Always use 3-col square grid for compact display (smaller size)
+                          // Mixed attachments: Use flex wrap for compact display
                           <div
-                            className="grid grid-cols-3 gap-2"
+                            className={cn(
+                              "flex flex-wrap gap-2",
+                              isOwn ? "justify-end" : "justify-start",
+                            )}
                             data-testid="image-grid-mixed-3cols"
                           >
                             {images.slice(0, 6).map((image, index) => {
@@ -569,7 +579,10 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                           </div>
                         ) : images.length === 2 ? (
                           <div
-                            className="grid grid-cols-2 gap-2"
+                            className={cn(
+                              "flex flex-wrap gap-2",
+                              isOwn ? "justify-end" : "justify-start",
+                            )}
                             data-testid="image-grid-2cols"
                           >
                             {images.map((image, index) => (
@@ -604,9 +617,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             ))}
                           </div>
                         ) : images.length >= 3 && images.length <= 6 ? (
-                          // 3-6 images: 3 columns grid
+                          // 3-6 images: flex wrap layout
                           <div
-                            className="grid grid-cols-3 gap-2"
+                            className={cn(
+                              "flex flex-wrap gap-2",
+                              isOwn ? "justify-end" : "justify-start",
+                            )}
                             data-testid="image-grid-3cols"
                           >
                             {images.map((image, index) => (
@@ -641,9 +657,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             ))}
                           </div>
                         ) : (
-                          // 7+ images: 3 cols with first 6 + "+N more" overlay
+                          // 7+ images: flex wrap with first 6 + "+N more" overlay
                           <div
-                            className="grid grid-cols-3 gap-2"
+                            className={cn(
+                              "flex flex-wrap gap-2",
+                              isOwn ? "justify-end" : "justify-start",
+                            )}
                             data-testid="image-grid-with-overlay"
                           >
                             {images.slice(0, 6).map((image, index) => {
@@ -716,67 +735,78 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     )}
 
                     {/* File attachments - Keep original logic */}
-                    {hasFiles &&
-                      files.map((file) => (
-                        <div
-                          key={file.fileId}
-                          className={cn(
-                            "flex items-center gap-3 cursor-pointer hover:bg-black/5 transition-colors min-w-0 w-full max-w-[280px]",
-                            hasText || hasImages ? "px-4 pb-4" : "px-4 py-4",
-                          )}
-                          data-testid={`message-file-attachment-${file.fileId}`}
-                          onClick={() => {
-                            onFilePreviewClick?.(
-                              file.fileId,
-                              file.fileName || "document",
-                            );
-                          }}
-                        >
-                          {/* Icon container with white background for visibility */}
-                          <div className="bg-white rounded-lg p-2 shadow-sm flex-shrink-0">
-                            <FileIcon
-                              contentType={
-                                file.contentType || "application/octet-stream"
-                              }
-                              size="md"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0 overflow-hidden">
-                            <p
-                              className={cn(
-                                "text-sm font-medium truncate",
-                                isOwn ? "text-white" : "text-gray-900",
-                              )}
-                            >
-                              {file.fileName || "File"}
-                            </p>
+                    {hasFiles && (
+                      <div
+                        className={cn(
+                          "mx-1",
+                          hasText || hasImages ? "pb-1" : "py-1",
+                        )}
+                      >
+                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                          {files.map((file, index) => (
                             <div
+                              key={file.fileId}
                               className={cn(
-                                "flex items-center gap-2 text-xs flex-wrap",
-                                isOwn ? "text-white/80" : "text-gray-600",
+                                "flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors min-w-0 w-full max-w-full px-2 py-2",
+                                index > 0 && "border-t border-gray-100",
                               )}
+                              data-testid={`message-file-attachment-${file.fileId}`}
+                              onClick={() => {
+                                onFilePreviewClick?.(
+                                  file.fileId,
+                                  file.fileName || "document",
+                                );
+                              }}
                             >
-                              {file.fileSize && (
-                                <span>{formatFileSize(file.fileSize)}</span>
-                              )}
-                              {getFileExtension(
-                                file.fileName ?? undefined,
-                                file.contentType ?? undefined,
-                              ) && (
-                                <>
-                                  {file.fileSize && <span>•</span>}
-                                  <span className="font-medium uppercase">
-                                    {getFileExtension(
-                                      file.fileName ?? undefined,
-                                      file.contentType ?? undefined,
-                                    )}
-                                  </span>
-                                </>
-                              )}
+                              {/* Icon container */}
+                              <div className="bg-gray-100 rounded-lg p-2 flex-shrink-0">
+                                <FileIcon
+                                  contentType={
+                                    file.contentType ||
+                                    "application/octet-stream"
+                                  }
+                                  size="md"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0 overflow-hidden">
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium truncate",
+                                    "text-gray-900",
+                                  )}
+                                >
+                                  {file.fileName || "File"}
+                                </p>
+                                <div
+                                  className={cn(
+                                    "flex items-center gap-2 text-xs flex-wrap",
+                                    "text-gray-600",
+                                  )}
+                                >
+                                  {file.fileSize && (
+                                    <span>{formatFileSize(file.fileSize)}</span>
+                                  )}
+                                  {getFileExtension(
+                                    file.fileName ?? undefined,
+                                    file.contentType ?? undefined,
+                                  ) && (
+                                    <>
+                                      {file.fileSize && <span>•</span>}
+                                      <span className="font-medium uppercase">
+                                        {getFileExtension(
+                                          file.fileName ?? undefined,
+                                          file.contentType ?? undefined,
+                                        )}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                    )}
                   </>
                 );
               })()}

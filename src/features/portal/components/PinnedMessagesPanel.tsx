@@ -102,7 +102,14 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
   const messages = React.useMemo(() => {
     if (!starredData) return [];
 
-    return starredData.map((starred: StarredMessageDto): PinnedMessage => {
+    // 🆕 Sort by message sentAt (newest first) instead of starred time
+    const sortedData = [...starredData].sort((a, b) => {
+      const timeA = new Date(a.message.sentAt).getTime();
+      const timeB = new Date(b.message.sentAt).getTime();
+      return timeB - timeA; // Newest first
+    });
+
+    return sortedData.map((starred: StarredMessageDto): PinnedMessage => {
       const msg = starred.message;
 
       // Find category and conversation info by conversationId
@@ -287,8 +294,11 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                                 className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-200 transform hover:scale-110"
                                 onClick={(e) => {
                                   e.stopPropagation(); // không kích hoạt onOpenChat
-                                  // Call API to unstar message
-                                  unstarMutation.mutate({ messageId: msg.id });
+                                  // Call API to unstar message - pass conversationId to invalidate messages cache
+                                  unstarMutation.mutate({
+                                    messageId: msg.id,
+                                    conversationId: msg.chatId,
+                                  });
                                 }}
                               >
                                 <StarOff

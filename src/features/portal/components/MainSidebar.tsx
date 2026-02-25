@@ -132,7 +132,9 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
       .split(/\s+/)
       .filter((p) => p && p !== "-" && p !== "–"); // Filter out dashes
     if (parts.length === 0) return "U";
-    const chars = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "");
+    // Take last 2 parts (tên lót + tên) instead of first 2
+    const lastTwoParts = parts.slice(-2);
+    const chars = lastTwoParts.map((p) => p[0]?.toUpperCase() ?? "");
     return chars.join("");
   }, [currentUserName]);
 

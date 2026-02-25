@@ -53,16 +53,6 @@ interface ChatHeaderProps {
 }
 
 /**
- * Get display name from DM format
- */
-const getDisplayName = (name: string, type?: "GRP" | "DM") => {
-  if (type === "DM") {
-    return name.replace(/^DM:\s*/, "").split(" <> ")[0];
-  }
-  return name;
-};
-
-/**
  * Translate status to Vietnamese and get badge type
  */
 const getStatusConfig = (
@@ -101,8 +91,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   categoryConversations,
   onChangeConversation,
 }) => {
-  // Define display values first
-  const displayName = getDisplayName(conversationName, conversationType);
+  // 🆕 Get current user info for DM member filtering
+  const currentUser = useAuthStore((state) => state.user);
+
+  // API returns correct name directly, no transformation needed
+  const displayName = conversationName;
   const isDirect = conversationType === "DM";
   const statusConfig = getStatusConfig(status);
 
@@ -129,23 +122,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       ? prevMemberCountRef.current
       : members.length;
 
-  // 🔧 FIX BUG-004: Display name for both title and avatar
+  // Display name for both title and avatar
+  // API returns correct name directly, just use category override if needed
   const headerDisplayName = React.useMemo(() => {
-    // Priority 1: Category name (for category-based conversations)
+    // Category name takes priority (for category-based conversations)
     if (conversationCategory) return conversationCategory;
-
-    // Priority 2: For DM, filter current user and show other participant
-    if (conversationType === "DM" && members.length > 0) {
-      const currentUserId = useAuthStore.getState().user?.id;
-      const otherMember = members.find((m) => m.userId !== currentUserId);
-      if (otherMember?.userName) {
-        return otherMember.userName;
-      }
-    }
-
-    // Priority 3: Default display name
     return displayName;
-  }, [conversationCategory, conversationType, members, displayName]);
+  }, [conversationCategory, displayName]);
 
   return (
     <div className="flex items-center justify-between border-b px-4 pt-3 shrink-0">
@@ -161,7 +144,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           // 🐛 FIX (ui-improvements-20260205): Loading skeleton for avatar
           <div className="h-10 w-10 rounded-full bg-gray-200 animate-pulse shrink-0" />
         ) : (
-          <Avatar name={headerDisplayName} avatarUrl={avatarUrl} />
+          <Avatar
+            name={headerDisplayName}
+            avatarUrl={avatarUrl}
+            conversationType={conversationType}
+          />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">

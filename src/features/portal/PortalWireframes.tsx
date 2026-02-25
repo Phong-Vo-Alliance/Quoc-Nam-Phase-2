@@ -48,6 +48,9 @@ import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { WorkTypeManagerDialog } from "./worktype-manager";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useTabTitle } from "@/hooks/useTabTitle"; // 🆕 For tab title with unread count
+import { sendMessage } from "@/api/messages.api";
+import { buildReceiveInfoContent } from "@/utils/receiveInfoMessage";
+import type { SendChatMessageRequest } from "@/types/messages";
 
 // ⚠️ TODO (2026-02-03): This file is a wireframe/demo page
 // Should migrate to use useCategories instead of useGroups, or deprecate if not needed
@@ -877,7 +880,7 @@ export default function PortalWireframes({
   };
 
   // Hàm xử lý khi Leader nhấn “Tiếp nhận thông tin”
-  const handleReceiveInfo = (message: Message) => {
+  const handleReceiveInfo = async (message: Message) => {
     const nowIso = new Date().toISOString();
 
     // ĐÃ TIẾP NHẬN RỒI THÌ THÔI
@@ -900,29 +903,29 @@ export default function PortalWireframes({
 
     setReceivedInfos((prev) => [...prev, info]);
 
-    // 2) Add system message
-    const excerpt =
-      (message.content ?? "").length > 40
-        ? (message.content ?? "").slice(0, 40) + "…"
-        : (message.content ?? "");
+    // 2) Send system message via API (Feature CHAT-026)
+    // Build content using utility function that handles text/file/image cases
+    const systemMessageContent = buildReceiveInfoContent(
+      message,
+      currentUser,
+      nowIso,
+    );
+    const conversationId = message.groupId; // groupId is conversationId in API
 
-    const systemMsg: Message = {
-      id: "sys_" + Date.now(),
-      type: "system",
-      content: `${excerpt} được tiếp nhận bởi ${currentUser} lúc ${new Date(
-        nowIso,
-      ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-      sender: "system",
-      senderId: "system",
-      groupId: message.groupId,
-      time: nowIso,
-      createdAt: nowIso,
-      isMine: false,
-      isPinned: false,
-      isSystem: true,
-    };
-
-    setMessages((prev) => [...prev, systemMsg]);
+    try {
+      const systemMessageRequest: SendChatMessageRequest = {
+        conversationId,
+        content: systemMessageContent,
+        messageType: "SYS",
+      };
+      await sendMessage(systemMessageRequest);
+      // Note: SignalR will broadcast the message to all members
+      // Local message will be added via SignalR event, no need to add locally
+    } catch (error) {
+      console.error("Failed to send receive info system message:", error);
+      // Don't fail the whole operation if system message fails
+      // The receive info action is still successful
+    }
 
     // 3) Auto open RightPanel + switch tab
     setShowRight(true);

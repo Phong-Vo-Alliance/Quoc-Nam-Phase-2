@@ -75,10 +75,7 @@ export const useConversationStore = create<ConversationState>()(
 
       // Clear selected conversation
       clearSelectedConversation: () => {
-        console.log(
-          "[ConversationStore] clearSelectedConversation called",
-          new Error().stack,
-        );
+        console.log("[ConversationStore] clearSelectedConversation called");
         set({ selectedConversation: null });
         // 🆕 Keep activeTabType to preserve tab state when no conversation selected
       },

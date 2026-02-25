@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import type { QuotedMessageDto } from "@/types/messages";
 import type { QuotedMessageData } from "@/stores/replyStore";
 import { useImageCacheStore } from "@/stores/imageCacheStore";
+import { useAuthStore } from "@/stores/authStore";
 import FileIcon from "@/components/files/FileIcon";
 
 interface QuotedMessagePreviewProps {
@@ -28,6 +29,16 @@ interface QuotedMessagePreviewProps {
    * - 'message': In MessageBubble (quote display)
    */
   variant?: "input" | "message";
+
+  /**
+   * Whether this is displayed in own message (for styling)
+   */
+  isOwn?: boolean;
+
+  /**
+   * Whether this is first message in group (for border-radius matching)
+   */
+  isFirstInGroup?: boolean;
 }
 
 /**
@@ -44,6 +55,8 @@ export default function QuotedMessagePreview({
   onClose,
   onClick,
   variant = "message",
+  isOwn = false,
+  isFirstInGroup = true,
 }: QuotedMessagePreviewProps) {
   const isInputVariant = variant === "input";
 
@@ -66,6 +79,17 @@ export default function QuotedMessagePreview({
   // 🆕 v1.2.0 - Get thumbnail from shared cache (reuse from MessageImage)
   const getImageUrl = useImageCacheStore((state) => state.getImageUrl);
   const hasImage = useImageCacheStore((state) => state.hasImage);
+
+  // 🆕 v1.3.0 - Get current user ID for "Bạn" display
+  const currentUserId = useAuthStore((state) => state.user?.id);
+
+  // 🆕 v1.3.0 - Determine display name ("Bạn" if self)
+  // senderId comes from QuotedMessageData (reply store) or QuotedMessageDto (API)
+  const senderId = quotedMessage?.senderId;
+  const displayName =
+    senderId && senderId === currentUserId
+      ? "Bạn"
+      : quotedMessage?.senderName || "";
 
   useEffect(() => {
     if (!firstImage || !firstImage.fileId) {
@@ -138,15 +162,25 @@ export default function QuotedMessagePreview({
     );
   }
 
+  // Dynamic border-radius matching parent bubble's top corners
+  const borderRadiusClass = isInputVariant
+    ? "rounded-xl"
+    : isOwn
+      ? `rounded-xl ${!isFirstInGroup ? "rounded-tr-md" : ""}`
+      : `rounded-xl ${!isFirstInGroup ? "rounded-tl-md" : ""}`;
+
   return (
     <div
       onClick={onClick}
       className={`
-        group relative rounded-md border-l-3
+        group relative border-l-3 transition-colors
+        ${borderRadiusClass}
         ${
           isInputVariant
             ? "bg-gray-50 border-gray-200 border-l-brand-500 p-2"
-            : "bg-gray-50/80 border-gray-200 border-l-gray-400 p-2 mb-2"
+            : isOwn
+              ? "bg-white hover:bg-gray-50 border-gray-200 border-l-brand-300 py-2 px-2.5"
+              : "bg-white hover:bg-gray-50 border-gray-200 border-l-gray-400 py-2 px-2.5"
         }
         ${onClick ? "cursor-pointer" : ""}
       `}
@@ -161,22 +195,39 @@ export default function QuotedMessagePreview({
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-0.5">
         <div className="flex items-center gap-1 text-xs font-medium">
           <Quote
             size={14}
-            className={isInputVariant ? "text-gray-400" : "text-gray-500"}
+            className={
+              isInputVariant
+                ? "text-gray-400"
+                : isOwn
+                  ? "text-brand-600"
+                  : "text-gray-500"
+            }
             data-testid="quoted-preview-quote-icon"
           />
           <span
-            className={isInputVariant ? "text-gray-600" : "text-gray-700"}
+            className={
+              isInputVariant
+                ? "text-gray-600"
+                : isOwn
+                  ? "text-gray-800"
+                  : "text-gray-700"
+            }
             data-testid="quoted-preview-sender-name"
           >
-            {quotedMessage.senderName}
+            {displayName}
           </span>
-          {!isInputVariant && <span className="text-gray-400">•</span>}
           {!isInputVariant && (
-            <span className="text-gray-400" data-testid="quoted-preview-time">
+            <span className={isOwn ? "text-gray-400" : "text-gray-400"}>•</span>
+          )}
+          {!isInputVariant && (
+            <span
+              className={isOwn ? "text-gray-400" : "text-gray-400"}
+              data-testid="quoted-preview-time"
+            >
               {new Date(quotedMessage.sentAt).toLocaleTimeString("vi-VN", {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -205,7 +256,10 @@ export default function QuotedMessagePreview({
       <div className="flex gap-2 items-center">
         {/* Image Thumbnail Preview */}
         {firstImage && (
-          <div className="flex-shrink-0 relative w-[40px] h-[40px] rounded-lg overflow-hidden bg-gray-100">
+          <div
+            className={`flex-shrink-0 relative w-[40px] h-[40px] rounded-lg overflow-hidden ${isOwn ? "bg-gray-100" : "bg-gray-100"}`}
+          >
+            {" "}
             {thumbnailUrl ? (
               <img
                 src={thumbnailUrl}
@@ -215,12 +269,18 @@ export default function QuotedMessagePreview({
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
-                <Image size={16} className="text-gray-400" />
+                <Image
+                  size={16}
+                  className={isOwn ? "text-gray-400" : "text-gray-400"}
+                />
               </div>
             )}
-            {/* Multiple images badge */}
+            {/* Multiple images badge - 🆕 v1.3.0 centered overlay */}
             {images.length > 1 && (
-              <div className="absolute top-1 right-1 bg-black/60 text-white text-xs font-medium px-1.5 py-0.5 rounded">
+              <div
+                className="absolute inset-0 flex items-center justify-center bg-black/40 text-white text-sm font-bold rounded-lg"
+                data-testid="quoted-preview-image-badge"
+              >
                 +{images.length - 1}
               </div>
             )}
@@ -229,7 +289,9 @@ export default function QuotedMessagePreview({
 
         {/* File Icon Preview (only if no images) */}
         {!firstImage && firstFile && (
-          <div className="flex-shrink-0 flex items-center justify-center w-[40px] h-[40px] rounded-lg bg-gray-100">
+          <div
+            className={`flex-shrink-0 flex items-center justify-center w-[40px] h-[40px] rounded-lg ${isOwn ? "bg-gray-100" : "bg-gray-100"}`}
+          >
             <FileIcon
               contentType={firstFile.contentType || "application/octet-stream"}
               size="md"
@@ -239,10 +301,25 @@ export default function QuotedMessagePreview({
 
         {/* Content + File Info */}
         <div className="flex-1 min-w-0">
+          {/* 🆕 v1.3.0 - Image label when has images */}
+          {firstImage && (
+            <p
+              className={`text-xs italic ${isOwn ? "text-gray-500" : "text-gray-500"}`}
+              data-testid="quoted-preview-image-label"
+            >
+              Hình ảnh
+            </p>
+          )}
           <div
             className={`
               text-sm
-              ${isInputVariant ? "text-gray-600 line-clamp-2" : "text-gray-700 line-clamp-3"}
+              ${
+                isInputVariant
+                  ? "text-gray-600 line-clamp-2"
+                  : isOwn
+                    ? "text-gray-700 line-clamp-3"
+                    : "text-gray-700 line-clamp-3"
+              }
             `}
             data-testid="quoted-preview-content"
           >
@@ -251,7 +328,9 @@ export default function QuotedMessagePreview({
 
           {/* File info text */}
           {attachments.length > 0 && (
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p
+              className={`text-xs mt-0.5 ${isOwn ? "text-gray-500" : "text-gray-500"}`}
+            >
               {firstImage && files.length > 0
                 ? `và ${files.length} tệp đính kèm`
                 : !firstImage && firstFile

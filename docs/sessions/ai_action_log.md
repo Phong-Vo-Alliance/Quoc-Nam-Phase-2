@@ -5,14 +5,297 @@
 
 ---
 
+## [2026-02-24 17:30] Session: Fix Receive Info System Message Integration (CHAT-026)
+
+### Context:
+
+System message không xuất hiện khi click "Tiếp nhận thông tin" vì integration trước đó nằm sai file (`PortalWireframes.tsx` là wireframe/demo, không phải production code). Actual production flow sử dụng `ChatMainContainer.tsx`.
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                                                   | Result                |
+| --- | ----- | ------ | ------------------------------------------------------------------------- | --------------------- |
+| 1   | 17:24 | MODIFY | src/features/portal/components/chat/ChatMainContainer.tsx                 | ✅ Added import       |
+| 2   | 17:25 | MODIFY | src/features/portal/components/chat/ChatMainContainer.tsx                 | ✅ Updated handler    |
+| 3   | 17:26 | MODIFY | src/utils/receiveInfoMessage.ts                                           | ✅ Support both types |
+| 4   | 17:28 | RUN    | npx vitest run src/utils/receiveInfoMessage.test.ts                       | ✅ 34 tests passed    |
+| 5   | 17:30 | MODIFY | docs/modules/chat/features/receive-info-system-message/\_changelog.md     | ✅ Updated docs       |
+| 6   | 17:30 | MODIFY | docs/modules/chat/features/receive-info-system-message/00_README.md       | ✅ Updated docs       |
+| 7   | 17:30 | MODIFY | docs/modules/chat/features/receive-info-system-message/01_requirements.md | ✅ Updated docs       |
+
+### Root Cause Analysis:
+
+- `PortalWireframes.tsx` is a **wireframe/demo** page, NOT used in production
+- Actual "Tiếp nhận thông tin" button uses `useCreateInformationConfirmed` hook in `ChatMainContainer.tsx`
+- The `handleConfirmInfo` callback (line ~1520) was calling mutation without sending system message
+
+### Fix Applied:
+
+**`ChatMainContainer.tsx`:**
+
+1. Added import: `buildReceiveInfoContent` from `@/utils/receiveInfoMessage`
+2. Modified `handleConfirmInfo` callback:
+   - Extract receiver name from `user.fullName || user.identifier`
+   - Build system message using `buildReceiveInfoContent(message, receiverName, new Date())`
+   - Add `onSuccess` callback to `createConfirmedInfoMutation.mutate()` that sends system message via `sendMessageMutation.mutate({ messageType: "SYS" })`
+
+**`receiveInfoMessage.ts`:**
+
+1. Added import: `ChatMessage`, `AttachmentDto` from `@/types/messages`
+2. Added `normalizeAttachment()` helper to handle both `FileAttachment.name` and `AttachmentDto.fileName`
+3. Updated `isImageAttachment()` to accept both types
+4. Updated `getMessageContentDescription()` to accept both `Message` and `ChatMessage`
+5. Updated `buildReceiveInfoContent()` to accept both types, with optional timestamp (defaults to `new Date()`)
+
+### Commands Executed:
+
+```bash
+npm test -- --run src/utils/receiveInfoMessage.test.ts
+# Result: 34 tests passed
+```
+
+---
+
+## [2026-02-24 17:20] Session: Implement Receive Info System Message (CHAT-026)
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                             | Result             |
+| --- | ----- | ------ | --------------------------------------------------- | ------------------ |
+| 1   | 17:12 | CREATE | src/utils/receiveInfoMessage.ts                     | ✅                 |
+| 2   | 17:15 | CREATE | src/utils/receiveInfoMessage.test.ts                | ✅                 |
+| 3   | 17:17 | RUN    | npx vitest run src/utils/receiveInfoMessage.test.ts | ✅ 34 tests passed |
+| 4   | 17:19 | MODIFY | src/features/portal/PortalWireframes.tsx            | ✅                 |
+
+### Commands Executed:
+
+```bash
+npx vitest run src/utils/receiveInfoMessage.test.ts
+# Result: 34 tests passed
+```
+
+### Summary of Changes:
+
+**New Files:**
+
+- `src/utils/receiveInfoMessage.ts` - Utility function `buildReceiveInfoContent()` that builds system message content based on message type (text/file/image/mixed)
+- `src/utils/receiveInfoMessage.test.ts` - 34 unit tests covering all cases
+
+**Modified Files:**
+
+- `src/features/portal/PortalWireframes.tsx`:
+  - Added imports: `sendMessage`, `buildReceiveInfoContent`, `SendChatMessageRequest`
+  - Updated `handleReceiveInfo` to be async
+  - Replaced local message creation with API call (`sendMessage` with `messageType: "SYS"`)
+  - SignalR will broadcast the message to all members (no local add needed)
+  - Error handling: failure to send system message doesn't block receive info action
+
+### HUMAN Decisions Applied:
+
+- Max text length: **60 ký tự**
+- Time format: **24h (hh:mm)**
+- Priority: **text over attachments**
+- Duplicate: **block**
+
+---
+
+## [2026-02-24 19:10] Session: Update Receive Info System Message - Scope Clarification
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                                                   | Result |
+| --- | ----- | ------ | ------------------------------------------------------------------------- | ------ |
+| 1   | 19:10 | MODIFY | docs/modules/chat/features/receive-info-system-message/01_requirements.md | ✅     |
+| 2   | 19:10 | MODIFY | docs/modules/chat/features/receive-info-system-message/00_README.md       | ✅     |
+
+### Commands Executed:
+
+```bash
+# (none - documentation update only)
+```
+
+### Notes:
+
+- **Scope Clarification**: GIỮ NGUYÊN toàn bộ logic hiện tại, chỉ BỔ SUNG gửi system message
+- Added "⚠️ Scope Quan Trọng" section to requirements
+- Listed what NOT to change vs what to ADD
+
+---
+
+## [2026-02-24 19:00] Session: Create Receive Info System Message Feature Docs
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                                                   | Result |
+| --- | ----- | ------ | ------------------------------------------------------------------------- | ------ |
+| 1   | 19:00 | CREATE | docs/modules/chat/features/receive-info-system-message/00_README.md       | ✅     |
+| 2   | 19:01 | CREATE | docs/modules/chat/features/receive-info-system-message/01_requirements.md | ✅     |
+| 3   | 19:02 | CREATE | docs/modules/chat/features/receive-info-system-message/\_changelog.md     | ✅     |
+
+### Commands Executed:
+
+```bash
+# (none - documentation creation only)
+```
+
+### Notes:
+
+- **Feature Request**: Tạo system message khi tiếp nhận thông tin (tương tự giao task)
+- **Format**: `"[Nội dung]" đã được tiếp nhận bởi [tên] lúc [hh:mm]`
+- **Content Logic** for different message types:
+  - Text: content (truncate if > 40 chars)
+  - Single file: file name
+  - Multiple files: first file + "và [n-1] tài liệu khác"
+  - Single image: image name
+  - Multiple images: first image + "và [n-1] ảnh khác"
+  - Mixed: first item + "[n-1] tài liệu và ảnh khác"
+- **Pending HUMAN Decisions**: max length, time format, text vs attachment priority, duplicate handling
+
+---
+
+## [2026-02-24 18:30] Session: Remove DM Name Transformation (API Fix)
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                                   | Result |
+| --- | ----- | ------ | --------------------------------------------------------- | ------ |
+| 1   | 18:20 | MODIFY | src/features/portal/components/chat/ChatHeader.tsx        | ✅     |
+| 2   | 18:22 | MODIFY | src/features/portal/components/chat/ChatMainContainer.tsx | ✅     |
+| 3   | 18:24 | MODIFY | src/features/portal/workspace/ConversationListSidebar.tsx | ✅     |
+| 4   | 18:26 | MODIFY | src/types/conversations.ts                                | ✅     |
+| 5   | 18:28 | MODIFY | docs/bugfixes/dm-chat-issues-20260224/00_README.md        | ✅     |
+
+### Commands Executed:
+
+```bash
+# (none - code changes only)
+```
+
+### Notes:
+
+- **API FIX REQUESTED**: User requested backend API to return correct DM name directly
+- **Frontend Simplification**: Removed all DM name transformation logic
+- **Changes:**
+  1. **ChatHeader.tsx**: Removed `getDisplayName()`, simplified `headerDisplayName`
+  2. **ChatMainContainer.tsx**: Removed `getDisplayName()`, use `conversationName` directly
+  3. **ConversationListSidebar.tsx**: Removed `getDMDisplayName()` import and usage
+  4. **conversations.ts**: Removed `getDMDisplayName()` function
+  5. **00_README.md**: Updated to reflect API-side fix approach
+- **TypeScript**: All files compile without errors
+
+---
+
+## [2026-02-24 17:45] Session: DM Chat Issues Debug Fix
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                                   | Result |
+| --- | ----- | ------ | --------------------------------------------------------- | ------ |
+| 1   | 17:30 | MODIFY | src/features/portal/components/chat/ChatMainContainer.tsx | ✅     |
+| 2   | 17:35 | MODIFY | src/features/portal/components/chat/ChatHeader.tsx        | ✅     |
+| 3   | 17:40 | MODIFY | src/features/portal/components/Avatar.tsx                 | ✅     |
+
+### Commands Executed:
+
+```bash
+npx tsc --noEmit # Verified no TypeScript errors
+```
+
+### Notes:
+
+- **DEBUG FIX**: User reported fixes not working after initial implementation
+- **Root cause**: Login API does NOT return `fullName`, so comparison with DM name always failed
+- **Changes:**
+  1. **ChatMainContainer.tsx**: Improved getDisplayName with better fallback (show first name instead of ugly full format)
+  2. **ChatHeader.tsx**: Same fix for getDisplayName + pass conversationType to Avatar
+  3. **Avatar.tsx**: Added `conversationType` prop, show 2 initials for DM (last 2 words' first chars)
+- **TypeScript**: All files compile without errors
+
+---
+
+## [2026-02-24 16:00] Session: DM Chat Issues Implementation
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                                   | Result |
+| --- | ----- | ------ | --------------------------------------------------------- | ------ |
+| 1   | 16:00 | MODIFY | docs/bugfixes/dm-chat-issues-20260224/00_README.md        | ✅     |
+| 2   | 16:00 | MODIFY | docs/bugfixes/dm-chat-issues-20260224/01_analysis.md      | ✅     |
+| 3   | 16:05 | CREATE | src/hooks/useDirectsRealtime.ts                           | ✅     |
+| 4   | 16:10 | MODIFY | src/features/portal/components/chat/ChatHeader.tsx        | ✅     |
+| 5   | 16:15 | MODIFY | src/features/portal/components/ConversationItem.tsx       | ✅     |
+| 6   | 16:20 | MODIFY | src/features/portal/workspace/ConversationListSidebar.tsx | ✅     |
+
+### Commands Executed:
+
+```bash
+# (none - code changes only)
+```
+
+### Notes:
+
+- **APPROVED by HUMAN (MINH ĐÃ DUYỆT)**
+- Implemented fixes for 5 DM chat issues:
+
+1. **Unread count + LastMessage preview**: Created `useDirectsRealtime.ts` hook
+   - Separate from `useCategoriesRealtime` to avoid affecting GROUP logic
+   - Handles MESSAGE_SENT and MESSAGE_READ for DMs only
+   - Updates `conversationKeys.directs()` cache (not categories)
+
+2. **ChatHeader DM display**: Fixed `getDisplayName()` function
+   - Now accepts `currentUserName` parameter
+   - Compares with both parts of "DM: User1 <> User2" to find OTHER user
+   - Falls back to first part if can't determine
+
+3. **Avatar initials for DM**: Fixed `getAvatarInitials()` function
+   - DM: Uses first char of last 2 words (e.g., "Ngọc Minh" → "NM")
+   - GROUP: Unchanged, still uses first char only
+
+4. **Integration**: Added `useDirectsRealtime` call in ConversationListSidebar
+
+- **GROUP logic 100% UNCHANGED** - All changes are DM-specific with type checks
+
+---
+
+## [2026-02-24 15:00] Session: DM Chat Issues Analysis
+
+### Actions Performed:
+
+| #   | Time  | Action | File(s)                                              | Result |
+| --- | ----- | ------ | ---------------------------------------------------- | ------ |
+| 1   | 15:00 | CREATE | docs/bugfixes/dm-chat-issues-20260224/00_README.md   | ✅     |
+| 2   | 15:05 | CREATE | docs/bugfixes/dm-chat-issues-20260224/01_analysis.md | ✅     |
+| 3   | 15:10 | MODIFY | docs/bugfixes/dm-chat-issues-20260224/00_README.md   | ✅     |
+| 4   | 15:10 | MODIFY | docs/bugfixes/dm-chat-issues-20260224/01_analysis.md | ✅     |
+
+### Commands Executed:
+
+```bash
+# (none - analysis only)
+```
+
+### Notes:
+
+- Created analysis documentation for 5 DM chat issues:
+  1. Unread count not showing for DMs
+  2. LastMessage preview not updating
+  3. ChatHeader showing full "DM: User1 <> User2" format
+  4. Conversation list UI inconsistency
+  5. Avatar using first letter instead of last 2 letters
+- Root cause identified: `useCategoriesRealtime` only handles GROUP, missing DM handling
+- Recommended: Create new `useDirectsRealtime.ts` hook
+- **Status:** Awaiting HUMAN approval before implementation
+
+---
+
 ## [2026-02-13 10:45] Session: Restore Confirmed Info Integration
 
 ### Actions Performed:
 
-| #   | Time  | Action | File(s) | Result |
-| --- | ----- | ------ | ------- | ------ |
-| 1   | 10:45 | MODIFY | src/features/conversation-detail/ConversationDetailPanel.tsx | ✅ |
-| 2   | 10:50 | MODIFY | src/features/conversation-detail/components/TasksTab/LeaderMode/LeaderModeContent.tsx | ✅ |
+| #   | Time  | Action | File(s)                                                                               | Result |
+| --- | ----- | ------ | ------------------------------------------------------------------------------------- | ------ |
+| 1   | 10:45 | MODIFY | src/features/conversation-detail/ConversationDetailPanel.tsx                          | ✅     |
+| 2   | 10:50 | MODIFY | src/features/conversation-detail/components/TasksTab/LeaderMode/LeaderModeContent.tsx | ✅     |
 
 ### Commands Executed:
 
@@ -37,9 +320,9 @@
 
 ### Actions Performed:
 
-| #   | Time  | Action | File(s) | Result |
-| --- | ----- | ------ | ------- | ------ |
-| 1   | 10:30 | MODIFY | src/features/portal/workspace/ConversationDetailPanel.tsx | ✅ |
+| #   | Time  | Action | File(s)                                                   | Result |
+| --- | ----- | ------ | --------------------------------------------------------- | ------ |
+| 1   | 10:30 | MODIFY | src/features/portal/workspace/ConversationDetailPanel.tsx | ✅     |
 
 ### Commands Executed:
 
@@ -57,20 +340,20 @@
 
 ### Actions Performed:
 
-| #   | Time  | Action | File(s) | Result |
-| --- | ----- | ------ | ------- | ------ |
-| 1   | 14:00 | CREATE | docs/modules/chat/features/direct-message-notifications/00_README.md | ✅ |
-| 2   | 14:05 | CREATE | docs/modules/chat/features/direct-message-notifications/01_requirements.md | ✅ |
-| 3   | 14:10 | CREATE | docs/modules/chat/features/direct-message-notifications/03_api-contract.md | ✅ |
-| 4   | 14:15 | CREATE | docs/modules/chat/features/direct-message-notifications/04_implementation-plan.md | ✅ |
-| 5   | 14:20 | CREATE | docs/modules/chat/features/direct-message-notifications/06_testing.md | ✅ |
-| 6   | 15:00 | CREATE | src/hooks/useTabTitle.ts | ✅ |
-| 7   | 15:10 | CREATE | src/hooks/__tests__/useTabTitle.test.tsx | ✅ |
-| 8   | 15:20 | MODIFY | src/hooks/useConversationRealtime.ts (add toast notification) | ✅ |
-| 9   | 15:25 | MODIFY | src/features/portal/PortalWireframes.tsx (integrate useTabTitle) | ✅ |
-| 10  | 15:30 | MODIFY | src/hooks/__tests__/useConversationRealtime.test.tsx (add toast tests) | ✅ |
-| 11  | 16:00 | MODIFY | src/hooks/__tests__/useTabTitle.test.tsx (fix mocking strategy) | ✅ |
-| 12  | 17:00 | CREATE | docs/modules/chat/features/direct-message-notifications/07_implementation-complete.md | ✅ |
+| #   | Time  | Action | File(s)                                                                               | Result |
+| --- | ----- | ------ | ------------------------------------------------------------------------------------- | ------ |
+| 1   | 14:00 | CREATE | docs/modules/chat/features/direct-message-notifications/00_README.md                  | ✅     |
+| 2   | 14:05 | CREATE | docs/modules/chat/features/direct-message-notifications/01_requirements.md            | ✅     |
+| 3   | 14:10 | CREATE | docs/modules/chat/features/direct-message-notifications/03_api-contract.md            | ✅     |
+| 4   | 14:15 | CREATE | docs/modules/chat/features/direct-message-notifications/04_implementation-plan.md     | ✅     |
+| 5   | 14:20 | CREATE | docs/modules/chat/features/direct-message-notifications/06_testing.md                 | ✅     |
+| 6   | 15:00 | CREATE | src/hooks/useTabTitle.ts                                                              | ✅     |
+| 7   | 15:10 | CREATE | src/hooks/**tests**/useTabTitle.test.tsx                                              | ✅     |
+| 8   | 15:20 | MODIFY | src/hooks/useConversationRealtime.ts (add toast notification)                         | ✅     |
+| 9   | 15:25 | MODIFY | src/features/portal/PortalWireframes.tsx (integrate useTabTitle)                      | ✅     |
+| 10  | 15:30 | MODIFY | src/hooks/**tests**/useConversationRealtime.test.tsx (add toast tests)                | ✅     |
+| 11  | 16:00 | MODIFY | src/hooks/**tests**/useTabTitle.test.tsx (fix mocking strategy)                       | ✅     |
+| 12  | 17:00 | CREATE | docs/modules/chat/features/direct-message-notifications/07_implementation-complete.md | ✅     |
 
 ### Commands Executed:
 
@@ -90,10 +373,12 @@ npm test -- src/hooks/__tests__/useConversationRealtime.test.tsx --run
 ### Test Results:
 
 **useTabTitle Tests:**
+
 - ✅ 11/11 tests passing (100%)
 - Duration: 139ms
 
 **useConversationRealtime Toast Tests (new):**
+
 - ✅ TC-7.12: Shows toast for DM conversations
 - ✅ TC-7.13: No toast for group conversations
 - ✅ TC-7.14: Handles missing createdByName
@@ -148,9 +433,9 @@ npm test -- src/hooks/__tests__/useConversationRealtime.test.tsx --run
 
 ### Actions Performed:
 
-| #   | Time  | Action | File(s) | Result |
-| --- | ----- | ------ | ------- | ------ |
-| 1   | 14:30 | MODIFY | src/hooks/useConversationRealtime.ts | ✅ |
+| #   | Time  | Action | File(s)                              | Result |
+| --- | ----- | ------ | ------------------------------------ | ------ |
+| 1   | 14:30 | MODIFY | src/hooks/useConversationRealtime.ts | ✅     |
 
 ### Summary:
 
@@ -198,12 +483,12 @@ members: members, // Complete member data from API
 
 ### Actions Performed:
 
-| #   | Time  | Action | File(s) | Result |
-| --- | ----- | ------ | ------- | ------ |
-| 1   | 14:00 | MODIFY | src/lib/signalr.ts | ✅ |
-| 2   | 14:00 | MODIFY | src/hooks/useConversationRealtime.ts | ✅ |
-| 3   | 14:01 | MODIFY | src/hooks/__tests__/useConversationRealtime.test.tsx | ✅ |
-| 4   | 14:02 | CREATE | docs/sessions/CONVERSATION_CREATED_HANDLER_20260205.md | ✅ |
+| #   | Time  | Action | File(s)                                                | Result |
+| --- | ----- | ------ | ------------------------------------------------------ | ------ |
+| 1   | 14:00 | MODIFY | src/lib/signalr.ts                                     | ✅     |
+| 2   | 14:00 | MODIFY | src/hooks/useConversationRealtime.ts                   | ✅     |
+| 3   | 14:01 | MODIFY | src/hooks/**tests**/useConversationRealtime.test.tsx   | ✅     |
+| 4   | 14:02 | CREATE | docs/sessions/CONVERSATION_CREATED_HANDLER_20260205.md | ✅     |
 
 ### Summary:
 
@@ -225,7 +510,7 @@ members: members, // Complete member data from API
 
 3. **Added Unit Tests** (`src/hooks/__tests__/useConversationRealtime.test.tsx`)
    - TC-7.9: Adds group conversation to categories cache
-   - TC-7.10: Adds DM conversation to directs cache  
+   - TC-7.10: Adds DM conversation to directs cache
    - TC-7.11: Invalidates cache when cache doesn't exist
 
 #### Technical Details:
@@ -256,6 +541,7 @@ members: members, // Complete member data from API
 ### Commits Made:
 
 <<<<<<< Updated upstream
+
 - Pending (ready to commit)
 
 ### Feature Summary:
@@ -278,6 +564,7 @@ members: members, // Complete member data from API
 **Test Pass Rate:** 100% (12/12)  
 **Ready for Deployment:** ✅ YES
 =======
+
 - N/A (ready for commit)
 
 ### Notes:
@@ -286,7 +573,7 @@ members: members, // Complete member data from API
 - Manual testing required to verify with actual SignalR events from backend
 - The auto-join logic is already in place - no additional changes needed
 - All TypeScript compilation successful with no errors
->>>>>>> Stashed changes
+  > > > > > > > Stashed changes
 
 ---
 

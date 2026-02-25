@@ -141,6 +141,8 @@ export function AssignTaskSheet({
       onTabChange?.("order");
 
       // Send system message about task creation
+      // Note: No need to invalidateQueries - SignalR MESSAGE_SENT event
+      // will automatically add the SYS message to cache via useMessageRealtime
       if (conversationId) {
         try {
           // Find assigned user's name
@@ -151,10 +153,12 @@ export function AssignTaskSheet({
             assignedMember?.userInfo?.fullName ||
             assignedMember?.userName ||
             "người dùng";
+          const creatorName =
+            currentUser?.fullName || currentUser?.identifier || "người dùng";
 
           const systemMessageData: SendChatMessageRequest = {
             conversationId,
-            content: `Công việc "${formData.title}" đã được tạo và giao cho ${assignedUserName}`,
+            content: `Công việc "${formData.title}" đã được tạo bởi ${creatorName} và giao cho ${assignedUserName}`,
             messageType: "SYS", // System message type
           };
           await sendMessage(systemMessageData);

@@ -45,6 +45,7 @@ import QuotedMessagePreview from "./QuotedMessagePreview"; // 🆕 NEW: Quoted m
 import { EmptyCategoryState } from "./EmptyCategoryState"; // 🆕 NEW (CBN-002)
 import MessageDateSeparator from "@/components/chat/MessageDateSeparator"; // 🆕 NEW: Date separators
 import { formatDateSeparator } from "@/utils/formatDateSeparator"; // 🆕 NEW: Date formatting
+import { buildReceiveInfoContent } from "@/utils/receiveInfoMessage"; // 🆕 NEW: System message for receive info
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import {
   RefreshCw,
@@ -283,6 +284,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       chatHub.setCurrentConversation(null);
     };
   }, [conversationId]);
+
+  // 🆕 v1.3.0: Clear reply state when switching conversations
+  useEffect(() => {
+    clearReply();
+  }, [conversationId, clearReply]);
 
   // 🐛 FIX: Save to localStorage when internal state changes (user action)
   const isFirstCategoryMountRef = useRef(true);
@@ -1391,6 +1397,74 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     e.target.value = "";
   };
 
+  // 🆕 v1.3.0: Handle paste image from clipboard
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent) => {
+      const clipboardItems = event.clipboardData?.items;
+      if (!clipboardItems) return;
+
+      const imageItems = Array.from(clipboardItems).filter((item) =>
+        item.type.startsWith("image/"),
+      );
+
+      if (imageItems.length === 0) return;
+
+      // Prevent default paste behavior for images
+      event.preventDefault();
+
+      // Check file limits
+      const currentCount = selectedFiles.length;
+      const remainingSlots = MAX_FILES_PER_MESSAGE - currentCount;
+
+      if (remainingSlots === 0) {
+        toast.error(
+          `Đã đủ ${MAX_FILES_PER_MESSAGE} file. Vui lòng xóa file cũ để paste ảnh mới.`,
+        );
+        return;
+      }
+
+      // Convert clipboard items to files
+      const newFiles: SelectedFile[] = [];
+      const timestamp = Date.now();
+
+      imageItems.slice(0, remainingSlots).forEach((item, index) => {
+        const file = item.getAsFile();
+        if (!file) return;
+
+        // Check file size (max 10MB per file as per PENDING DECISIONS)
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(`Ảnh vượt quá 10MB. Vui lòng chọn ảnh nhỏ hơn.`);
+          return;
+        }
+
+        // Create a File with custom name (clipboard-{timestamp}.png as per PENDING DECISIONS)
+        const extension = file.type.split("/")[1] || "png";
+        const customName = `clipboard-${timestamp}${index > 0 ? `-${index}` : ""}.${extension}`;
+
+        // Create new File object with custom name
+        const renamedFile = new File([file], customName, { type: file.type });
+
+        newFiles.push({
+          id: `paste-${timestamp}-${index}`,
+          file: renamedFile,
+          preview: URL.createObjectURL(renamedFile),
+        });
+      });
+
+      if (newFiles.length > 0) {
+        setSelectedFiles((prev) => [...prev, ...newFiles]);
+        toast.success(`Đã paste ${newFiles.length} ảnh`);
+
+        // Auto-focus input after paste
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 0);
+      }
+    },
+    [selectedFiles.length],
+  );
+
   // Handle remove file
   const handleRemoveFile = (fileId: string) => {
     setSelectedFiles((prev) => {
@@ -1524,16 +1598,43 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       )?.message;
       if (!message || !user?.id) return;
 
+      // Build system message content using utility function
+      const receiverName =
+        user.fullName || user.identifier || "Người tiếp nhận";
+      const systemMessageContent = buildReceiveInfoContent(
+        message,
+        receiverName,
+        new Date(),
+      );
+
       // Create confirmed information
-      createConfirmedInfoMutation.mutate({
-        conversationId,
-        messageId,
-        content: message.content || message.attachments?.[0]?.fileName || "",
-        statusCode: "pending",
-        confirmedBy: user.id,
-      });
+      createConfirmedInfoMutation.mutate(
+        {
+          conversationId,
+          messageId,
+          content: message.content || message.attachments?.[0]?.fileName || "",
+          statusCode: "pending",
+          confirmedBy: user.id,
+        },
+        {
+          onSuccess: () => {
+            // 🆕 NEW: Send system message after successful confirmation
+            sendMessageMutation.mutate({
+              conversationId,
+              content: systemMessageContent,
+              messageType: "SYS",
+            });
+          },
+        },
+      );
     },
-    [conversationId, groupedMessages, user?.id, createConfirmedInfoMutation],
+    [
+      conversationId,
+      groupedMessages,
+      user,
+      createConfirmedInfoMutation,
+      sendMessageMutation,
+    ],
   );
 
   // 🆕 NEW: Scroll to quoted message (Quote Reply feature - 2026-02-04)
@@ -1554,32 +1655,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     [scrollToAndHighlight],
   );
 
-  // Get display name from DM format
-  const getDisplayName = (name: string) => {
-    if (conversationType === "DM") {
-      // Format: "DM: UserA <> UserB"
-      // We need to show the OTHER user's name (not current user)
-      const cleaned = name.replace(/^DM:\s*/, "");
-      const [user1, user2] = cleaned.split(" <> ");
-
-      // Get current user's identifier
-      const currentUserIdentifier = user?.identifier || "";
-
-      // Compare both users with current user (trim whitespace)
-      const isUser1Current = user1?.trim() === currentUserIdentifier?.trim();
-      const isUser2Current = user2?.trim() === currentUserIdentifier?.trim();
-
-      // Return the user that is NOT the current user
-      if (isUser1Current) {
-        return user2?.trim() || user1?.trim() || cleaned;
-      } else if (isUser2Current) {
-        return user1?.trim() || user2?.trim() || cleaned;
-      }
-
-      return user1?.trim() || cleaned;
-    }
-    return name;
-  };
+  // API returns correct name directly, no transformation needed
 
   // Translate status to Vietnamese
   const translateStatus = (status: string): string => {
@@ -1612,7 +1688,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     return parts.join(" • ");
   };
 
-  const displayName = getDisplayName(conversationName);
+  const displayName = conversationName;
 
   // Format status line
   const isDirect = conversationType === "DM";
@@ -1879,8 +1955,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                       setPreviewFileId(images[initialIndex]?.fileId || null);
                     }}
                     onToggleStar={onToggleStar}
-                    onCreateTask={handleCreateTask}
-                    onConfirmInfo={handleConfirmInfo}
+                    // DM conversations don't have task creation buttons
+                    onCreateTask={isDirect ? undefined : handleCreateTask}
+                    onConfirmInfo={isDirect ? undefined : handleConfirmInfo}
                     hasConfirmedInfo={confirmedMessageIds.has(message.id)}
                     onRetry={handleRetry}
                     onScrollToQuoted={handleScrollToQuoted}
@@ -1991,7 +2068,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       />
 
       {/* Input area */}
-      <div className="border-t p-3 shrink-0" data-testid="message-input">
+      <div
+        className="border-t p-3 shrink-0"
+        data-testid="message-input"
+        onPaste={handlePaste}
+      >
         <div className="flex items-center gap-2">
           {/* File upload button */}
           <Button

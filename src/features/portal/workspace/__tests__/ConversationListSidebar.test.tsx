@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { ConversationListSidebar } from "../ConversationListSidebar";
+import { ConversationListSidebar } from "@/features/conversation-list";
 import * as categoriesHook from "@/hooks/queries/useCategories";
 import * as directMessagesHook from "@/hooks/queries/useDirectMessages";
 import type { CategoryWithUnread } from "@/types/categories";

@@ -5,6 +5,7 @@ import type { AttachmentDto } from "@/types/messages";
  * Reply Store - Manage reply state for Quote Reply feature
  * Stores quoted message info when user activates reply mode
  *
+ * Updated 2026-02-25: Added senderId for "Bạn" display (v1.3.0)
  * Updated 2026-02-05: Added attachments support (v1.2.0)
  * - Include attachments array for preview rendering
  * Updated 2026-02-04: Changed to use QuotedMessageData (simplified structure)
@@ -14,6 +15,7 @@ import type { AttachmentDto } from "@/types/messages";
 
 export interface QuotedMessageData {
   id: string;
+  senderId: string; // 🆕 v1.3.0 - For "Bạn" display when replying to self
   senderName: string;
   content: string;
   sentAt: string;
@@ -40,9 +42,7 @@ export const useReplyStore = create<ReplyState>((set, get) => ({
 
   // Activate reply mode
   setReplyTarget: (data) => {
-    set({
-      replyTarget: data,
-    });
+    set({ replyTarget: data });
 
     // Call focus callback if available
     const callback = get()._focusInputCallback;
@@ -55,10 +55,7 @@ export const useReplyStore = create<ReplyState>((set, get) => ({
   },
 
   // Cancel reply mode
-  clearReply: () =>
-    set({
-      replyTarget: null,
-    }),
+  clearReply: () => set({ replyTarget: null }),
 
   // Set focus input callback (called by ChatMainContainer on mount)
   setFocusInputCallback: (callback) =>

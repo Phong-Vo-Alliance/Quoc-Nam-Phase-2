@@ -134,4 +134,60 @@ describe("messageGrouping", () => {
     expect(grouped[1].isFirstInGroup).toBe(false);
     expect(grouped[1].isLastInGroup).toBe(true);
   });
+
+  it("should NOT group system messages with regular messages from same sender", () => {
+    const messages = [
+      { senderId: "user1", timestamp: 1000, contentType: "SYS" },
+      { senderId: "user1", timestamp: 2000, contentType: "TXT" },
+    ];
+    const grouped = groupMessages(messages);
+
+    // System message should be standalone
+    expect(grouped[0].isFirstInGroup).toBe(true);
+    expect(grouped[0].isLastInGroup).toBe(true);
+
+    // Regular message should also be first in its own group
+    expect(grouped[1].isFirstInGroup).toBe(true);
+    expect(grouped[1].isLastInGroup).toBe(true);
+  });
+
+  it("should NOT group regular message followed by system message", () => {
+    const messages = [
+      { senderId: "user1", timestamp: 1000, contentType: "TXT" },
+      { senderId: "user1", timestamp: 2000, contentType: "SYS" },
+      { senderId: "user1", timestamp: 3000, contentType: "TXT" },
+    ];
+    const grouped = groupMessages(messages);
+
+    // First regular message - standalone (next is SYS)
+    expect(grouped[0].isFirstInGroup).toBe(true);
+    expect(grouped[0].isLastInGroup).toBe(true);
+
+    // System message - always standalone
+    expect(grouped[1].isFirstInGroup).toBe(true);
+    expect(grouped[1].isLastInGroup).toBe(true);
+
+    // Last regular message - standalone (prev is SYS)
+    expect(grouped[2].isFirstInGroup).toBe(true);
+    expect(grouped[2].isLastInGroup).toBe(true);
+  });
+
+  it("should still group regular messages from same sender", () => {
+    const messages = [
+      { senderId: "user1", timestamp: 1000, contentType: "TXT" },
+      { senderId: "user1", timestamp: 2000, contentType: "TXT" },
+      { senderId: "user1", timestamp: 3000, contentType: "TXT" },
+    ];
+    const grouped = groupMessages(messages);
+
+    // All should be grouped together
+    expect(grouped[0].isFirstInGroup).toBe(true);
+    expect(grouped[0].isLastInGroup).toBe(false);
+
+    expect(grouped[1].isFirstInGroup).toBe(false);
+    expect(grouped[1].isLastInGroup).toBe(false);
+
+    expect(grouped[2].isFirstInGroup).toBe(false);
+    expect(grouped[2].isLastInGroup).toBe(true);
+  });
 });

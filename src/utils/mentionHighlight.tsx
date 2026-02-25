@@ -1,10 +1,12 @@
 /**
  * Utility functions for highlighting mentions in message content
  * Uses mention metadata (startIndex, length) to highlight @mentions
+ * Also supports linkifying URLs in text segments
  */
 
 import React from "react";
 import type { MentionDto, MentionInputDto } from "@/types/messages";
+import { renderWithLinks } from "@/utils/linkify";
 
 // Union type for mentions (can be either from request or response)
 type MentionType = MentionDto | MentionInputDto;
@@ -93,12 +95,14 @@ export function parseMentions(
 }
 
 /**
- * Render message content with highlighted mentions
+ * Render message content with highlighted mentions and clickable links
  *
  * @param content - The message content string
  * @param mentions - Array of mention metadata from API
- * @param className - Additional CSS classes for mention highlights
- * @returns React nodes with highlighted mentions
+ * @param mentionClassName - Additional CSS classes for mention highlights
+ * @param enableLinks - Whether to make URLs clickable (default: true)
+ * @param linkClassName - CSS classes for links (default: blue for received messages)
+ * @returns React nodes with highlighted mentions and clickable links
  *
  * @example
  * ```tsx
@@ -106,7 +110,9 @@ export function parseMentions(
  *   {renderMessageWithMentions(
  *     message.content,
  *     message.mentions,
- *     "bg-blue-100 text-blue-800"
+ *     "bg-blue-100 text-blue-800",
+ *     true,
+ *     "text-blue-600 underline" // or "text-white/90 underline" for own messages
  *   )}
  * </p>
  * ```
@@ -115,10 +121,16 @@ export function renderMessageWithMentions(
   content: string | null | undefined,
   mentions: MentionType[] | null | undefined,
   mentionClassName?: string,
+  enableLinks: boolean = true,
+  linkClassName?: string,
 ): React.ReactNode {
   if (!content) return null;
 
   const segments = parseMentions(content, mentions);
+
+  // Default link class for received messages (blue)
+  const defaultLinkClass =
+    "text-blue-600 hover:text-blue-800 underline hover:no-underline cursor-pointer";
 
   return segments.map((segment, index) => {
     if (segment.type === "mention") {
@@ -140,6 +152,20 @@ export function renderMessageWithMentions(
         >
           {segment.content}
         </span>
+      );
+    }
+
+    // Text segment - render with clickable links if enabled
+    if (enableLinks) {
+      const linkElements = renderWithLinks(segment.content, {
+        linkClassName: linkClassName || defaultLinkClass,
+        truncate: true,
+        maxUrlLength: 40,
+        openInNewTab: true,
+      });
+
+      return (
+        <React.Fragment key={`text-${index}`}>{linkElements}</React.Fragment>
       );
     }
 

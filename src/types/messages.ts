@@ -171,6 +171,7 @@ export interface ParentMessagePreviewDto {
 export interface QuotedMessageDto {
   id: string;
   content: string;
+  senderId?: string; // 🆕 v1.3.0 - Optional, for "Bạn" display (pending API support)
   senderName: string;
   sentAt: string; // ISO datetime
   attachments?: AttachmentDto[]; // 🆕 v1.2.0 - Attachment preview in quote

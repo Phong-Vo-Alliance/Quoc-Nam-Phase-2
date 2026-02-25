@@ -121,38 +121,3 @@ export function isDirectConversation(
 ): conv is DirectConversation {
   return conv.type === "DM";
 }
-
-// =============================================================
-// Helper to extract display name from DM
-// Prefers using members array, falls back to parsing name format "DM: user1 <> user2"
-// =============================================================
-
-export function getDMDisplayName(
-  conversation: { name: string; members?: ConversationMember[] },
-  currentUserId?: string,
-): string {
-  // Priority 1: Use members array if available
-  if (conversation.members && conversation.members.length === 2 && currentUserId) {
-    const otherMember = conversation.members.find(m => m.userId !== currentUserId);
-    if (otherMember?.userInfo?.fullName) {
-      return otherMember.userInfo.fullName;
-    }
-  }
-
-  // Priority 2: Parse from name format "DM: user1 <> user2"
-  const dmName = conversation.name;
-  const cleaned = dmName.replace(/^DM:\s*/, "");
-  const parts = cleaned.split(" <> ");
-
-  if (parts.length !== 2) {
-    return cleaned; // Fallback to cleaned name
-  }
-
-  // Return the other user's name (not current user)
-  if (currentUserId) {
-    return parts[0] === currentUserId ? parts[1] : parts[0];
-  }
-
-  // If no current user provided, return first part
-  return parts[0];
-}

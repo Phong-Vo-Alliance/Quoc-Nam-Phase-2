@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { ConversationListSidebar } from "./ConversationListSidebar";
+import { ConversationListSidebar } from "@/features/conversation-list";
 import { ChatMessagePanel } from "./ChatMessagePanel";
 import { ConversationDetailPanel } from "@/features/conversation-detail";
 import { PinnedMessagesPanel } from "../components/PinnedMessagesPanel";
