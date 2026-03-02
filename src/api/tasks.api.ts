@@ -239,6 +239,7 @@ export const updateChecklistTemplate = async (
     description?: string | null;
     conversationId?: string;
     items?: Array<string>;
+    isDefault?: boolean;
   },
 ): Promise<any> => {
   const response = await taskApiClient.patch(

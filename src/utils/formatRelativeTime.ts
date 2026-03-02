@@ -1,4 +1,4 @@
-import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
+import { format, isYesterday } from "date-fns";
 import { vi } from "date-fns/locale";
 
 /**

@@ -95,6 +95,10 @@ interface LeaderModeContentProps {
   onOpenGroupTransfer?: (info: ReceivedInfo) => void;
   handleConfirmedInfoAssign?: (info: ReceivedInfo) => void;
   handleConfirmedInfoTransfer?: (info: ReceivedInfo) => void;
+
+  // Conversation context for system messages
+  conversationId?: string;
+  workspaceId?: string;
 }
 
 export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
@@ -149,6 +153,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
   onOpenGroupTransfer,
   handleConfirmedInfoAssign,
   handleConfirmedInfoTransfer,
+  conversationId,
+  workspaceId,
 }) => {
   return (
     <>
@@ -348,6 +354,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                       groupName={groupName}
                       checklistVariants={checklistVariants}
                       assigneeOptions={assigneeOptions}
+                      conversationId={conversationId}
+                      workspaceId={workspaceId}
                       onChangeStatus={onChangeTaskStatus}
                       onReassign={onReassignTask}
                       onToggleChecklist={onToggleChecklist}
@@ -387,6 +395,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                       groupName={groupName}
                       checklistVariants={checklistVariants}
                       assigneeOptions={assigneeOptions}
+                      conversationId={conversationId}
+                      workspaceId={workspaceId}
                       onChangeStatus={onChangeTaskStatus}
                       onReassign={onReassignTask}
                       onToggleChecklist={onToggleChecklist}
@@ -428,6 +438,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                       groupName={groupName}
                       checklistVariants={checklistVariants}
                       assigneeOptions={assigneeOptions}
+                      conversationId={conversationId}
+                      workspaceId={workspaceId}
                       onChangeStatus={onChangeTaskStatus}
                       onReassign={onReassignTask}
                       onToggleChecklist={onToggleChecklist}
@@ -475,6 +487,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                         groupName={groupName}
                         checklistVariants={checklistVariants}
                         assigneeOptions={assigneeOptions}
+                        conversationId={conversationId}
+                        workspaceId={workspaceId}
                         onChangeStatus={onChangeTaskStatus}
                         onReassign={onReassignTask}
                         onToggleChecklist={onToggleChecklist}
@@ -769,6 +783,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                       groupName={groupName}
                       checklistVariants={checklistVariants}
                       assigneeOptions={assigneeOptions}
+                      conversationId={conversationId}
+                      workspaceId={workspaceId}
                       onChangeStatus={onChangeTaskStatus}
                       onReassign={onReassignTask}
                       onToggleChecklist={onToggleChecklist}
@@ -812,6 +828,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                       groupName={groupName}
                       checklistVariants={checklistVariants}
                       assigneeOptions={assigneeOptions}
+                      conversationId={conversationId}
+                      workspaceId={workspaceId}
                       onChangeStatus={onChangeTaskStatus}
                       onReassign={onReassignTask}
                       onToggleChecklist={onToggleChecklist}
@@ -857,6 +875,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                       groupName={groupName}
                       checklistVariants={checklistVariants}
                       assigneeOptions={assigneeOptions}
+                      conversationId={conversationId}
+                      workspaceId={workspaceId}
                       onChangeStatus={onChangeTaskStatus}
                       onReassign={onReassignTask}
                       onToggleChecklist={onToggleChecklist}

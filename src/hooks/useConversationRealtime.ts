@@ -139,15 +139,9 @@ export function useConversationRealtime(
           // Update cache
           queryClient.setQueryData(categoriesKeys.list(), updatedCategories);
 
-          console.log(
-            `✅ [Realtime] Added group conversation ${conversationId} to category ${targetCategoryId}`,
-          );
         } else {
           // If no categories data or conversation has no category, refetch
           queryClient.invalidateQueries({ queryKey: categoriesKeys.all });
-          console.log(
-            `🔄 [Realtime] Invalidating categories for new conversation ${conversationId}`,
-          );
         }
       } else {
         // For direct messages: Add to directs cache
@@ -212,9 +206,6 @@ export function useConversationRealtime(
               pages: updatedPages,
             });
 
-            console.log(
-              `✅ [Realtime] Added direct conversation ${conversationId} to directs list with ${members.length} members`,
-            );
           } catch (error) {
             console.error(
               `❌ [Realtime] Failed to fetch members for conversation ${conversationId}:`,
@@ -230,9 +221,6 @@ export function useConversationRealtime(
           queryClient.invalidateQueries({
             queryKey: conversationKeys.directs(),
           });
-          console.log(
-            `🔄 [Realtime] Invalidating directs for new conversation ${conversationId}`,
-          );
         }
       }
     },

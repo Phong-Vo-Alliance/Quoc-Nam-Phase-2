@@ -557,17 +557,10 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
   // Helper: handle DM selection
   const handleDirectSelect = (dm: DirectConversation) => {
-    console.log("[DirectSelect] Selecting DM:", {
-      id: dm.id,
-      name: dm.name,
-      type: dm.type,
-    });
-
     onSelectChat({ type: "dm", id: dm.id, name: dm.name });
 
     // Phase 6: Save selected conversation to localStorage
     saveSelectedConversation(dm.id);
-    console.log("[DirectSelect] Saved to localStorage:", dm.id);
 
     // Clear category since DMs don't have categories
     saveSelectedCategory("");
@@ -576,20 +569,10 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   // Helper: handle creating new DM conversation with department member
   const handleCreateConversation = async (contact: ContactItem) => {
     try {
-      console.log(
-        "[CreateConversation] Creating conversation with:",
-        contact.userId,
-      );
-
       // Create the conversation
       const newConversation = await createDMMutation.mutateAsync({
         recipientId: contact.userId,
       });
-
-      console.log(
-        "[CreateConversation] Conversation created:",
-        newConversation,
-      );
 
       // Convert ConversationDto to DirectConversation format
       const directConversation: DirectConversation = {
@@ -684,10 +667,6 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
         const savedGroup = apiGroups.find((g) => g.id === savedConversationId);
 
         if (savedGroup) {
-          console.log(
-            "[ConversationRestore] Restoring GROUP:",
-            savedGroup.name,
-          );
           // 🐛 FIX: Prioritize savedCategoryId from localStorage
           // Verify conversation belongs to saved category
           let category = savedCategoryId

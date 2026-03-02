@@ -22,6 +22,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { LinearTabs } from "../LinearTabs";
+import { MessageSearchBar } from "./MessageSearchBar"; // 🆕 NEW: Message search
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers"; // 🆕 NEW: Self-fetch members
 import { useAuthStore } from "@/stores/authStore"; // 🆕 NEW: Get current user ID for DM filtering
 import type { ConversationInfoDto } from "@/types/categories";
@@ -50,6 +51,9 @@ interface ChatHeaderProps {
   categoryConversations?: ConversationInfoDto[];
   /** Callback when user switches conversation */
   onChangeConversation?: (conversationId: string) => void;
+
+  // 🆕 NEW: Message search
+  onSearchSelectMessage?: (messageId: string) => void;
 }
 
 /**
@@ -90,6 +94,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   // 🆕 NEW (CBN-002): Category-based navigation props
   categoryConversations,
   onChangeConversation,
+
+  // 🆕 NEW: Message search
+  onSearchSelectMessage,
 }) => {
   // 🆕 Get current user info for DM member filtering
   const currentUser = useAuthStore((state) => state.user);
@@ -230,7 +237,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       </div>
 
       {/* Header actions */}
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
+        {/* Message search */}
+        {conversationId && onSearchSelectMessage && (
+          <MessageSearchBar
+            conversationId={conversationId}
+            onSelectMessage={onSearchSelectMessage}
+          />
+        )}
+
         {/* Menu button */}
         {/* <Popover>
           <PopoverTrigger asChild>
@@ -285,19 +300,18 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
         {/* Toggle right panel button */}
         {onToggleRightPanel && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
+          <button
+            className="h-8 w-8 p-0 shrink-0 flex items-center justify-center rounded-full hover:bg-brand-50 transition-colors"
             onClick={onToggleRightPanel}
             data-testid="chat-header-toggle-panel-button"
+            type="button"
           >
             {showRightPanel ? (
-              <PanelRightClose className="h-5 w-5 text-gray-600" />
+              <PanelRightClose className="!h-4 !w-4 text-brand-600" />
             ) : (
-              <PanelRightOpen className="h-5 w-5 text-gray-600" />
+              <PanelRightOpen className="!h-4 !w-4 text-brand-600" />
             )}
-          </Button>
+          </button>
         )}
       </div>
     </div>

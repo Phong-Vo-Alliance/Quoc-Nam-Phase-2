@@ -140,8 +140,9 @@ export function useCategoriesRealtime(
         content,
         sentAt,
         attachments,
+        parentMessageId,
+        parentMessageContent,
       } = message;
-
       queryClient.setQueryData<CategoryWithUnread[]>(
         categoriesKeys.list(),
         (oldData) => {
@@ -176,6 +177,8 @@ export function useCategoriesRealtime(
                   content,
                   sentAt,
                   attachments,
+                  parentMessageId: message.parentMessageId || null,
+                  parentMessageContent: message.parentMessageContent || null,
                 },
                 unreadCount: newUnreadCount,
               };
@@ -259,11 +262,6 @@ export function useCategoriesRealtime(
     const handleMemberAdded = async (data: any) => {
       const { conversationId, userId } = data;
 
-      console.log("[CategoryRealtime] MemberAdded received:", {
-        conversationId,
-        userId,
-      });
-
       try {
         // Reload categories to get fresh data
         await queryClient.invalidateQueries({
@@ -344,12 +342,6 @@ export function useCategoriesRealtime(
 
     const handleCategoryDepartmentLinked = async (data: any) => {
       const { categoryId, categoryName, departmentId } = data;
-
-      console.log("[CategoryRealtime] CategoryDepartmentLinked received:", {
-        categoryId,
-        categoryName,
-        departmentId,
-      });
 
       try {
         // Reload categories to get fresh data

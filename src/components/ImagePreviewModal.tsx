@@ -262,6 +262,8 @@ export default function ImagePreviewModal({
                 src={imageUrl}
                 alt={currentFileName || "Preview"}
                 className="max-h-full max-w-full object-contain"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
                 data-testid="image-preview-image"
               />
             </div>

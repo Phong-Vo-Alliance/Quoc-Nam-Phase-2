@@ -148,7 +148,10 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
   const add = () => {
     const newId = "tpl_" + Date.now().toString(36);
 
-    setItems((prev) => [...prev, { id: newId, label: "" }]);
+    setItems((prev) => [
+      ...prev.map((item) => ({ ...item, label: item.label.trim() })),
+      { id: newId, label: "" },
+    ]);
 
     // Sau khi state cập nhật, focus vào input mới
     setTimeout(() => {
@@ -175,6 +178,11 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
           isRequired: false,
         }));
 
+        // Get isDefault property from selected template
+        const selectedTemplate = apiTemplates?.find(
+          (t: CheckListTemplateResponse) => t.id === selectedApiTemplateId,
+        );
+
         await updateTemplateMutation.mutateAsync({
           templateId: selectedApiTemplateId,
           payload: {
@@ -182,6 +190,7 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
             name: selectedTemplateName,
             description: selectedTemplateDescription || undefined,
             conversationId: conversationId || undefined,
+            isDefault: selectedTemplate?.isDefault ?? false,
             items:
               transformedItems.length > 0
                 ? transformedItems.map((item) => item.content)
@@ -210,15 +219,10 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
   const conversationName =
     useConversationStore((s) => s.getConversationName()) || "Nhóm";
 
-  // console.log("Rendering ChecklistTemplateSlideOver with items:", items);
-  // console.log("Selected API Template ID:", selectedApiTemplateId);
   if (!open) return null;
 
   // Use all templates from API - already filtered by conversationId
   const _apiTemplates = apiTemplates || [];
-
-  // console.log("API Templates for conversation:", apiTemplates);
-  // console.log("Checklist Variants:", checklistVariants);
 
   return (
     <div className="fixed inset-0 z-[999] flex justify-end bg-black/30">
@@ -334,19 +338,25 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
                     "
                     value={it.label}
                     onChange={(e) => update(it.id, e.target.value)}
+                    onBlur={() => update(it.id, it.label.trim())}
                     placeholder="Tên mục..."
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
                         const isLast = items[items.length - 1]?.id === it.id;
-                        const hasValue = it.label.trim() !== "";
+                        const trimmedLabel = it.label.trim();
+                        const hasValue = trimmedLabel !== "";
 
                         // Chỉ thêm mục mới nếu là item cuối và đã có tên
                         if (isLast && hasValue) {
                           const newId = "tpl_" + Date.now().toString(36);
 
                           setItems((prev) => [
-                            ...prev,
+                            ...prev.map((item) =>
+                              item.id === it.id
+                                ? { ...item, label: trimmedLabel }
+                                : item,
+                            ),
                             { id: newId, label: "" },
                           ]);
 

@@ -7,10 +7,14 @@
  * @module components/portal/components/file-sheet/ExcelPreview
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useExcelPreview } from "@/hooks/queries/useExcelPreview";
 import { AlertCircle } from "lucide-react";
 import { useWatermarkStyles } from "./Watermark";
+import { useContentProtection } from "@/hooks/useContentProtection";
+import { securityConfig } from "@/config/security.config";
+import { isProtectedFileType } from "@/utils/security/protectionHelpers";
+import { cn } from "@/lib/utils";
 import PreviewHeader from "./PreviewHeader";
 import ExcelSheetTabs from "./ExcelSheetTabs";
 import ExcelPagination from "./ExcelPagination";
@@ -54,6 +58,20 @@ export default function ExcelPreview({
 
   // Generate watermark styles (always call hook, pass data?.watermark safely)
   const watermarkStyles = useWatermarkStyles(data?.watermark);
+
+  // Ref for content protection
+  const excelContentRef = useRef<HTMLDivElement>(null);
+
+  // Check if content protection should be applied
+  const shouldProtectContent =
+    securityConfig.contentProtection.enabled &&
+    isProtectedFileType(fileName, securityConfig.contentProtection.fileTypes);
+
+  // Content Protection: Prevent copy/select for Excel content (respects protect content flag)
+  useContentProtection(excelContentRef as React.RefObject<HTMLElement>, {
+    filename: fileName,
+    enabled: shouldProtectContent,
+  });
 
   // State for active sheet
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
@@ -152,9 +170,19 @@ export default function ExcelPreview({
 
             {/* Table Content with Watermark */}
             <div
-              className="relative flex-1 overflow-auto p-6"
+              ref={excelContentRef}
+              className={cn(
+                "relative flex-1 overflow-auto p-6",
+                shouldProtectContent && "select-none [&_*]:select-none",
+              )}
               style={{ ...watermarkStyles, backgroundColor: "white" }}
               data-testid="excel-preview-content"
+              onCopy={
+                shouldProtectContent ? (e) => e.preventDefault() : undefined
+              }
+              onCut={
+                shouldProtectContent ? (e) => e.preventDefault() : undefined
+              }
             >
               {/* Excel Table */}
               {activeSheet && (

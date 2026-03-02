@@ -1,108 +1,104 @@
 // ChatMainContainer - Container that fetches messages and integrates with ChatMain
 
+import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
+import { useSendMessage } from "@/hooks/mutations/useSendMessage";
+import { flattenMessages, useMessages } from "@/hooks/queries/useMessages";
+import { useQueryClient } from "@tanstack/react-query";
 import React, {
+  useCallback,
   useEffect,
   useLayoutEffect,
-  useRef,
-  useCallback,
-  useState,
   useMemo,
+  useRef,
+  useState,
 } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
-import { useSendMessage } from "@/hooks/mutations/useSendMessage";
-import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
-// [PHASE2-REMOVED] Pin feature removed from desktop
-// import { usePinnedMessages } from "@/hooks/queries/usePinnedMessages";
-import {
-  useStarredMessages,
-  useConversationStarredMessages,
-} from "@/hooks/queries/useStarredMessages";
-import { useMessageRealtime } from "@/hooks/useMessageRealtime";
-import { useConversationRealtime } from "@/hooks/useConversationRealtime"; // 🐛 FIX: Join category conversations
-import { useSendTypingIndicator } from "@/hooks/useSendTypingIndicator";
-import { useNetworkStatus } from "@/hooks/useNetworkStatus";
-import { useAuthStore } from "@/stores/authStore";
-import { useReplyStore } from "@/stores/replyStore"; // 🆕 NEW: Reply store
-import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW (CBN-002)
+import { getMessagesAfter, getMessagesAround } from "@/api/messages.api"; // 🆕 NEW: Jump-to-message APIs
 import { useCreateInformationConfirmed } from "@/hooks/mutations/useCreateInformationConfirmed"; // 🆕 NEW: Confirmed information
+import { messageKeys } from "@/hooks/queries/keys/messageKeys"; // 🆕 NEW: Query keys
+import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW (CBN-002)
+import { useConversationMembers } from "@/hooks/queries/useConversationMembers"; // 🆕 NEW: For confirmed info userName lookup
 import { useInformationConfirmed } from "@/hooks/queries/useInformationConfirmed"; // 🆕 NEW: Confirmed information query
 import {
-  saveSelectedConversation,
-  getSelectedConversation,
-  saveSelectedCategory,
-  getSelectedCategory,
-} from "@/utils/storage"; // 🆕 NEW: Persist active conversation + category
-import { getMessagesAround, getMessagesAfter } from "@/api/messages.api"; // 🆕 NEW: Jump-to-message APIs
-import { messageKeys } from "@/hooks/queries/keys/messageKeys"; // 🆕 NEW: Query keys
+  useConversationStarredMessages,
+  useStarredMessages,
+} from "@/hooks/queries/useStarredMessages";
+import {
+  useDirectMessages,
+  flattenDirectMessages,
+} from "@/hooks/queries/useDirectMessages";
+import { useConversationRealtime } from "@/hooks/useConversationRealtime";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { useSendTypingIndicator } from "@/hooks/useSendTypingIndicator";
+import { useAuthStore } from "@/stores/authStore";
+import { useReplyStore } from "@/stores/replyStore"; // 🆕 NEW: Reply store
+import { getSelectedCategory, saveSelectedCategory } from "@/utils/storage"; // 🆕 NEW: Persist active conversation + category
 // import { MessageSkeleton } from "../components/MessageSkeleton";
-import { MessageSkeleton } from "../MessageSkeleton";
-import { groupMessages } from "@/utils/messageGrouping";
-import { MessageBubbleSimple } from "./MessageBubbleSimple";
-import { SystemMessageBubble } from "./SystemMessageBubble";
-import { ChatHeader } from "./ChatHeader";
-import QuotedMessagePreview from "./QuotedMessagePreview"; // 🆕 NEW: Quoted message preview (Quote Reply feature)
-import { EmptyCategoryState } from "./EmptyCategoryState"; // 🆕 NEW (CBN-002)
 import MessageDateSeparator from "@/components/chat/MessageDateSeparator"; // 🆕 NEW: Date separators
-import { formatDateSeparator } from "@/utils/formatDateSeparator"; // 🆕 NEW: Date formatting
 import { buildReceiveInfoContent } from "@/utils/receiveInfoMessage"; // 🆕 NEW: System message for receive info
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
+import { Button } from "@/components/ui/button";
+import { formatDateSeparator } from "@/utils/formatDateSeparator"; // 🆕 NEW: Date formatting
+import { groupMessages } from "@/utils/messageGrouping";
 import {
-  RefreshCw,
-  Send,
+  ChevronDown,
+  Image as ImageIcon,
   Loader2,
   Paperclip,
-  ChevronLeft,
-  Image as ImageIcon,
+  RefreshCw,
+  Send,
   // [PHASE2-REMOVED] Pin,
   Star,
-  StarOff,
-  MoreVertical,
-  ChevronDown,
 } from "lucide-react";
-import { Avatar } from "../Avatar";
-import { IconButton } from "@/components/ui/icon-button";
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { MessageSkeleton } from "../MessageSkeleton";
+import { ChatHeader } from "./ChatHeader";
+import { EmptyCategoryState } from "./EmptyCategoryState"; // 🆕 NEW (CBN-002)
+import { MessageBubbleSimple } from "./MessageBubbleSimple";
+import QuotedMessagePreview from "./QuotedMessagePreview"; // 🆕 NEW: Quoted message preview (Quote Reply feature)
+import { SystemMessageBubble } from "./SystemMessageBubble";
+// import {
+//   Popover,
+//   PopoverContent,
+//   PopoverTrigger,
+// } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import FileIcon from "@/components/FileIcon";
-import { cn } from "@/lib/utils";
+// import FileIcon from "@/components/FileIcon";
+// import { cn } from "@/lib/utils";
 import FilePreview from "@/components/FilePreview";
+import { useUploadFiles } from "@/hooks/mutations/useUploadFiles";
+import { useUploadFilesBatch } from "@/hooks/mutations/useUploadFilesBatch";
 import { useFileValidation } from "@/hooks/useFileValidation";
 import { chatHub } from "@/lib/signalr"; // 🆕 NEW: Track conversation for auto-refetch
 import {
+  extractSuccessfulUploads,
   revokeFilePreview,
   validateBatchFileSelection,
-  extractSuccessfulUploads,
 } from "@/utils/fileHelpers";
-import { useUploadFiles } from "@/hooks/mutations/useUploadFiles";
-import { useUploadFilesBatch } from "@/hooks/mutations/useUploadFilesBatch";
 import { formatAttachment } from "@/utils/formatAttachment";
-import { getFileUrl } from "@/utils/fileUrl";
+// import { getFileUrl } from "@/utils/fileUrl";
 import { hasLeaderPermissions } from "@/utils/roleUtils"; // 🆕 Permission check for confirmed info API
 import { toast } from "sonner";
-import { MentionInputInline } from "./MentionInputInline";
-import MessageImage from "@/features/portal/workspace/MessageImage";
+import {
+  MentionInputInline,
+  type MentionInputHandle,
+} from "./MentionInputInline";
+// import MessageImage from "@/features/portal/workspace/MessageImage";
 import FilePreviewModal from "@/components/FilePreviewModal";
-import type { ChatMessage } from "@/types/messages";
-import type { SelectedFile, FileUploadProgressState } from "@/types/files";
+// import type { ChatMessage } from "@/types/messages";
+import ImagePreviewModal from "@/components/ImagePreviewModal";
 import type { ConversationInfoDto } from "@/types/categories"; // 🆕 NEW (CBN-002)
+import type { FileUploadProgressState, SelectedFile } from "@/types/files";
+import { FILE_CATEGORIES, MAX_FILES_PER_MESSAGE } from "@/types/files";
 import type {
   PinnedMessageDto,
   StarredMessageDto,
 } from "@/types/pinned_and_starred";
-import { FILE_CATEGORIES, MAX_FILES_PER_MESSAGE } from "@/types/files";
-import ImagePreviewModal from "@/components/ImagePreviewModal";
+import { Message } from "../../types";
 
 /**
  * Format file size from bytes to human-readable format
@@ -169,6 +165,8 @@ interface ChatMainContainerProps {
     category?: string;
     categoryId?: string;
     memberCount?: number;
+    // messages: Message[];
+    // setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   }) => void;
 
   // 🆕 NEW (CBN-002): Category-based navigation
@@ -180,7 +178,18 @@ interface ChatMainContainerProps {
     messageId: string;
     messageContent: string;
     conversationId: string;
+    confirmedInfoId?: string; // 🆕 FIX: Pass to mark confirmed info as finished
   }) => void;
+
+  // 🆕 NEW: Open task log thread
+  onTaskLogClick?: (taskId: string) => void;
+
+  // Thread unread counts per task
+  threadUnreadCounts?: Record<string, number>;
+  threadCurrentSessionCounts?: Record<string, number>;
+
+  // 🆕 NEW: Currently open thread message ID (to hide unread badge)
+  openThreadMessageId?: string;
 
   // 🆕 NEW: Scroll to specific message (for navigation from starred/pinned)
   scrollToMessageId?: PinnedMessageDto | StarredMessageDto | null;
@@ -188,6 +197,7 @@ interface ChatMainContainerProps {
 
   // 🆕 NEW: Confirm info success callback (for auto-switching to order tab)
   onConfirmInfoSuccess?: () => void;
+  // messages:Message[];
 }
 
 /**
@@ -226,16 +236,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // 🆕 NEW: Handle task creation (delegate to parent - PortalWireframes)
   onCreateTaskFromMessage,
 
+  // 🆕 NEW: Open task log thread
+  onTaskLogClick,
+
+  // Thread unread counts per task
+  threadUnreadCounts,
+  threadCurrentSessionCounts,
+
+  // 🆕 NEW: Currently open thread message ID (to hide unread badge)
+  openThreadMessageId,
+
   // 🆕 NEW: Scroll to message
   scrollToMessageId,
   onScrollComplete,
 
   // 🆕 NEW: Confirm info success callback
   onConfirmInfoSuccess,
+  // messages = []
 }) => {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient(); // 🆕 NEW: For cache manipulation in jump-to-message
-
   // 🆕 NEW: Quote Reply state management (2026-02-04)
   const replyTarget = useReplyStore((state) => state.replyTarget);
   const clearReply = useReplyStore((state) => state.clearReply);
@@ -337,11 +357,12 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const [confirmingMessageId, setConfirmingMessageId] = useState<string | null>(
     null,
   ); // NEW: Track confirming message
+  const confirmingRef = useRef(false); // Synchronous mutex to prevent duplicate API calls
   const [showGoToBottom, setShowGoToBottom] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<MentionInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const prevConversationIdRef = useRef<string | undefined>(undefined);
@@ -518,7 +539,48 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const { data: allStarredMessages = [] } = useStarredMessages({
     enabled: showAllStarredModal,
   });
-  // console.log(allStarredMessages);
+
+  // 🆕 NEW: Fetch direct messages for starred message conversation lookup
+  // NOTE: Always enabled (not conditional on modal) to ensure data is cached
+  // before user opens the modal - prevents race condition with empty lookup
+  const directMessagesQuery = useDirectMessages();
+  const directConversations = useMemo(
+    () => flattenDirectMessages(directMessagesQuery.data),
+    [directMessagesQuery.data],
+  );
+
+  /**
+   * 🆕 Helper function to get conversation display text for starred messages
+   * - DM: "Tin nhắn cá nhân với [name]"
+   * - GRP: "[Category] . [Conversation]"
+   */
+  const getStarredMessageConversationText = useCallback(
+    (conversationId: string): string => {
+      // First check if it's a DM conversation
+      const dmConversation = directConversations.find(
+        (dm) => dm.id === conversationId,
+      );
+      if (dmConversation) {
+        return `Tin nhắn cá nhân với ${dmConversation.name}`;
+      }
+
+      // Check in categories for GRP conversations
+      if (categoriesQuery.data) {
+        for (const category of categoriesQuery.data) {
+          const conversation = category.conversations.find(
+            (conv) => conv.conversationId === conversationId,
+          );
+          if (conversation) {
+            return `${category.name} . ${conversation.conversationName}`;
+          }
+        }
+      }
+
+      // Fallback: Show conversation ID if not found
+      return `Cuộc trò chuyện: ${conversationId}`;
+    },
+    [directConversations, categoriesQuery.data],
+  );
 
   // 🆕 NEW: Fetch confirmed information for this conversation (leader only)
   const { data: confirmedInfoData } = useInformationConfirmed(
@@ -528,16 +590,39 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     { enabled: !!conversationId && hasLeaderPermissions() },
   );
 
-  // 🆕 NEW: Create Set of message IDs that have confirmed information
-  const confirmedMessageIds = useMemo(() => {
-    const ids = new Set<string>();
+  // 🆕 NEW: Fetch conversation members for confirmed info userName lookup
+  const { data: conversationMembers } = useConversationMembers({
+    conversationId,
+    enabled: !!conversationId && hasLeaderPermissions(),
+  });
+
+  // 🆕 NEW: Create Map of message IDs to confirmed info with userName
+  // Format: Map<messageId, confirmedByName | undefined>
+  const confirmedMessageMap = useMemo(() => {
+    const map = new Map<string, string | undefined>();
     if (confirmedInfoData?.data) {
       confirmedInfoData.data.forEach((info) => {
-        ids.add(info.messageId);
+        // Get userName from confirmedBy userId
+        let confirmedByName: string | undefined;
+
+        // Check if current user confirmed
+        if (info.confirmedBy === user?.id) {
+          confirmedByName = "Bạn";
+        } else {
+          // Lookup from conversation members
+          const member = conversationMembers?.find(
+            (m) =>
+              m.userId === info.confirmedBy ||
+              m.userInfo?.id === info.confirmedBy,
+          );
+          confirmedByName = member?.userInfo?.fullName || member?.userName;
+        }
+
+        map.set(info.messageId, confirmedByName);
       });
     }
-    return ids;
-  }, [confirmedInfoData]);
+    return map;
+  }, [confirmedInfoData, conversationMembers, user?.id]);
 
   // Send message mutation
   const sendMessageMutation = useSendMessage({
@@ -590,7 +675,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
     return flattenMessages(messagesQuery.data);
   }, [messagesQuery.data, messagesQuery.isSuccess, categoriesQuery.isLoading]);
-
+  // setMessages(_messages); // Update messages in parent state
   // Scroll detection for go-to-bottom button + bidirectional loading
   useEffect(() => {
     const setupScrollDetection = () => {
@@ -744,12 +829,51 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // 🆕 NEW: Helper function to scroll to and highlight a message
   const scrollToAndHighlight = useCallback((element: Element) => {
+    // For system messages, highlight the inner pill element instead of the full-width wrapper
+    const isSystemMessage = element
+      .getAttribute("data-testid")
+      ?.startsWith("system-message-bubble-");
+    const highlightTarget = (
+      isSystemMessage
+        ? (element.firstElementChild as HTMLElement) || element
+        : element
+    ) as HTMLElement;
+
     element.scrollIntoView({ behavior: "smooth", block: "center" });
-    element.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
+
+    // Save original styles to restore later
+    const originalBg = highlightTarget.style.backgroundColor;
+    const originalBorder = highlightTarget.style.border;
+    const originalTransition = highlightTarget.style.transition;
+
+    // Apply highlight: amber background fill + border
+    highlightTarget.style.transition =
+      "background-color 0.3s ease, border 0.3s ease";
+    highlightTarget.style.backgroundColor = "#fef3c7"; // amber-100
+    highlightTarget.style.border = "2px solid #fbbf24"; // amber-400
+
     setTimeout(() => {
-      element.classList.remove("ring-2", "ring-amber-400", "ring-offset-2");
+      // Fade out then restore
+      highlightTarget.style.backgroundColor = originalBg;
+      highlightTarget.style.border = originalBorder;
+      setTimeout(() => {
+        highlightTarget.style.transition = originalTransition;
+      }, 300);
     }, 2000);
   }, []);
+
+  // Helper to find a message element in DOM (supports both regular and system messages)
+  const findMessageElement = useCallback(
+    (messageId: string): Element | null => {
+      return (
+        document.querySelector(`[data-testid="message-bubble-${messageId}"]`) ||
+        document.querySelector(
+          `[data-testid="system-message-bubble-${messageId}"]`,
+        )
+      );
+    },
+    [],
+  );
 
   // Function to scroll to a message or jump via API if not in view
   // ✅ REFACTORED: Using aroundMessageId for instant jump (no loop)
@@ -780,9 +904,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             // Wait for conversation to switch and messages to load
             // The message will be scrolled to via useEffect after messages load
             setTimeout(() => {
-              const messageElement = document.querySelector(
-                `[data-testid="message-bubble-${targetMessageId}"]`,
-              );
+              const messageElement = findMessageElement(targetMessageId);
               if (messageElement) {
                 scrollToAndHighlight(messageElement);
               }
@@ -800,9 +922,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       }
 
       // Step 2: Check if message exists in current view
-      const messageElement = document.querySelector(
-        `[data-testid="message-bubble-${targetMessageId}"]`,
-      );
+      const messageElement = findMessageElement(targetMessageId);
 
       if (messageElement) {
         // Message is in current view, scroll to it
@@ -891,9 +1011,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         // Find and scroll to message
-        const updatedMessageElement = document.querySelector(
-          `[data-testid="message-bubble-${targetMessageId}"]`,
-        );
+        const updatedMessageElement = findMessageElement(targetMessageId);
 
         if (updatedMessageElement) {
           scrollToAndHighlight(updatedMessageElement);
@@ -926,7 +1044,113 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       conversationCategory,
       activeCategoryId,
       scrollToAndHighlight,
+      findMessageElement,
     ],
+  );
+
+  // 🆕 NEW: Jump to message from search results (simplified - always within current conversation)
+  const handleSearchJumpToMessage = useCallback(
+    async (targetMessageId: string) => {
+      // Step 1: Check if message exists in current view
+      const messageElement = findMessageElement(targetMessageId);
+
+      if (messageElement) {
+        scrollToAndHighlight(messageElement);
+        return;
+      }
+
+      // Step 2: Fetch messages around target
+      setIsLoadingNewer(true);
+
+      try {
+        const result = await getMessagesAround({
+          conversationId,
+          aroundMessageId: targetMessageId,
+          limit: 50,
+        });
+
+        // Merge messages into main cache (deduplicate by ID)
+        queryClient.setQueryData(
+          messageKeys.conversation(conversationId),
+          (oldData: any) => {
+            if (!oldData) {
+              return {
+                pages: [
+                  {
+                    items: result.items,
+                    nextCursor: result.nextCursor,
+                    hasMore: result.hasMore,
+                  },
+                ],
+                pageParams: [undefined],
+              };
+            }
+
+            const existingMessageIds = new Set(
+              oldData.pages.flatMap((p: any) => p.items.map((m: any) => m.id)),
+            );
+
+            const newMessages = result.items.filter(
+              (msg) => !existingMessageIds.has(msg.id),
+            );
+
+            if (newMessages.length === 0) {
+              return oldData;
+            }
+
+            const allMessages = [
+              ...oldData.pages.flatMap((p: any) => p.items),
+              ...newMessages,
+            ].sort(
+              (a, b) =>
+                new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(),
+            );
+
+            const hasMoreOlderMessages = result.hasMore || !!result.nextCursor;
+
+            return {
+              pages: [
+                {
+                  items: allMessages,
+                  nextCursor: hasMoreOlderMessages
+                    ? result.nextCursor ||
+                      allMessages[allMessages.length - 1]?.id
+                    : undefined,
+                  hasMore: hasMoreOlderMessages,
+                },
+              ],
+              pageParams: [undefined],
+            };
+          },
+        );
+
+        // Wait for DOM update
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const updatedMessageElement = findMessageElement(targetMessageId);
+
+        if (updatedMessageElement) {
+          scrollToAndHighlight(updatedMessageElement);
+          toast.success("Đã tìm thấy tin nhắn!");
+          setHasUnloadedNewerMessages(true);
+        } else {
+          toast.error("Không thể hiển thị tin nhắn. Vui lòng thử lại.");
+        }
+      } catch (error: any) {
+        console.error("Error jumping to search result:", error);
+
+        if (error.response?.status === 404) {
+          toast.error("Tin nhắn không tồn tại hoặc đã bị xóa.");
+        } else if (error.response?.status === 403) {
+          toast.error("Bạn không có quyền xem tin nhắn này.");
+        } else {
+          toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
+        }
+      } finally {
+        setIsLoadingNewer(false);
+      }
+    },
+    [conversationId, queryClient, scrollToAndHighlight, findMessageElement],
   );
 
   // Phase 2: File upload
@@ -984,7 +1208,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
     // Skip if we already processed this exact message
     if (lastScrolledMessageIdRef.current === messageId) {
-      console.log("Skipping duplicate scroll request for message:", messageId);
       return;
     }
     // Mark as processed
@@ -1016,7 +1239,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         onMessagesLoaded(messages);
       }
     }
-  }, [onMessagesLoaded]);
+  }, [messages, onMessagesLoaded]);
   // Phase 4: Group messages by time proximity (10 minutes)
   // Convert ChatMessage to format compatible with groupMessages
   const groupedMessages = useMemo(() => {
@@ -1584,15 +1807,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       )?.message;
       if (!message) return;
 
+      // 🆕 FIX: Find confirmedInfo for this message (if exists and not finished)
+      const confirmedInfo = confirmedInfoData?.data?.find(
+        (info) => info.messageId === messageId && !info.isFinished,
+      );
+
       // Delegate to parent component (PortalWireframes) to open AssignTaskSheet
       onCreateTaskFromMessage?.({
         messageId,
         messageContent:
           message.content || message.attachments?.[0]?.fileName || "",
         conversationId,
+        confirmedInfoId: confirmedInfo?.id, // 🆕 Pass confirmedInfoId if exists
       });
     },
-    [conversationId, onCreateTaskFromMessage, groupedMessages],
+    [
+      conversationId,
+      onCreateTaskFromMessage,
+      groupedMessages,
+      confirmedInfoData,
+    ],
   );
 
   // 🆕 NEW: Mutation for creating confirmed information
@@ -1601,16 +1835,20 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // 🆕 NEW: Handle confirm information from message
   const handleConfirmInfo = useCallback(
     (messageId: string) => {
-      // Prevent double-click
-      if (confirmingMessageId) return;
+      // Synchronous mutex guard — prevents duplicate API calls from rapid clicks
+      if (confirmingRef.current) return;
+      confirmingRef.current = true;
 
       // Find the message to get its content
       const message = groupedMessages.find(
         (g) => g.message.id === messageId,
       )?.message;
-      if (!message || !user?.id) return;
+      if (!message || !user?.id) {
+        confirmingRef.current = false;
+        return;
+      }
 
-      // Set loading state
+      // Set loading state (for UI disabled/spinner)
       setConfirmingMessageId(messageId);
 
       // Build system message content using utility function
@@ -1630,10 +1868,13 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           content: message.content || message.attachments?.[0]?.fileName || "",
           statusCode: "pending",
           confirmedBy: user.id,
+          senderId: message.senderId,
+          senderName: message.senderName || "",
         },
         {
           onSuccess: () => {
             // Clear loading state
+            confirmingRef.current = false;
             setConfirmingMessageId(null);
 
             // 🆕 NEW: Send system message after successful confirmation
@@ -1648,6 +1889,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           },
           onError: () => {
             // Clear loading state on error
+            confirmingRef.current = false;
             setConfirmingMessageId(null);
           },
         },
@@ -1657,7 +1899,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       conversationId,
       groupedMessages,
       user,
-      confirmingMessageId,
       createConfirmedInfoMutation,
       sendMessageMutation,
       onConfirmInfoSuccess,
@@ -1667,9 +1908,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // 🆕 NEW: Scroll to quoted message (Quote Reply feature - 2026-02-04)
   const handleScrollToQuoted = useCallback(
     (quotedMessageId: string) => {
-      const messageElement = document.querySelector(
-        `[data-testid="message-bubble-${quotedMessageId}"]`,
-      );
+      const messageElement = findMessageElement(quotedMessageId);
 
       if (!messageElement) {
         toast.warning("Tin nhắn gốc không còn trong lịch sử hiển thị");
@@ -1679,7 +1918,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       // 🎨 Use same highlight style as starred/pinned messages (border only, not background)
       scrollToAndHighlight(messageElement);
     },
-    [scrollToAndHighlight],
+    [scrollToAndHighlight, findMessageElement],
   );
 
   // API returns correct name directly, no transformation needed
@@ -1874,7 +2113,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       </div>
     );
   }
-
   return (
     <div className={mainContainerCls} data-testid="chat-main-container">
       {/* Header */}
@@ -1902,6 +2140,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         onChangeConversation={
           selectedCategoryId ? handleConversationChange : undefined
         }
+        onSearchSelectMessage={handleSearchJumpToMessage}
       />
 
       {/* Phase 7: Network status banner */}
@@ -1985,10 +2224,24 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                     // DM conversations don't have task creation buttons
                     onCreateTask={isDirect ? undefined : handleCreateTask}
                     onConfirmInfo={isDirect ? undefined : handleConfirmInfo}
-                    hasConfirmedInfo={confirmedMessageIds.has(message.id)}
+                    hasConfirmedInfo={confirmedMessageMap.has(message.id)}
+                    confirmedByName={confirmedMessageMap.get(message.id)}
                     isConfirming={confirmingMessageId === message.id}
                     onRetry={handleRetry}
                     onScrollToQuoted={handleScrollToQuoted}
+                    onTaskLogClick={onTaskLogClick}
+                    threadUnreadCount={
+                      message.linkedTaskId
+                        ? (threadUnreadCounts?.[message.linkedTaskId] ?? 0)
+                        : 0
+                    }
+                    currentSessionCount={
+                      message.linkedTaskId
+                        ? (threadCurrentSessionCounts?.[message.linkedTaskId] ??
+                          0)
+                        : 0
+                    }
+                    isThreadOpen={message.id === openThreadMessageId}
                     isFirstInGroup={groupedMsg.isFirstInGroup}
                     isMiddleInGroup={groupedMsg.isMiddleInGroup}
                     isLastInGroup={groupedMsg.isLastInGroup}
@@ -2164,6 +2417,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             disabled={sendMessageMutation.isPending || isUploading}
             className="flex-1"
             placeholder="Nhập tin nhắn"
+            canSendWithoutText={selectedFiles.length > 0}
           />
 
           {/* Send button - Decision #9: Disable during upload */}
@@ -2343,7 +2597,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   key={starred.messageId}
                   className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition"
                   onClick={() => {
-                    console.log("Scrolling to starred message:", starred);
                     // 🐛 FIX (ui-improvements-20260205): Conditional close
                     const needsSwitchConversation =
                       starred.message.conversationId !== conversationId;
@@ -2375,7 +2628,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                         </span>
                       </div>
                       <div className="text-xs text-blue-600 mb-1">
-                        Cuộc trò chuyện: {starred.message.conversationId}
+                        {getStarredMessageConversationText(
+                          starred.message.conversationId,
+                        )}
                       </div>
                       <p className="text-sm text-gray-700 line-clamp-3">
                         {starred.message.content || "[File đính kèm]"}

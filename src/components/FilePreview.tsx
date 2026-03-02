@@ -6,12 +6,9 @@
 
 import { X, RotateCw } from "lucide-react";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
-import {
-  getFileIcon,
-  formatFileSize,
-  truncateFileName,
-} from "@/utils/fileHelpers";
+import { formatFileSize, truncateFileName } from "@/utils/fileHelpers";
 import { Button } from "@/components/ui/button";
+import FileIcon from "@/components/files/FileIcon";
 
 interface FilePreviewProps {
   files: SelectedFile[];
@@ -37,7 +34,6 @@ export default function FilePreview({
     >
       {files.map((selectedFile) => {
         const { file, id, preview } = selectedFile;
-        const icon = getFileIcon(file.type);
         const displayName = truncateFileName(file.name);
         const size = formatFileSize(file.size);
         const isImage = file.type.startsWith("image/");
@@ -65,9 +61,12 @@ export default function FilePreview({
                   className="w-10 h-10 object-cover rounded border border-border shrink-0"
                 />
               ) : (
-                <span className="text-xl" aria-hidden="true">
-                  {icon}
-                </span>
+                <div className="bg-gray-100 rounded-lg p-2 flex-shrink-0">
+                  <FileIcon
+                    contentType={file.type || "application/octet-stream"}
+                    size="md"
+                  />
+                </div>
               )}
 
               {/* File Info */}

@@ -30,11 +30,8 @@ export interface UploadFileParams {
  *   sourceEntityId: conversationId,
  *   onUploadProgress: (e) => {
  *     const progress = Math.round((e.loaded * 100) / e.total);
- *     console.log(`Upload progress: ${progress}%`);
  *   }
  * });
- *
- * console.log('File ID:', result.fileId);
  * ```
  */
 export async function uploadFile(
@@ -85,9 +82,7 @@ export async function uploadFile(
  * });
  *
  * if (result.allSuccess) {
- *   console.log('All files uploaded successfully');
  * } else if (result.partialSuccess) {
- *   console.log(`${result.successCount}/${result.totalFiles} files uploaded`);
  *   const failed = result.results.filter(r => !r.success);
  *   console.error('Failed files:', failed);
  * }

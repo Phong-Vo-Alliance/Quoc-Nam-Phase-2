@@ -15,14 +15,14 @@ export function validateFileSize(
   file: File,
   maxSize: number
 ): FileValidationResult {
-  if (file.size > maxSize) {
-    return {
-      isValid: false,
-      error: `File "${
-        file.name
-      }" vượt quá kích thước cho phép (${formatFileSize(maxSize)})`,
-    };
-  }
+  // if (file.size > maxSize) {
+  //   return {
+  //     isValid: false,
+  //     error: `File "${
+  //       file.name
+  //     }" vượt quá kích thước cho phép (${formatFileSize(maxSize)})`,
+  //   };
+  // }
   return { isValid: true };
 }
 

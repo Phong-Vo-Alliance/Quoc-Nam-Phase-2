@@ -1,3 +1,7 @@
+/**
+ * Update a message by id in the infinite query data structure
+ * Returns a new data object with the message updated
+ */
 // useMessages hook - Fetch messages with infinite scroll
 
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -31,11 +35,6 @@ export function useMessages({
         beforeMessageId: pageParam,
       }),
     getNextPageParam: (lastPage) => {
-      // Log for debugging
-      // console.log("[useMessages] getNextPageParam:", {
-      //   hasMore: lastPage.hasMore,
-      //   nextCursor: lastPage.nextCursor,
-      // });
       return lastPage.hasMore ? lastPage.nextCursor : undefined;
     },
     initialPageParam: undefined as string | undefined,
@@ -43,6 +42,7 @@ export function useMessages({
     gcTime: 1000 * 60 * 5, // 5 minutes - cache garbage collection time
     refetchOnMount: "always", // ✅ Always refetch when component mounts with this conversation
     enabled: enabled && !!conversationId,
+    
   });
 }
 

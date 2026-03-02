@@ -24,4 +24,8 @@ export const messageKeys = {
   // 🆕 NEW: Messages after a specific message (for scroll-down)
   after: (conversationId: string, messageId: string) =>
     [...messageKeys.conversation(conversationId), 'after', messageId] as const,
+
+  // 🆕 NEW: Search messages within a conversation
+  search: (conversationId: string, query: string) =>
+    [...messageKeys.conversation(conversationId), 'search', query] as const,
 };

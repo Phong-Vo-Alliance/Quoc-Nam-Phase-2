@@ -17,6 +17,8 @@ export interface InformationConfirmedDto {
   isFinished: boolean;
   createdAt: string;
   updatedAt: string | null;
+  senderId?: string;    // ID of the message sender (from backend)
+  senderName?: string;  // Name of the message sender (from backend)
 }
 
 /**
@@ -28,6 +30,8 @@ export interface CreateInformationConfirmedRequest {
   content: string;
   statusCode: string;
   confirmedBy: string;
+  senderId: string;    // ID of the message sender
+  senderName: string;  // Name of the message sender
 }
 
 /**

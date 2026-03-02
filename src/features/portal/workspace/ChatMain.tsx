@@ -965,7 +965,6 @@ export const ChatMain: React.FC<{
             isMine: true,
           };
           // In a real app, this would update the taskLogs state
-          console.log('Send task log message:', newMsg);
         }}
       />
     )}

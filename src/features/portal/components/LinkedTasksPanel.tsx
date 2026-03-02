@@ -49,10 +49,6 @@ export function LinkedTasksPanel({
   const authUser = useAuthStore((state) => state.user);
   const effectiveUserId = currentUserId ?? authUser?.id;
 
-  console.log("LinkedTasksPanel - currentUserId:", currentUserId);
-  console.log("LinkedTasksPanel - authUser:", authUser);
-  console.log("LinkedTasksPanel - effectiveUserId:", effectiveUserId);
-
   // Helper: Check if date is today
   const isToday = (dateStr?: string) => {
     if (!dateStr) return false;
@@ -82,7 +78,6 @@ export function LinkedTasksPanel({
       return isMyTask;
     });
   }, [tasks, effectiveUserId]);
-  console.log(myTasks);
   // Group staff tasks by status
   const staffBuckets = React.useMemo(() => {
     if (!hasStaffPermissions())
@@ -103,11 +98,8 @@ export function LinkedTasksPanel({
       ),
     };
   }, [myTasks]);
-  console.log(hasStaffPermissions(), staffBuckets);
   // STAFF UI
   if (hasStaffPermissions()) {
-    console.log("Current User ID:", staffBuckets);
-    console.log("Rendering LinkedTasksPanel for Staff with tasks:", myTasks);
     return (
       <>
         {/* Primary: Todo + In Progress */}

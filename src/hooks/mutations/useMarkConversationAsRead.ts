@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import { categoriesKeys } from "@/hooks/queries/useCategories"; // 🆕 NEW: Update categories too
+import { messageKeys } from "@/hooks/queries/keys/messageKeys"; // 🆕 NEW: Update messages cache for thread unread
 import { markConversationAsRead as markConversationAsReadApi } from "@/api/conversations.api"; // 🆕 NEW: API call
 import type { InfiniteData } from "@tanstack/react-query";
 import type {
@@ -8,10 +9,12 @@ import type {
   DirectConversation,
 } from "@/types/conversations";
 import type { CategoryWithUnread } from "@/types/categories"; // 🆕 NEW
+import type { GetMessagesResponse } from "@/types/messages"; // 🆕 NEW: For messages cache
 
 interface MarkAsReadVariables {
   conversationId: string;
   messageId?: string; // 🆕 NEW: Optional - mark as read up to this message
+  parentMessageId?: string; // 🆕 NEW: For thread - the parent message to update unreadReplyCount
 }
 
 type ConversationPage = {
@@ -53,10 +56,15 @@ export function useMarkConversationAsRead() {
     },
 
     // Optimistic update
-    onMutate: async ({ conversationId }) => {
+    onMutate: async ({
+      conversationId,
+      messageId,
+      parentMessageId,
+    }: MarkAsReadVariables) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: conversationKeys.all });
       await queryClient.cancelQueries({ queryKey: categoriesKeys.all }); // 🆕 NEW
+      await queryClient.cancelQueries({ queryKey: messageKeys.all }); // 🆕 NEW: Cancel messages queries
 
       // Snapshot previous value
       const previousDirects = queryClient.getQueryData<
@@ -65,6 +73,9 @@ export function useMarkConversationAsRead() {
       const previousCategories = queryClient.getQueryData<CategoryWithUnread[]>(
         categoriesKeys.list(),
       ); // 🆕 NEW
+      const previousMessages = queryClient.getQueryData<
+        InfiniteData<GetMessagesResponse>
+      >(messageKeys.conversation(conversationId)); // 🆕 NEW: Snapshot messages
 
       // Optimistically update categories (contains conversations)
       if (previousCategories) {
@@ -97,12 +108,32 @@ export function useMarkConversationAsRead() {
         );
       }
 
+      // ✅ NEW: If parentMessageId provided (thread mode), reset unreadReplyCount on parent message
+      // This is separate from messageId which is sent to API for mark-read position
+      const targetMessageId = parentMessageId || messageId;
+      if (targetMessageId && previousMessages) {
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.conversation(conversationId),
+          {
+            ...previousMessages,
+            pages: previousMessages.pages.map((page) => ({
+              ...page,
+              items: page.items.map((msg) =>
+                msg.id === targetMessageId
+                  ? { ...msg, unreadReplyCount: 0 } // Reset thread unread
+                  : msg,
+              ),
+            })),
+          },
+        );
+      }
+
       // Return context for rollback
-      return { previousDirects, previousCategories };
+      return { previousDirects, previousCategories, previousMessages };
     },
 
     // Rollback on error
-    onError: (_err, _variables, context) => {
+    onError: (_err, variables, context) => {
       // Rollback directs
       if (context?.previousDirects) {
         queryClient.setQueryData(
@@ -116,6 +147,14 @@ export function useMarkConversationAsRead() {
         queryClient.setQueryData(
           categoriesKeys.list(),
           context.previousCategories,
+        );
+      }
+
+      // ✅ NEW: Rollback messages cache
+      if (context?.previousMessages && variables.conversationId) {
+        queryClient.setQueryData(
+          messageKeys.conversation(variables.conversationId),
+          context.previousMessages,
         );
       }
       // TODO: Show toast notification to user

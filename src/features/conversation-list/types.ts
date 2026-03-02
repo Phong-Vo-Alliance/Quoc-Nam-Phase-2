@@ -62,6 +62,8 @@ export interface CategoryItemProps {
         senderName: string;
         content: string;
         sentAt: string;
+        parentMessageId?: string | null;
+        parentMessageContent?:string | null;
       } | null;
     }>;
   };

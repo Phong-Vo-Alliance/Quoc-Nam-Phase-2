@@ -7,7 +7,9 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   useAddCheckItem,
   useToggleCheckItem,
@@ -15,6 +17,8 @@ import {
   useDeleteCheckItem,
   useUpdateTaskStatus,
 } from "@/hooks/mutations";
+import { useSendMessage } from "@/hooks/mutations/useSendMessage";
+import { useAuthStore } from "@/stores/authStore";
 import type {
   Task,
   ChecklistItem,
@@ -29,6 +33,14 @@ import {
   abbreviateVietnameseName,
 } from "../utils/formatters";
 import type { MinimalMember, ViewMode } from "../types";
+
+/* =============== Constants =============== */
+const STATUS_LABELS_VI: Record<string, string> = {
+  todo: "Chưa xử lý",
+  doing: "Đang xử lý",
+  need_to_verified: "Chờ duyệt",
+  finished: "Hoàn thành",
+};
 
 /* =============== Helpers =============== */
 const StatusBadge: React.FC<{ s: Task["status"] }> = ({ s }) => {
@@ -68,6 +80,8 @@ export const TaskCard: React.FC<{
   groupName?: string;
   checklistVariants?: ChecklistVariant[];
   assigneeOptions?: MinimalMember[];
+  conversationId?: string;
+  workspaceId?: string;
   onChangeStatus?: (id: string, next: Task["status"]) => void;
   onReassign?: (id: string, assignTo: string) => void;
   onToggleChecklist?: (taskId: string, itemId: string, done: boolean) => void;
@@ -84,6 +98,8 @@ export const TaskCard: React.FC<{
   groupName,
   checklistVariants,
   assigneeOptions,
+  conversationId,
+  workspaceId,
   onChangeStatus,
   onReassign,
   onToggleChecklist,
@@ -100,6 +116,8 @@ export const TaskCard: React.FC<{
     null,
   );
   const [newLabel, setNewLabel] = React.useState("");
+  const [deleteItemTarget, setDeleteItemTarget] =
+    React.useState<ChecklistItem | null>(null);
 
   // Mutation hooks for API calls
   const addCheckItemMutation = useAddCheckItem();
@@ -107,6 +125,16 @@ export const TaskCard: React.FC<{
   const updateCheckItemMutation = useUpdateCheckItem();
   const deleteCheckItemMutation = useDeleteCheckItem();
   const updateStatusMutation = useUpdateTaskStatus();
+
+  // Send system message on checklist toggle
+  const sendMessageMutation = useSendMessage({
+    workspaceId: workspaceId || "",
+    conversationId: conversationId || "",
+  });
+
+  // Get current user's full name for system messages
+  const currentUser = useAuthStore((s) => s.user);
+  const currentUserFullName = currentUser?.fullName || "Unknown User";
 
   const total = t.checklist?.length ?? 0;
   const doneCount = t.checklist?.filter((c) => c.done).length ?? 0;
@@ -125,8 +153,56 @@ export const TaskCard: React.FC<{
 
   const permissions = t.permissions;
 
-  // Checklist can only be toggled when task has started (not in 'todo' status)
-  const canToggleChecklist = t.status.code !== "todo";
+  // Checklist can only be toggled when task is in "doing" status
+  // Disabled when: todo (chưa bắt đầu), need_to_verified (chờ duyệt), finished (hoàn thành)
+  const canToggleChecklist = t.status.code === "doing";
+
+  // Get tooltip message for disabled checkbox based on status
+  const getChecklistDisabledTooltip = () => {
+    switch (t.status.code) {
+      case "todo":
+        return "Vui lòng bắt đầu task trước khi check";
+      case "need_to_verified":
+        return "Task đang chờ duyệt, không thể chỉnh sửa";
+      case "finished":
+        return "Task đã hoàn thành";
+      default:
+        return "Không thể chỉnh sửa checklist";
+    }
+  };
+
+  // Handler: Delete checklist item with toast and system message
+  const handleDeleteChecklistItem = async () => {
+    if (!deleteItemTarget) return;
+
+    try {
+      await deleteCheckItemMutation.mutateAsync({
+        taskId: t.id,
+        itemId: deleteItemTarget.id,
+      });
+
+      toast.success("Đã xóa mục");
+
+      // Send system message about deleting checklist item
+      if (conversationId && t.messageId) {
+        try {
+          await sendMessageMutation.mutateAsync({
+            conversationId,
+            content: `${currentUserFullName} đã xóa mục "${deleteItemTarget.label}"`,
+            messageType: "SYS",
+            parentMessageId: t.messageId,
+          });
+        } catch (error) {
+          // Silently fail - don't show error to user
+        }
+      }
+    } catch (error) {
+      console.error("Failed to delete checklist item:", error);
+      toast.error("Xóa mục thất bại. Thử lại sau");
+    }
+
+    setDeleteItemTarget(null);
+  };
 
   // Helper: check if label is valid (contains at least one alphanumeric character)
   const isValidLabel = (text: string) => {
@@ -241,6 +317,20 @@ export const TaskCard: React.FC<{
                     } catch (error) {
                       console.error("Failed to add checklist item:", error);
                     }
+
+                    try {
+                      const messageContent = `${currentUserFullName} đã thêm mục ${newLabel.trim()} vào công việc ${t.title}`;
+                      if (conversationId && t.messageId) {
+                        sendMessageMutation.mutateAsync({
+                          conversationId,
+                          content: messageContent,
+                          messageType: "SYS",
+                          parentMessageId: t.messageId,
+                        });
+                      }
+                    } catch (error) {
+                      // Silently fail - don't show error to user
+                    }
                   } else {
                     try {
                       await updateCheckItemMutation.mutateAsync({
@@ -253,6 +343,19 @@ export const TaskCard: React.FC<{
                       setOpen(true);
                     } catch (error) {
                       console.error("Failed to update checklist item:", error);
+                    }
+                    try {
+                      const messageContent = `${currentUserFullName} đã cập nhật mục ${editingItem.label} thành ${newLabel.trim()} vào công việc ${t.title}`;
+                      if (conversationId && t.messageId) {
+                        sendMessageMutation.mutateAsync({
+                          conversationId,
+                          content: messageContent,
+                          messageType: "SYS",
+                          parentMessageId: t.messageId,
+                        });
+                      }
+                    } catch (error) {
+                      // Silently fail - don't show error to user
                     }
                   }
                 }}
@@ -484,7 +587,9 @@ export const TaskCard: React.FC<{
                             transition flex items-center justify-center
                             ${
                               !canToggleChecklist
-                                ? "border-[1px] border-gray-200 bg-gray-100 cursor-not-allowed opacity-70"
+                                ? c.done
+                                  ? "bg-emerald-500 text-white cursor-not-allowed"
+                                  : "border-[1px] border-gray-200 bg-gray-100 cursor-not-allowed opacity-70"
                                 : c.done
                                   ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer checklist-btn"
                                   : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
@@ -492,15 +597,41 @@ export const TaskCard: React.FC<{
                           `}
                           disabled={
                             !canToggleChecklist ||
-                            toggleCheckItemMutation.isPending
+                            toggleCheckItemMutation.isPending ||
+                            sendMessageMutation.isPending
                           }
                           onClick={async () => {
                             if (!canToggleChecklist) return;
                             try {
+                              // Toggle the checklist item
                               await toggleCheckItemMutation.mutateAsync({
                                 taskId: t.id,
                                 itemId: c.id,
                               });
+
+                              // Send system message about the toggle
+                              const newDoneState = !c.done;
+                              const action = newDoneState
+                                ? "đánh dấu"
+                                : "bỏ đánh dấu";
+                              const messageContent = `${currentUserFullName} đã ${action} mục "${c.label}"`;
+
+                              if (conversationId && t.messageId) {
+                                try {
+                                  await sendMessageMutation.mutateAsync({
+                                    conversationId,
+                                    content: messageContent,
+                                    messageType: "SYS",
+                                    parentMessageId: t.messageId,
+                                  });
+                                } catch (error) {
+                                  console.error(
+                                    "Failed to send system message:",
+                                    error,
+                                  );
+                                  // Silently fail - don't show error to user
+                                }
+                              }
                             } catch (error) {
                               console.error(
                                 "Failed to toggle checklist item:",
@@ -510,7 +641,7 @@ export const TaskCard: React.FC<{
                           }}
                           title={
                             !canToggleChecklist
-                              ? "Vui lòng bắt đầu task trước khi check"
+                              ? getChecklistDisabledTooltip()
                               : c.done
                                 ? "Nhấn để bỏ chọn"
                                 : "Nhấn để hoàn thành"
@@ -529,14 +660,40 @@ export const TaskCard: React.FC<{
                           onClick={async () => {
                             if (
                               !canToggleChecklist ||
-                              toggleCheckItemMutation.isPending
+                              toggleCheckItemMutation.isPending ||
+                              sendMessageMutation.isPending
                             )
                               return;
                             try {
+                              // Toggle the checklist item
                               await toggleCheckItemMutation.mutateAsync({
                                 taskId: t.id,
                                 itemId: c.id,
                               });
+
+                              // Send system message about the toggle
+                              const newDoneState = !c.done;
+                              const action = newDoneState
+                                ? "đánh dấu"
+                                : "bỏ đánh dấu";
+                              const messageContent = `${currentUserFullName} đã ${action} mục "${c.label}"`;
+
+                              if (conversationId && t.messageId) {
+                                try {
+                                  await sendMessageMutation.mutateAsync({
+                                    conversationId,
+                                    content: messageContent,
+                                    messageType: "SYS",
+                                    parentMessageId: t.messageId,
+                                  });
+                                } catch (error) {
+                                  console.error(
+                                    "Failed to send system message:",
+                                    error,
+                                  );
+                                  // Silently fail - don't show error to user
+                                }
+                              }
                             } catch (error) {
                               console.error(
                                 "Failed to toggle checklist item:",
@@ -546,7 +703,7 @@ export const TaskCard: React.FC<{
                           }}
                           title={
                             !canToggleChecklist
-                              ? "Vui lòng bắt đầu task trước khi check"
+                              ? getChecklistDisabledTooltip()
                               : c.done
                                 ? "Nhấn để bỏ chọn"
                                 : "Nhấn để hoàn thành"
@@ -566,26 +723,14 @@ export const TaskCard: React.FC<{
                               }}
                             />
 
-                            {deleteCheckItemMutation.isPending ? (
+                            {deleteCheckItemMutation.isPending &&
+                            deleteItemTarget?.id === c.id ? (
                               <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
                             ) : (
                               <Trash2
                                 data-testid={`checklist-delete-${c.id}`}
                                 className="w-3.5 h-3.5 text-rose-500 cursor-pointer hover:text-rose-600"
-                                onClick={async () => {
-                                  if (!confirm(`Xóa mục "${c.label}"?`)) return;
-                                  try {
-                                    await deleteCheckItemMutation.mutateAsync({
-                                      taskId: t.id,
-                                      itemId: c.id,
-                                    });
-                                  } catch (error) {
-                                    console.error(
-                                      "Failed to delete checklist item:",
-                                      error,
-                                    );
-                                  }
-                                }}
+                                onClick={() => setDeleteItemTarget(c)}
                               />
                             )}
                           </div>
@@ -636,7 +781,7 @@ export const TaskCard: React.FC<{
               <button
                 data-testid="task-log-button"
                 onClick={() => onOpenTaskLog?.(t.id)}
-                className="px-2 py-1 rounded-md border text-[11px] border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                className="inline-flex items-center justify-center px-2 h-[26px] rounded-md border text-[11px] border-emerald-300 text-emerald-700 hover:bg-emerald-50"
               >
                 Nhật ký
               </button>
@@ -644,20 +789,45 @@ export const TaskCard: React.FC<{
               {permissions?.canChangeToDoing && t.status.code === "todo" && (
                 <button
                   data-testid="task-start-button"
-                  disabled={updateStatusMutation.isPending}
+                  disabled={
+                    updateStatusMutation.isPending ||
+                    sendMessageMutation.isPending
+                  }
                   onClick={async () => {
                     try {
                       await updateStatusMutation.mutateAsync({
                         taskId: t.id,
                         status: "doing",
                       });
+
+                      // Send system message about status change
+                      const newStatusLabel = STATUS_LABELS_VI["doing"];
+                      const messageContent = `${currentUserFullName} đã chuyển trạng thái công việc ${t.title} sang ${newStatusLabel}.`;
+
+                      if (conversationId && t.messageId) {
+                        try {
+                          await sendMessageMutation.mutateAsync({
+                            conversationId,
+                            content: messageContent,
+                            messageType: "SYS",
+                            parentMessageId: t.messageId,
+                          });
+                        } catch (error) {
+                          // Silently fail - don't show error to user
+                        }
+                      }
                     } catch (error) {
                       console.error("Failed to update status:", error);
                     }
                   }}
-                  className="rounded-md border px-2 py-0.5 text-[11px] hover:bg-emerald-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-md border px-2 h-[26px] text-[11px] min-w-[52px] hover:bg-emerald-50 disabled:opacity-50"
                 >
-                  {updateStatusMutation.isPending ? "..." : "Bắt đầu"}
+                  {updateStatusMutation.isPending ||
+                  sendMessageMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    "Bắt đầu"
+                  )}
                 </button>
               )}
 
@@ -668,6 +838,7 @@ export const TaskCard: React.FC<{
                     data-testid="task-complete-button"
                     disabled={
                       updateStatusMutation.isPending ||
+                      sendMessageMutation.isPending ||
                       (t.checklist && t.checklist.some((c) => !c.done))
                     }
                     onClick={async () => {
@@ -676,18 +847,41 @@ export const TaskCard: React.FC<{
                           taskId: t.id,
                           status: "need_to_verified",
                         });
+
+                        // Send system message about status change
+                        const newStatusLabel =
+                          STATUS_LABELS_VI["need_to_verified"];
+                        const messageContent = `${currentUserFullName} đã chuyển trạng thái công việc ${t.title} sang ${newStatusLabel}.`;
+
+                        if (conversationId && t.messageId) {
+                          try {
+                            await sendMessageMutation.mutateAsync({
+                              conversationId,
+                              content: messageContent,
+                              messageType: "SYS",
+                              parentMessageId: t.messageId,
+                            });
+                          } catch (error) {
+                            // Silently fail - don't show error to user
+                          }
+                        }
                       } catch (error) {
                         console.error("Failed to update status:", error);
                       }
                     }}
-                    className="rounded-md border px-2 py-1 text-[11px] min-w-[60px] text-center transition-all duration-200 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center justify-center rounded-md border px-2 h-[26px] text-[11px] min-w-[60px] transition-all duration-200 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title={
                       t.checklist && t.checklist.some((c) => !c.done)
                         ? "Vui lòng hoàn thành tất cả checklist items trước"
                         : undefined
                     }
                   >
-                    {updateStatusMutation.isPending ? "..." : "Hoàn tất"}
+                    {updateStatusMutation.isPending ||
+                    sendMessageMutation.isPending ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      "Chờ duyệt"
+                    )}
                   </button>
                 )}
 
@@ -698,6 +892,7 @@ export const TaskCard: React.FC<{
                     data-testid="task-finish-button"
                     disabled={
                       updateStatusMutation.isPending ||
+                      sendMessageMutation.isPending ||
                       (t.checklist && t.checklist.some((c) => !c.done))
                     }
                     onClick={async () => {
@@ -706,24 +901,59 @@ export const TaskCard: React.FC<{
                           taskId: t.id,
                           status: "finished",
                         });
+
+                        // Send system message about status change
+                        const newStatusLabel = STATUS_LABELS_VI["finished"];
+                        const messageContent = `${currentUserFullName} đã chuyển trạng thái công việc ${t.title} sang ${newStatusLabel}.`;
+
+                        if (conversationId && t.messageId) {
+                          try {
+                            await sendMessageMutation.mutateAsync({
+                              conversationId,
+                              content: messageContent,
+                              messageType: "SYS",
+                              parentMessageId: t.messageId,
+                            });
+                          } catch (error) {
+                            // Silently fail - don't show error to user
+                          }
+                        }
                       } catch (error) {
                         console.error("Failed to update status:", error);
                       }
                     }}
-                    className="rounded-md border px-2 py-1 text-[11px] min-w-[60px] text-center transition-all duration-200 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center justify-center rounded-md border px-2 h-[26px] text-[11px] min-w-[60px] transition-all duration-200 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title={
                       t.checklist && t.checklist.some((c) => !c.done)
                         ? "Vui lòng hoàn thành tất cả checklist trước"
                         : undefined
                     }
                   >
-                    {updateStatusMutation.isPending ? "..." : "Hoàn tất"}
+                    {updateStatusMutation.isPending ||
+                    sendMessageMutation.isPending ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      "Hoàn tất"
+                    )}
                   </button>
                 )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Delete Checklist Item Confirm Dialog */}
+      <ConfirmDialog
+        open={!!deleteItemTarget}
+        onOpenChange={(open) => !open && setDeleteItemTarget(null)}
+        title="Xác nhận xóa"
+        description={`Bạn có chắc chắn muốn xóa mục "${deleteItemTarget?.label}" không?`}
+        confirmText="Xóa"
+        cancelText="Hủy"
+        variant="danger"
+        onConfirm={handleDeleteChecklistItem}
+        isLoading={deleteCheckItemMutation.isPending}
+      />
 
       <style>
         {`

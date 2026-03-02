@@ -43,16 +43,11 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   // Register global event handlers immediately after connection
   const registerGlobalHandlers = useCallback(() => {
     if (handlersRegisteredRef.current) {
-      console.log("[SignalRProvider] Handlers already registered, skipping");
       return;
     }
 
     // ConversationCreated - Most important for the broadcast issue
     chatHub.on(SIGNALR_EVENTS.CONVERSATION_CREATED, (event: any) => {
-      console.log(
-        "[SignalRProvider] CONVERSATION_CREATED event received:",
-        event,
-      );
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     });
@@ -62,10 +57,13 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     // useCategoriesRealtime and useMessageRealtime handle updates via setQueryData
     // invalidateQueries would cause refetch → reset unreadCount → flash bug
     chatHub.on(SIGNALR_EVENTS.MESSAGE_SENT, (event: any) => {
-      console.log("[SignalRProvider] MESSAGE_SENT event received:", event);
-      const conversationId =
-        event?.conversationId || event?.message?.conversationId;
-      if (conversationId) {
+      const message = event?.message || event;
+      const conversationId = message?.conversationId;
+
+      // ✅ FIX: Don't invalidate for thread messages (parentMessageId exists)
+      // Thread messages are handled by TaskLogThreadSheet's local state
+      // Invalidating would refetch messages and overwrite optimistic unreadReplyCount
+      if (conversationId && !message?.parentMessageId) {
         queryClient.invalidateQueries({
           queryKey: ["messages", conversationId],
         });
@@ -77,24 +75,16 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     // NOTE: Do NOT invalidate categories/conversations here!
     // useCategoriesRealtime handles unread reset via setQueryData
     chatHub.on(SIGNALR_EVENTS.MESSAGE_READ, (event: any) => {
-      console.log("[SignalRProvider] MESSAGE_READ event received:", event);
       // Removed: invalidateQueries for categories/conversations (causes unread count flash)
     });
 
     // ConversationUpdated
     chatHub.on(SIGNALR_EVENTS.CONVERSATION_UPDATED, (event: any) => {
-      console.log(
-        "[SignalRProvider] CONVERSATION_UPDATED event received:",
-        event,
-      );
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     });
 
     handlersRegisteredRef.current = true;
-    console.log(
-      "[SignalRProvider] Global event handlers registered successfully",
-    );
   }, [queryClient]);
 
   // Unregister global event handlers
@@ -103,14 +93,12 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
       return;
     }
 
-    console.log("[SignalRProvider] Unregistering global event handlers...");
     chatHub.off(SIGNALR_EVENTS.CONVERSATION_CREATED);
     chatHub.off(SIGNALR_EVENTS.MESSAGE_SENT);
     chatHub.off(SIGNALR_EVENTS.MESSAGE_READ);
     chatHub.off(SIGNALR_EVENTS.CONVERSATION_UPDATED);
 
     handlersRegisteredRef.current = false;
-    console.log("[SignalRProvider] Global event handlers unregistered");
   }, []);
 
   // Connect to SignalR
@@ -127,16 +115,18 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
 
     try {
       setConnectionState("Connecting");
-      
+
       // Connect Chat Hub
       await chatHub.start(accessToken || undefined);
 
       // Connect Task Hub (parallel)
       try {
         await taskHub.start(taskAccessToken || undefined);
-        console.log("[SignalRProvider] ✅ Both Chat and Task hubs connected");
       } catch (taskError) {
-        console.warn("[SignalRProvider] Task hub connection failed (non-critical):", taskError);
+        console.warn(
+          "[SignalRProvider] Task hub connection failed (non-critical):",
+          taskError,
+        );
         // Task hub failure is non-critical, continue with chat hub only
       }
 
@@ -154,7 +144,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     } finally {
       connectionAttemptRef.current = false;
     }
-  }, [accessToken, taskAccessToken,  registerGlobalHandlers]);
+  }, [accessToken, taskAccessToken, registerGlobalHandlers]);
 
   // Disconnect from SignalR
   const disconnect = useCallback(async () => {
@@ -167,7 +157,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
         chatHub.stop(),
         // taskHub.stop(),
       ]);
-      
+
       if (mountedRef.current) {
         setConnectionState("Disconnected");
       }
@@ -240,10 +230,10 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   );
 }
 
-export function useSignalRConnection() {
+export function useSignalRConnection(): SignalRContextValue | null {
   const context = useContext(SignalRContext);
   if (!context) {
-    throw new Error("useSignalRConnection must be used within SignalRProvider");
+    return null;
   }
   return context;
 }

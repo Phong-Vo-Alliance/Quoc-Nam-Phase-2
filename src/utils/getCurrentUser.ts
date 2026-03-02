@@ -54,7 +54,6 @@ export async function getCurrentUser(): Promise<{
         if (user?.id) {
           // If departments are missing, we need to fetch from API
           if (!user.departments || user.departments.length === 0) {
-            // console.log("Departments missing in current_user, fetching from API...");
             const apiUser = await getCurrentUserFromAPI();
             if (apiUser) {
               return apiUser;
@@ -85,9 +84,6 @@ export async function getCurrentUser(): Promise<{
             !parsed.state.user.departments ||
             parsed.state.user.departments.length === 0
           ) {
-            console.log(
-              "Departments missing in auth-storage, fetching from API...",
-            );
             const apiUser = await getCurrentUserFromAPI();
             if (apiUser) {
               // Also update the auth-storage with departments

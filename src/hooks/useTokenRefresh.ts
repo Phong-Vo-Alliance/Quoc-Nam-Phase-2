@@ -25,7 +25,7 @@ export function useTokenRefresh() {
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const checkAndRefreshToken = useCallback(() => {
+  const checkAndRefreshToken = useCallback(async () => {
     if (!accessToken || !isAuthenticated) {
       return;
     }
@@ -33,7 +33,7 @@ export function useTokenRefresh() {
     // Check if token is already expired
     if (isTokenExpired(accessToken)) {
       console.warn('[Auth] Token expired, logging out');
-      logout();
+      await logout();
       // Navigate to login using React Router
       navigate(AUTH_CONFIG.routes.login, { replace: true });
       return;

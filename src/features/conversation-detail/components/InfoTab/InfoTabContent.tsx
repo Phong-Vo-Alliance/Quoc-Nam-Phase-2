@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Users, Plus } from "lucide-react";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
 import { RightAccordion } from "@/features/portal/components";
 import { FileManagerPhase1A } from "@/features/portal/components/FileManagerPhase1A";
 import type { MessageLike } from "@/features/portal/components/FileManagerPhase1A";
 import type { MinimalMember } from "../../types";
+import { MemberListModal } from "../MemberListModal";
 
 interface InfoTabContentProps {
   isDM: boolean;
@@ -23,6 +24,11 @@ interface InfoTabContentProps {
   setShowAddMemberDialog: (show: boolean) => void;
   /** When true, the info card is hidden (chat/categories loading) */
   isLoading?: boolean;
+  conversationAttachment?: any;
+  /** Callback to navigate to chat tab before scrolling to message */
+  onNavigateToChat?: () => void;
+  /** Callback to open "Nhật ký công việc" by parent message ID */
+  onOpenTaskLogByMessageId?: (parentMessageId: string) => void;
 }
 
 export const InfoTabContent: React.FC<InfoTabContentProps> = ({
@@ -37,7 +43,12 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
   members,
   setShowAddMemberDialog,
   isLoading = false,
+  conversationAttachment,
+  onNavigateToChat,
+  onOpenTaskLogByMessageId,
 }) => {
+  const [isMemberListOpen, setIsMemberListOpen] = useState(false);
+
   return (
     <div className="space-y-4 min-h-0" data-testid="info-tab-content">
       {/* Group + WorkType - Only show for group chats */}
@@ -84,12 +95,11 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
               groupId={groupId}
               selectedWorkTypeId={selectedWorkTypeId}
               onOpenSourceMessage={handleOpenSourceMessageById}
-              onNavigateToChat={() => {
-                // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
-                // User can see highlighted message in current tab
-              }}
+              onNavigateToChat={onNavigateToChat}
+              onOpenTaskLogByMessageId={onOpenTaskLogByMessageId}
               messages={messages}
               messagesQuery={messagesQuery}
+              conversationAttachment={conversationAttachment}
             />
           )}
         </RightAccordion>
@@ -120,12 +130,11 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
               groupId={groupId}
               selectedWorkTypeId={selectedWorkTypeId}
               onOpenSourceMessage={handleOpenSourceMessageById}
-              onNavigateToChat={() => {
-                // 🐛 FIX (ui-improvements-20260205): Don't auto-switch tab
-                // User can see highlighted message in current tab
-              }}
+              onNavigateToChat={onNavigateToChat}
+              onOpenTaskLogByMessageId={onOpenTaskLogByMessageId}
               messages={messages}
               messagesQuery={messagesQuery}
+              conversationAttachment={conversationAttachment}
             />
           )}
         </RightAccordion>
@@ -152,14 +161,35 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-gray-600" />
                   <div className="text-sm">
-                    <div className="text-xs text-gray-500">
+                    <button
+                      data-testid="member-count-button"
+                      onClick={() =>
+                        members.length > 0 && setIsMemberListOpen(true)
+                      }
+                      disabled={members.length === 0}
+                      className={`text-xs transition-colors ${
+                        members.length > 0
+                          ? "text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
+                          : "text-gray-400 cursor-not-allowed"
+                      }`}
+                    >
                       {members.length} thành viên
-                    </div>
+                    </button>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowAddMemberDialog(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs hover:bg-brand-50"
+                  disabled={!selectedWorkTypeId}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${
+                    selectedWorkTypeId
+                      ? "hover:bg-brand-50 cursor-pointer"
+                      : "opacity-50 cursor-not-allowed"
+                  }`}
+                  title={
+                    !selectedWorkTypeId
+                      ? "Vui lòng chọn Loại việc trước"
+                      : undefined
+                  }
                   data-testid="add-member-button"
                 >
                   <Plus className="h-3.5 w-3.5" /> Thêm
@@ -168,6 +198,16 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
             )}
           </RightAccordion>
         </div>
+      )}
+
+      {/* Member List Modal - Only render when members exist */}
+      {members.length > 0 && (
+        <MemberListModal
+          open={isMemberListOpen}
+          onOpenChange={setIsMemberListOpen}
+          members={members}
+          groupName={groupName}
+        />
       )}
     </div>
   );

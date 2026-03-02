@@ -29,8 +29,10 @@ import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfir
 import { toast } from "sonner";
 import type { CreateTaskRequest } from "@/types/tasks_api";
 import { sendMessage } from "@/api/messages.api";
-import type { SendChatMessageRequest } from "@/types/messages";
+import type { GetMessagesResponse, SendChatMessageRequest } from "@/types/messages";
 import { updateInformationConfirmed } from "@/api/information_confirmed.api";
+import { useMessages } from "@/hooks/queries/useMessages";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 
 interface Props {
   open: boolean;
@@ -135,7 +137,7 @@ export function AssignTaskSheet({
         });
       }
 
-      toast.success("Công việc đã được giao thành công");
+      toast.success("Công việc đã được giao thành công");      
 
       // Switch to tasks tab
       onTabChange?.("order");
@@ -193,18 +195,12 @@ export function AssignTaskSheet({
   // Create task mutation
   const createTaskMutation = useCreateTask({
     onSuccess: async (createdTaskId) => {
-      console.log("Task created with ID:", createdTaskId);
-      console.log("messageId:", messageId);
-      console.log("conversationId:", conversationId);
-      console.log("confirmedInfoId:", confirmedInfoId);
-
       // Mark confirmed info as finished if this task was created from confirmed info
       if (confirmedInfoId) {
         try {
           await updateInformationConfirmed(confirmedInfoId, {
             isFinished: true,
           });
-          console.log("Marked confirmed info as finished:", confirmedInfoId);
           // Invalidate information confirmed queries to refresh the list
           queryClient.invalidateQueries({
             queryKey: informationConfirmedKeys.all,

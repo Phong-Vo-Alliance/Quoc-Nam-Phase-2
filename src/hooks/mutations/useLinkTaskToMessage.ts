@@ -22,7 +22,6 @@ interface UseLinkTaskToMessageOptions {
  * Usage:
  * ```ts
  * const linkMutation = useLinkTaskToMessage({
- *   onSuccess: (data) => console.log('Linked:', data),
  *   onError: (error) => console.error('Error:', error),
  * });
  *

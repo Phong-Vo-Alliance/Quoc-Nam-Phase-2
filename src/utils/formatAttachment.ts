@@ -8,8 +8,8 @@
  * @since 2026-01-07
  */
 
-import type { AttachmentInputDto } from "@/types/messages";
 import type { UploadFileResult } from "@/types/files";
+import type { AttachmentInputDto } from "@/types/messages";
 
 /**
  * Format a single file + upload result into AttachmentInputDto

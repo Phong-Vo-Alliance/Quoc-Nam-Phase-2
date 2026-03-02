@@ -198,6 +198,7 @@ export interface ChatMessage {
   reactions: ChatMessageReaction[];
   attachments: AttachmentDto[]; // Updated to use AttachmentDto from Swagger
   replyCount: number;
+  unreadReplyCount: number; // 🆕 NEW: Số reply chưa đọc trong thread (from API)
   isStarred: boolean;
   isPinned: boolean;
   threadPreview: unknown | null;
@@ -279,6 +280,32 @@ export interface LinkTaskToMessageResponse {
   contentType: ChatMessageContentType;
   sender: ChatMessageSender;
   createdAt: string;
+}
+
+// =============================================================
+// Thread Types (Message Threading)
+// =============================================================
+
+// Response for GET /api/messages/{id}/thread
+export interface ThreadDto {
+  parentMessage: ChatMessage;
+  replies: ChatMessage[] | null;
+  totalReplyCount: number;
+  nextCursor: string | null;
+}
+
+// Thread summary for conversation thread list
+export interface ThreadSummaryDto {
+  id: string; // Parent message ID
+  conversationId: string;
+  content: string | null;
+  senderId: string;
+  senderUserName: string | null;
+  senderFullName: string | null;
+  senderRoles: string | null;
+  sentAt: string;
+  replyCount: number;
+  lastReplyAt: string | null;
 }
 
 // =============================================================

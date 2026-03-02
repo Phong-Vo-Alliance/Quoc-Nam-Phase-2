@@ -39,6 +39,8 @@ interface StaffModeContentProps {
   tasks: Task[];
   selectedWorkTypeId?: string;
   effectiveUserId: string | undefined;
+  conversationId?: string;
+  workspaceId?: string;
 }
 
 export const StaffModeContent: React.FC<StaffModeContentProps> = ({
@@ -60,6 +62,8 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
   tasks,
   selectedWorkTypeId,
   effectiveUserId,
+  conversationId,
+  workspaceId,
 }) => {
   return (
     <>
@@ -88,6 +92,8 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
                 groupName={groupName}
                 checklistVariants={checklistVariants}
                 assigneeOptions={assigneeOptions}
+                conversationId={conversationId}
+                workspaceId={workspaceId}
                 onChangeStatus={onChangeTaskStatus}
                 onReassign={onReassignTask}
                 onToggleChecklist={onToggleChecklist}
@@ -111,6 +117,8 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
                 groupName={groupName}
                 checklistVariants={checklistVariants}
                 assigneeOptions={assigneeOptions}
+                conversationId={conversationId}
+                workspaceId={workspaceId}
                 onChangeStatus={onChangeTaskStatus}
                 onReassign={onReassignTask}
                 onToggleChecklist={onToggleChecklist}
@@ -153,6 +161,8 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
                 groupName={groupName}
                 checklistVariants={checklistVariants}
                 assigneeOptions={assigneeOptions}
+                conversationId={conversationId}
+                workspaceId={workspaceId}
                 onChangeStatus={onChangeTaskStatus}
                 onReassign={onReassignTask}
                 onToggleChecklist={onToggleChecklist}

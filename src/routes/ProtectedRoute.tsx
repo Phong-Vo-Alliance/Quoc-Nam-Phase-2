@@ -1,6 +1,6 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';
+import { useAuthStore } from '@/stores/authStore';
+import { Navigate, Outlet } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   redirectTo?: string;

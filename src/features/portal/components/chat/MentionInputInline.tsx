@@ -22,6 +22,11 @@ export interface MentionData {
   id: string; // Unique ID for React key and DOM tracking
 }
 
+export interface MentionInputHandle {
+  focus: () => void;
+  clear: () => void;
+}
+
 export interface MentionInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -32,6 +37,8 @@ export interface MentionInputProps {
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
+  /** Allow sending with Enter even when text is empty (e.g., when files are attached) */
+  canSendWithoutText?: boolean;
 }
 
 /**
@@ -58,7 +65,7 @@ export interface MentionInputProps {
  * />
  * ```
  */
-export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
+export const MentionInputInline = forwardRef<MentionInputHandle, MentionInputProps>(
   (
     {
       value,
@@ -70,6 +77,7 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
       placeholder = "Type your message...",
       autoFocus,
       className,
+      canSendWithoutText = false,
     },
     forwardedRef,
   ) => {
@@ -109,7 +117,23 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
     const lastKnownTextRef = useRef<string>("");
     const mentionsRef = useRef<MentionData[]>([]); // Ref to avoid stale closure
 
-    useImperativeHandle(forwardedRef, () => editorRef.current!);
+    useImperativeHandle(
+      forwardedRef,
+      () => ({
+        focus: () => editorRef.current?.focus(),
+        clear: () => {
+          if (editorRef.current) {
+            editorRef.current.innerHTML = "";
+          }
+          mentionsRef.current = [];
+          setMentionsState([]);
+          if (onMentionsChange) {
+            onMentionsChange([]);
+          }
+        },
+      }),
+      [onMentionsChange],
+    );
 
     // Fetch conversation members
     const { data: members = [] } = useConversationMembers({
@@ -532,15 +556,30 @@ export const MentionInputInline = forwardRef<HTMLDivElement, MentionInputProps>(
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           const text = getTextContent();
-          if (text.trim()) {
+          // Allow sending if text is not empty OR if canSendWithoutText is true (e.g., files attached)
+          if (text.trim() || canSendWithoutText) {
             // Use mentionsRef.current to avoid stale closure issue
             const mentionsForApi = buildMentionsForApi(
               text,
               mentionsRef.current,
             );
             onSend(text, mentionsForApi);
-            // 🔧 FIX: Don't clear here - let parent clear after successful send via value prop
-            // Parent should set value="" after onSend succeeds, which will trigger the sync useEffect
+            // Clear DOM immediately after send to prevent stale text
+            // (parent state sync via useEffect is unreliable due to race conditions)
+            if (editorRef.current) {
+              editorRef.current.innerHTML = "";
+            }
+            mentionsRef.current = [];
+            setMentionsState([]);
+            onChange("");
+            if (onMentionsChange) {
+              onMentionsChange([]);
+            }
+
+            // Restore focus after clearing
+            setTimeout(() => {
+              editorRef.current?.focus();
+            }, 0);
           }
         }
 

@@ -94,13 +94,10 @@ export interface UploadFilesResult {
  *     sourceModule: 1, // Chat
  *     sourceEntityId: conversationId,
  *     onProgress: (fileId, progress) => {
- *       console.log(`File ${fileId}: ${progress}%`);
  *     },
  *   });
  *
  *   // Updated: result.files instead of result.fileIds
- *   console.log('Uploaded files:', result.files);
- *   console.log('Success:', result.successCount, 'Failed:', result.failedCount);
  *
  *   // Access file metadata for attachments
  *   const attachments = result.files.map(({ originalFile, uploadResult }) => ({

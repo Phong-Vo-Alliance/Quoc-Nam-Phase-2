@@ -24,7 +24,7 @@ export const securityConfig: SecurityConfig = {
     enabled: SECURITY_FLAGS.enableContentProtection,
     fileTypes: import.meta.env.VITE_CONTENT_PROTECTION_FILE_TYPES?.split(
       ",",
-    ) || ["pdf", "docx", "xlsx"],
+    ) || ["pdf", "doc", "docx", "xlsx", "xls"],
     showWarning: true, // Show toast when copy is blocked
   },
   printProtection: {

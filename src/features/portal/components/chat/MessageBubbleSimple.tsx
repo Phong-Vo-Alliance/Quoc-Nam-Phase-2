@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Inbox,
   Loader2,
+  Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
@@ -78,6 +79,14 @@ export interface MessageBubbleSimpleProps {
   onToggleStar?: (messageId: string, isStarred: boolean) => void;
   onRetry?: (messageId: string) => void; // NEW: Retry failed message
   onScrollToQuoted?: (messageId: string) => void; // NEW: Scroll to quoted message
+  onReply?: (replyData: {
+    id: string;
+    senderId: string;
+    senderName: string;
+    content: string;
+    sentAt: string;
+    attachments?: any[];
+  }) => void; // NEW: Custom reply handler (for thread mode)
   // Phase 4: Grouping props
   isFirstInGroup?: boolean;
   isMiddleInGroup?: boolean;
@@ -85,7 +94,12 @@ export interface MessageBubbleSimpleProps {
   onCreateTask?: (messageId: string) => void;
   onConfirmInfo?: (messageId: string) => void; // NEW: Confirm information
   hasConfirmedInfo?: boolean; // NEW: Check if message already has confirmed info
+  confirmedByName?: string; // NEW: Name of user who confirmed (for display)
+  onTaskLogClick?: (taskId: string) => void; // NEW: Open task log thread
+  threadUnreadCount?: number; // NEW: Unread count for task log thread
   isConfirming?: boolean; // NEW: Loading state when confirming
+  currentSessionCount?: number; // NEW: Messages sent in current session (for "new" indicator)
+  isThreadOpen?: boolean; // NEW: Hide unread badge when thread is open
 }
 
 export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
@@ -98,17 +112,26 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   onImageClick,
   onRetry,
   onScrollToQuoted,
+  onReply,
   isFirstInGroup = true,
   isMiddleInGroup = false,
   isLastInGroup = true,
   onCreateTask,
   onConfirmInfo,
   hasConfirmedInfo = false,
+  confirmedByName,
+  onTaskLogClick,
+  threadUnreadCount = 0,
   isConfirming = false,
+  currentSessionCount = 0, // 🔴 DEPRECATED: No longer needed since replyCount is updated in real-time via SignalR
+  isThreadOpen = false,
 }) => {
+  // ✅ Use replyCount directly from cache (updated in real-time by SignalR)
+  // currentSessionCount is kept for backwards compatibility but not used
+  const mergedReplyCount = message.replyCount ?? 0;
+  const debugTimestamp = Date.now();
   // Quote Reply: Get setReplyTarget from store
   const setReplyTarget = useReplyStore((state) => state.setReplyTarget);
-
   // Content Protection: Prevent copy/select for message content
   const messageContentRef = useRef<HTMLDivElement>(null);
   useContentProtection(messageContentRef as React.RefObject<HTMLElement>, {
@@ -118,14 +141,23 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   // Handle Reply button click
   const handleReplyClick = () => {
     if (!message) return;
-    setReplyTarget({
+
+    const replyData = {
       id: message.id,
       senderId: message.senderId, // 🆕 v1.3.0 - For "Bạn" display when replying to self
       senderName: message.senderName,
       content: message.content || "",
       sentAt: message.sentAt,
       attachments: message.attachments, // 🆕 v1.2.0 - Pass attachments for preview
-    });
+    };
+
+    // Use custom onReply handler if provided (for thread mode)
+    // Otherwise use global replyStore (for main conversation)
+    if (onReply) {
+      onReply(replyData);
+    } else {
+      setReplyTarget(replyData);
+    }
   };
   // Phase 4: Dynamic border-radius based on grouping position
   const radiusBySide = isOwn
@@ -757,16 +789,16 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     {hasFiles && (
                       <div
                         className={cn(
-                          "mx-1",
+                          "px-1",
                           hasText || hasImages ? "pb-1" : "py-1",
                         )}
                       >
-                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden min-w-[200px]">
                           {files.map((file, index) => (
                             <div
                               key={file.fileId}
                               className={cn(
-                                "flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors min-w-0 w-full max-w-full px-2 py-2",
+                                "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors px-2 py-2",
                                 index > 0 && "border-t border-gray-100",
                               )}
                               data-testid={`message-file-attachment-${file.fileId}`}
@@ -787,12 +819,10 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                                   size="md"
                                 />
                               </div>
-                              <div className="flex-1 min-w-0 overflow-hidden">
+                              <div className="min-w-0 overflow-hidden">
                                 <p
-                                  className={cn(
-                                    "text-sm font-medium truncate",
-                                    "text-gray-900",
-                                  )}
+                                  className="text-sm font-medium text-gray-900 truncate"
+                                  title={file.fileName || "File"}
                                 >
                                   {file.fileName || "File"}
                                 </p>
@@ -832,22 +862,46 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             </div>
           </div>
 
-          {/* Indicator for linked task or confirmed info - below bubble with connector */}
-          {(message.linkedTaskId || hasConfirmedInfo) && (
-            <div className="flex items-center gap-1.5 mt-0.5 mb-1.5">
+          {/* Confirmed info indicator - directly below bubble, no connector */}
+          {/* Only show if confirmed AND no linkedTaskId (hide when task is created) */}
+          {hasConfirmedInfo && !message.linkedTaskId && (
+            <div
+              className={cn(
+                "mt-1.5",
+                isOwn ? "flex justify-end" : "flex justify-start",
+              )}
+            >
+              <span className="inline-flex items-center gap-1 text-[11px] text-green-600">
+                <Paperclip className="w-3 h-3" />
+                {confirmedByName
+                  ? `Đã tiếp nhận bởi ${confirmedByName}`
+                  : "Đã tiếp nhận"}
+              </span>
+            </div>
+          )}
+
+          {/* Indicator for linked task - below bubble with connector */}
+          {message.linkedTaskId && (
+            <div className="flex items-center gap-1.5 mt-2 mb-1.5">
               {/* Text first for own messages, SVG first for received */}
               {isOwn && (
-                <div className="flex items-center gap-2">
-                  {message.linkedTaskId && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
-                      <ClipboardPlus size={12} className="text-emerald-600" />
-                      Đã giao việc
-                    </span>
-                  )}
-                  {hasConfirmedInfo && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
-                      <Inbox size={12} className="text-brand-600" />
-                      Đã tiếp nhận thông tin
+                <div
+                  onClick={() => onTaskLogClick?.(message.linkedTaskId!)}
+                  className="flex items-center gap-1 text-[11px] text-gray-600 hover:text-gray-700 cursor-pointer"
+                  data-testid="task-log-link"
+                >
+                  <span className="text-emerald-600">📝 Nhật ký công việc</span>
+                  <span>·</span>
+                  <span>{mergedReplyCount} phản hồi</span>
+                  {/* ✅ NEW: Display unread count badge from API (hidden when thread is open) */}
+                  {message.unreadReplyCount > 0 && !isThreadOpen && (
+                    <span
+                      className="inline-flex justify-center items-center ml-1 px-1.5 py-0 text-[10px] font-semibold bg-red-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
+                      data-testid="thread-unread-badge"
+                    >
+                      {message.unreadReplyCount > 99
+                        ? "99+"
+                        : message.unreadReplyCount}
                     </span>
                   )}
                 </div>
@@ -873,17 +927,23 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
               </svg>
               {/* Text after SVG for received messages */}
               {!isOwn && (
-                <div className="flex items-center gap-2">
-                  {message.linkedTaskId && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
-                      <ClipboardPlus size={12} className="text-emerald-600" />
-                      Đã giao việc
-                    </span>
-                  )}
-                  {hasConfirmedInfo && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
-                      <Inbox size={12} className="text-brand-600" />
-                      Đã tiếp nhận thông tin
+                <div
+                  onClick={() => onTaskLogClick?.(message.linkedTaskId!)}
+                  className="flex items-center gap-1 text-[11px] text-gray-600 hover:text-gray-700 cursor-pointer"
+                  data-testid="task-log-link"
+                >
+                  <span className="text-emerald-600">📝 Nhật ký công việc</span>
+                  <span>·</span>
+                  <span>{mergedReplyCount} phản hồi</span>
+                  {/* ✅ NEW: Display unread count badge from API (hidden when thread is open) */}
+                  {message.unreadReplyCount > 0 && !isThreadOpen && (
+                    <span
+                      className="inline-flex justify-center items-center ml-1 px-1.5 py-0 text-[10px] font-semibold bg-red-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
+                      data-testid="thread-unread-badge"
+                    >
+                      {message.unreadReplyCount > 99
+                        ? "99+"
+                        : message.unreadReplyCount}
                     </span>
                   )}
                 </div>

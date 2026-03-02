@@ -36,7 +36,6 @@ export default function FilePreviewModal({
 }: FilePreviewModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-console.log(fileName);
   // Phase 5: Check if this is Word/Excel file
   const extension = getFileExtension(fileName);
   const isWordFile = extension === "docx";
@@ -209,11 +208,11 @@ console.log(fileName);
                     error.message.includes("Không tìm thấy")
                       ? "Không tìm thấy tệp"
                       : error.message.includes("401") ||
-                        error.message.includes("Unauthorized")
-                      ? "Không có quyền truy cập"
-                      : error.message.includes("Network")
-                      ? "Lỗi kết nối mạng"
-                      : "Không thể tải tệp"}
+                          error.message.includes("Unauthorized")
+                        ? "Không có quyền truy cập"
+                        : error.message.includes("Network")
+                          ? "Lỗi kết nối mạng"
+                          : "Không thể tải tệp"}
                   </h3>
                   <p className="text-sm text-gray-600">{error.message}</p>
                 </div>
@@ -238,6 +237,8 @@ console.log(fileName);
                 src={imageUrl}
                 alt={`Trang ${currentPage} của ${fileName}`}
                 className="max-h-full max-w-full object-contain"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
                 data-testid="file-preview-image"
               />
             </div>

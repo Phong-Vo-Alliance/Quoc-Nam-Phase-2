@@ -21,41 +21,31 @@ export function useSendTypingIndicator({
   );
   const isTypingRef = useRef(false);
 
-  const sendTyping = useCallback(
-    (isTyping: boolean) => {
-      chatHub.sendTyping(conversationId, isTyping);
-    },
-    [conversationId]
-  );
+  const sendTyping = useCallback(() => {
+    chatHub.sendTyping(conversationId);
+  }, [conversationId]);
 
   const handleTyping = useCallback(() => {
-    // Clear existing timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    // Send typing start if not already typing
-    if (!isTypingRef.current) {
-      isTypingRef.current = true;
-      sendTyping(true);
-    }
+    // Send typing heartbeat (server handles timeout)
+    sendTyping();
 
-    // Set timeout to send typing stop
     timeoutRef.current = setTimeout(() => {
       isTypingRef.current = false;
-      sendTyping(false);
     }, debounceMs);
+
+    isTypingRef.current = true;
   }, [sendTyping, debounceMs]);
 
   const stopTyping = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    if (isTypingRef.current) {
-      isTypingRef.current = false;
-      sendTyping(false);
-    }
-  }, [sendTyping]);
+    isTypingRef.current = false;
+  }, []);
 
   return {
     handleTyping,

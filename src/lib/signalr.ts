@@ -236,10 +236,13 @@ export interface TaskUpdatePayload {
     conversationId?: string;
     completionPercentage: number;
     dueDate?: string;
+    messageId?: string; // Linked message ID, if any
   };
   timestamp: string;
   changedByUserId: string;
   metadata?: Record<string, any>;
+  conversationId?: string; // Optional conversationId for easier handling in UI
+  messageId?: string; // Optional messageId for easier handling in UI
 }
 
 // Typing Indicators
@@ -371,18 +374,12 @@ class ChatHubConnection {
 
   async start(accessToken?: string): Promise<void> {
     if (this.connection?.state === signalR.HubConnectionState.Connected) {
-      console.log("[SignalR] Already connected, skipping start()");
       return;
     }
 
     if (this.isConnecting) {
-      console.log("[SignalR] Connection already in progress, skipping start()");
       return;
     }
-
-    console.log(
-      `[SignalR] Starting connection... | Timestamp: ${new Date().toISOString()}`,
-    );
     this.isConnecting = true;
 
     try {
@@ -413,16 +410,10 @@ class ChatHubConnection {
 
       this.connection.onreconnected((connectionId) => {
         const timestamp = new Date().toISOString();
-        console.log(
-          `[SignalR] ${timestamp} | Reconnected | ConnectionId: ${connectionId}`,
-        );
         this.reconnectAttempts = 0;
 
         // AUTO REFETCH: Invalidate messages to sync after reconnection
         if (this.queryClient && this.currentConversationId) {
-          console.log(
-            `[SignalR] Auto-refetching messages after reconnect | ConversationId: ${this.currentConversationId}`,
-          );
           this.queryClient.invalidateQueries({
             queryKey: ["messages", this.currentConversationId],
             refetchType: "active", // Only refetch if query is active
@@ -437,23 +428,16 @@ class ChatHubConnection {
             `[SignalR] ${timestamp} | Max reconnect attempts reached | Attempts: ${this.reconnectAttempts}`,
           );
         } else {
-          console.log(`[SignalR] ${timestamp} | Connection closed`, error);
         }
       });
 
       await this.connection.start();
       this.reconnectAttempts = 0;
       const timestamp = new Date().toISOString();
-      console.log(
-        `[SignalR] ${timestamp} | Connected successfully | State: ${this.connection.state}`,
-      );
     } catch (error) {
       const timestamp = new Date().toISOString();
       // Don't log AbortError as it's expected when connection is stopped during negotiation
       if (error instanceof Error && error.name === "AbortError") {
-        console.log(
-          `[SignalR] ${timestamp} | Connection aborted (likely due to unmount or auth change)`,
-        );
       } else {
         console.error(`[SignalR] ${timestamp} | Connection failed`, error);
       }
@@ -465,19 +449,13 @@ class ChatHubConnection {
 
   async stop(): Promise<void> {
     const timestamp = new Date().toISOString();
-    console.log(`[SignalR] ${timestamp} | Stopping connection...`);
 
     this.isConnecting = false; // Cancel any pending connection
     if (this.connection) {
       try {
         await this.connection.stop();
-        console.log(`[SignalR] ${timestamp} | Disconnected successfully`);
       } catch (error) {
         // Ignore errors during stop
-        console.log(
-          `[SignalR] ${timestamp} | Stop completed with warning`,
-          error,
-        );
       }
       this.connection = null;
     }
@@ -492,9 +470,6 @@ class ChatHubConnection {
       return;
     }
     // const timestamp = new Date().toISOString();
-    // console.log(
-    //   `[SignalR] ${timestamp} | Joining conversation | ConversationId: ${conversationId}`,
-    // );
 
     try {
       await this.connection.invoke(
@@ -522,9 +497,6 @@ class ChatHubConnection {
       return;
     }
     // const timestamp = new Date().toISOString();
-    // console.log(
-    //   `[SignalR] ${timestamp} | Leaving conversation | ConversationId: ${conversationId}`,
-    // );
 
     try {
       await this.connection.invoke(
@@ -542,40 +514,28 @@ class ChatHubConnection {
         );
       } catch {
         // Ignore errors when leaving
-        console.log(
-          `[SignalR] | Leave failed (may be already left) | ConversationId: ${conversationId}`,
-        );
       }
     }
   }
 
   // Typing indicator
-  async sendTyping(groupId: string, isTyping: boolean): Promise<void> {
+  async sendTyping(groupId: string): Promise<void> {
     if (this.connection?.state !== signalR.HubConnectionState.Connected) {
       console.warn(
         `[SignalR] Cannot send typing - not connected | GroupId: ${groupId}`,
       );
       return;
     }
-    const timestamp = new Date().toISOString();
-    // console.log(
-    //   `[SignalR] ${timestamp} | Sending typing indicator | GroupId: ${groupId} | IsTyping: ${isTyping}`,
-    // );
 
-    await this.connection.invoke(SIGNALR_EVENTS.SEND_TYPING, groupId, isTyping);
+    await this.connection.invoke(SIGNALR_EVENTS.SEND_TYPING, groupId);
   }
 
   // Generic event subscription
   on<T>(event: string, callback: (data: T) => void): void {
     // const timestamp = new Date().toISOString();
-    // console.log(`[SignalR] ${timestamp} | Registering generic handler | Event: "${event}"`);
 
     const wrappedCallback = (data: T) => {
       const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | Generic: "${event}" | Data:`,
-        data,
-      );
       callback(data);
     };
 
@@ -620,7 +580,6 @@ class ChatHubConnection {
   // Generic event unsubscription
   off(event: string, callback?: (...args: unknown[]) => void): void {
     // const timestamp = new Date().toISOString();
-    // console.log(`[SignalR] ${timestamp} | Unregistering handler | Event: "${event}" | HasCallback: ${!!callback}`);
 
     if (callback) {
       this.connection?.off(event, callback);
@@ -633,44 +592,18 @@ class ChatHubConnection {
 
   // Message Events
   onMessageSent(callback: (event: NewMessageEvent) => void): void {
-    // console.log(
-    //   `[SignalR] Registering MessageSent handler via onMessageSent()`,
-    // );
 
     const wrappedCallback = (event: NewMessageEvent) => {
       const timestamp = new Date().toISOString();
-      console.log(`[SignalR EVENT] ${timestamp} | MessageSent | Event Data:`, {
-        eventName: SIGNALR_EVENTS.MESSAGE_SENT,
-        conversationId: event.conversationId,
-        messageId: event.message?.id,
-        senderId: event.message?.senderId,
-        contentType: event.message?.contentType,
-        content: event.message?.content?.substring(0, 50),
-        fullEvent: event,
-      });
       callback(event);
     };
 
     this.connection?.on(SIGNALR_EVENTS.MESSAGE_SENT, wrappedCallback);
-    console.log(
-      `[SignalR] MessageSent handler registered for event: "${SIGNALR_EVENTS.MESSAGE_SENT}"`,
-    );
   }
 
   onMessageEdited(callback: (event: MessageEditedEvent) => void): void {
     const wrappedCallback = (event: MessageEditedEvent) => {
       const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MessageEdited | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MESSAGE_EDITED,
-          conversationId: event.conversationId,
-          messageId: event.message?.id,
-          newContent: event.message?.content?.substring(0, 50),
-          editedAt: event.message?.editedAt,
-          fullEvent: event,
-        },
-      );
       callback(event);
     };
 
@@ -680,16 +613,6 @@ class ChatHubConnection {
   onMessageDeleted(callback: (event: MessageDeletedEvent) => void): void {
     const wrappedCallback = (event: MessageDeletedEvent) => {
       const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MessageDeleted | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MESSAGE_DELETED,
-          conversationId: event.conversationId,
-          messageId: event.messageId,
-          deletedAt: event.deletedAt,
-          fullEvent: event,
-        },
-      );
       callback(event);
     };
 
@@ -699,17 +622,6 @@ class ChatHubConnection {
   onMessageRead(callback: (event: MessageReadEvent) => void): void {
     const wrappedCallback = (event: MessageReadEvent) => {
       const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MessageRead | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MESSAGE_READ,
-          conversationId: event.conversationId,
-          messageId: event.messageId,
-          userId: event.userId,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       callback(event);
     };
 
@@ -722,19 +634,6 @@ class ChatHubConnection {
   ): void {
     const wrappedCallback = (event: ConversationCreatedEvent) => {
       const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | ConversationCreated | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.CONVERSATION_CREATED,
-          conversationId: event.id,
-          type: event.type,
-          name: event.name,
-          createdBy: event.createdBy,
-          createdByName: event.createdByName,
-          memberCount: event.memberCount,
-          fullEvent: event,
-        },
-      );
       callback(event);
     };
 
@@ -744,18 +643,6 @@ class ChatHubConnection {
   onMemberAdded(callback: (event: MemberAddedEvent) => void): void {
     const wrappedCallback = (event: MemberAddedEvent) => {
       const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MemberAdded | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MEMBER_ADDED,
-          conversationId: event.conversationId,
-          userId: event.userId,
-          addedBy: event.addedBy,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
-      console.error("[SignalR] MemberAdded handler not fully implemented yet");
       callback(event);
     };
 
@@ -763,24 +650,7 @@ class ChatHubConnection {
   }
 
   onMembersAdded(callback: (event: MembersAddedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MembersAdded handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MembersAddedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MembersAdded | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MEMBERS_ADDED,
-          conversationId: event.conversationId,
-          addedCount: event.addedCount,
-          addedBy: event.addedBy,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error("[SignalR] MembersAdded handler not fully implemented yet");
       callback(event);
     };
@@ -789,24 +659,7 @@ class ChatHubConnection {
   }
 
   onMemberRemoved(callback: (event: MemberRemovedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MemberRemoved handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MemberRemovedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MemberRemoved | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MEMBER_REMOVED,
-          conversationId: event.conversationId,
-          userId: event.userId,
-          removedBy: event.removedBy,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] MemberRemoved handler not fully implemented yet",
       );
@@ -817,25 +670,7 @@ class ChatHubConnection {
   }
 
   onMemberPromoted(callback: (event: MemberPromotedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MemberPromoted handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MemberPromotedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MemberPromoted | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MEMBER_PROMOTED,
-          conversationId: event.conversationId,
-          userId: event.userId,
-          newRole: event.newRole,
-          promotedBy: event.promotedBy,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] MemberPromoted handler not fully implemented yet",
       );
@@ -848,22 +683,7 @@ class ChatHubConnection {
   onConversationUpdated(
     callback: (event: ConversationUpdatedEvent) => void,
   ): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering ConversationUpdated handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: ConversationUpdatedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | ConversationUpdated | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.CONVERSATION_UPDATED,
-          conversationId: event.id,
-          name: event.name,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] ConversationUpdated handler not fully implemented yet",
       );
@@ -876,24 +696,7 @@ class ChatHubConnection {
   onCategoryDepartmentLinked(
     callback: (event: CategoryDepartmentLinkedEvent) => void,
   ): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering CategoryDepartmentLinked handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: CategoryDepartmentLinkedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | CategoryDepartmentLinked | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.CATEGORY_DEPARTMENT_LINKED,
-          categoryId: event.categoryId,
-          categoryName: event.categoryName,
-          departmentId: event.departmentId,
-          linkedBy: event.linkedBy,
-          fullEvent: event,
-        },
-      );
       callback(event);
     };
 
@@ -905,23 +708,7 @@ class ChatHubConnection {
 
   // Typing Indicators
   onUserTyping(callback: (event: UserTypingEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering UserTyping handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: UserTypingEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | UserTyping | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.USER_TYPING,
-          userId: event.userId,
-          conversationId: event.conversationId,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       callback(event);
     };
 
@@ -929,23 +716,7 @@ class ChatHubConnection {
   }
 
   onUserStoppedTyping(callback: (event: UserStoppedTypingEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering UserStoppedTyping handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: UserStoppedTypingEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | UserStoppedTyping | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.USER_STOPPED_TYPING,
-          userId: event.userId,
-          conversationId: event.conversationId,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       callback(event);
     };
 
@@ -956,23 +727,7 @@ class ChatHubConnection {
   onUserPresenceChanged(
     callback: (event: UserPresenceChangedEvent) => void,
   ): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering UserPresenceChanged handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: UserPresenceChangedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | UserPresenceChanged | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.USER_PRESENCE_CHANGED,
-          userId: event.userId,
-          status: event.status,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] UserPresenceChanged handler not fully implemented yet",
       );
@@ -984,24 +739,7 @@ class ChatHubConnection {
 
   // Reaction Events
   onReactionAdded(callback: (event: ReactionAddedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering ReactionAdded handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: ReactionAddedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | ReactionAdded | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.REACTION_ADDED,
-          messageId: event.messageId,
-          userId: event.userId,
-          reactionType: event.reactionType,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] ReactionAdded handler not fully implemented yet",
       );
@@ -1012,24 +750,7 @@ class ChatHubConnection {
   }
 
   onReactionRemoved(callback: (event: ReactionRemovedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering ReactionRemoved handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: ReactionRemovedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | ReactionRemoved | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.REACTION_REMOVED,
-          messageId: event.messageId,
-          userId: event.userId,
-          reactionType: event.reactionType,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] ReactionRemoved handler not fully implemented yet",
       );
@@ -1041,25 +762,7 @@ class ChatHubConnection {
 
   // Threading Events
   onThreadUpdated(callback: (event: ThreadUpdatedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering ThreadUpdated handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: ThreadUpdatedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | ThreadUpdated | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.THREAD_UPDATED,
-          parentMessageId: event.parentMessageId,
-          replyId: event.replyId,
-          conversationId: event.conversationId,
-          senderId: event.senderId,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] ThreadUpdated handler not fully implemented yet",
       );
@@ -1071,24 +774,7 @@ class ChatHubConnection {
 
   // Pin Events
   onMessagePinned(callback: (event: MessagePinnedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MessagePinned handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MessagePinnedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MessagePinned | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MESSAGE_PINNED,
-          messageId: event.messageId,
-          conversationId: event.conversationId,
-          pinnedBy: event.pinnedBy,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] MessagePinned handler not fully implemented yet",
       );
@@ -1099,24 +785,7 @@ class ChatHubConnection {
   }
 
   onMessageUnpinned(callback: (event: MessageUnpinnedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MessageUnpinned handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MessageUnpinnedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MessageUnpinned | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MESSAGE_UNPINNED,
-          messageId: event.messageId,
-          conversationId: event.conversationId,
-          unpinnedBy: event.unpinnedBy,
-          timestamp: event.timestamp,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] MessageUnpinned handler not fully implemented yet",
       );
@@ -1128,26 +797,7 @@ class ChatHubConnection {
 
   // Mention Events
   onUserMentioned(callback: (event: UserMentionedEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering UserMentioned handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: UserMentionedEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | UserMentioned | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.USER_MENTIONED,
-          mentionId: event.mentionId,
-          messageId: event.messageId,
-          conversationId: event.conversationId,
-          mentionedByUserId: event.mentionedByUserId,
-          mentionedByUserName: event.mentionedByUserName,
-          messageContentPreview: event.messageContentPreview?.substring(0, 50),
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] UserMentioned handler not fully implemented yet",
       );
@@ -1158,24 +808,7 @@ class ChatHubConnection {
   }
 
   onMentionRead(callback: (event: MentionReadEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MentionRead handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MentionReadEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MentionRead | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MENTION_READ,
-          mentionId: event.mentionId,
-          messageId: event.messageId,
-          userId: event.userId,
-          readAt: event.readAt,
-          fullEvent: event,
-        },
-      );
       console.error("[SignalR] MentionRead handler not fully implemented yet");
       callback(event);
     };
@@ -1184,23 +817,7 @@ class ChatHubConnection {
   }
 
   onMentionsBulkRead(callback: (event: MentionsBulkReadEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering MentionsBulkRead handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: MentionsBulkReadEvent) => {
-      const eventTimestamp = new Date().toISOString();
-      console.log(
-        `[SignalR EVENT] ${eventTimestamp} | MentionsBulkRead | Event Data:`,
-        {
-          eventName: SIGNALR_EVENTS.MENTIONS_BULK_READ,
-          conversationId: event.conversationId,
-          markedCount: event.markedCount,
-          markedAt: event.markedAt,
-          fullEvent: event,
-        },
-      );
       console.error(
         "[SignalR] MentionsBulkRead handler not fully implemented yet",
       );
@@ -1212,11 +829,6 @@ class ChatHubConnection {
 
   // Error Events
   onError(callback: (event: SignalRErrorEvent) => void): void {
-    const timestamp = new Date().toISOString();
-    console.log(
-      `[SignalR] Registering Error handler | Timestamp: ${timestamp}`,
-    );
-
     const wrappedCallback = (event: SignalRErrorEvent) => {
       const eventTimestamp = new Date().toISOString();
       console.error(`[SignalR EVENT] ${eventTimestamp} | Error | Event Data:`, {
@@ -1414,7 +1026,6 @@ export const chatHub = new ChatHubConnection();
 export function initializeSignalR(queryClient: QueryClient): void {
   chatHub.setQueryClient(queryClient);
   taskHub.setQueryClient(queryClient);
-  console.log("SignalR: QueryClient initialized for Chat and Task hubs");
 }
 
 // Expose to window for debugging
@@ -1456,17 +1067,13 @@ class TaskHubConnection {
     }
 
     if (this.connection?.state === signalR.HubConnectionState.Connected) {
-      console.log("[TaskHub] Already connected");
       return;
     }
 
     if (this.isConnecting) {
-      console.log("[TaskHub] Connection already in progress");
       return;
     }
 
-    const timestamp = new Date().toISOString();
-    console.log(`[TaskHub] ${timestamp} | Starting connection...`);
     this.isConnecting = true;
 
     try {
@@ -1495,15 +1102,10 @@ class TaskHubConnection {
       });
 
       this.connection.onreconnected((connectionId) => {
-        const ts = new Date().toISOString();
-        console.log(
-          `[TaskHub] ${ts} | ✅ Reconnected | ConnectionId: ${connectionId}`,
-        );
         this.reconnectAttempts = 0;
 
         // Refetch tasks on reconnection
         if (this.queryClient) {
-          console.log(`[TaskHub] Auto-refetching tasks after reconnect`);
           this.queryClient.invalidateQueries({
             queryKey: ["tasks"],
             refetchType: "active",
@@ -1512,14 +1114,6 @@ class TaskHubConnection {
       });
 
       this.connection.onclose((error) => {
-        const ts = new Date().toISOString();
-
-        // Detailed close reason logging
-        console.group(`[TaskHub] ${ts} | 🔴 CONNECTION CLOSED`);
-        console.log("Reconnect Attempts:", this.reconnectAttempts);
-        console.log("Max Reconnect Attempts:", this.maxReconnectAttempts);
-        console.log("Connection State:", this.connection?.state);
-
         if (error) {
           console.error("Close Error:", {
             message: error.message || error,
@@ -1556,7 +1150,6 @@ class TaskHubConnection {
             console.error("❌ CLOSE REASON: Unknown error");
           }
         } else {
-          console.log("ℹ️ CLOSE REASON: Clean disconnect (no error)");
         }
 
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
@@ -1565,7 +1158,6 @@ class TaskHubConnection {
           );
         }
 
-        console.groupEnd();
       });
 
       await this.connection.start();
@@ -1577,9 +1169,6 @@ class TaskHubConnection {
         try {
           // Store task token in localStorage for persistence
           localStorage.setItem("taskAccessToken", taskAccessToken);
-          console.log(
-            `[TaskHub] ${ts} | Task access token saved after negotiation`,
-          );
         } catch (error) {
           console.warn(
             `[TaskHub] ${ts} | Failed to save task access token:`,
@@ -1592,9 +1181,6 @@ class TaskHubConnection {
 
       // ❌ FAILURE LOG
       if (error instanceof Error && error.name === "AbortError") {
-        console.log(
-          `[TaskHub] ${ts} | Connection aborted (likely due to unmount or auth change)`,
-        );
       } else {
       }
       throw error;
@@ -1604,25 +1190,12 @@ class TaskHubConnection {
   }
 
   async stop(): Promise<void> {
-    const timestamp = new Date().toISOString();
-    const callStack = new Error().stack;
-
-    console.group(`[TaskHub] ${timestamp} | Stopping connection...`);
-    console.log("Current State:", this.connection?.state);
-    console.log("Called from:", callStack);
-    console.groupEnd();
-
     this.isConnecting = false; // Cancel any pending connection
     if (this.connection) {
       try {
         await this.connection.stop();
-        console.log(`[TaskHub] ${timestamp} | Disconnected successfully`);
       } catch (error) {
         // Ignore errors during stop
-        console.log(
-          `[TaskHub] ${timestamp} | Stop completed with warning`,
-          error,
-        );
       }
       this.connection = null;
     }
@@ -1630,7 +1203,6 @@ class TaskHubConnection {
 
   // Event handlers
   on(event: string, handler: (...args: any[]) => void): void {
-    console.log(`[TaskHub] Registering handler for event: ${event}`);
     this.connection?.on(event, handler);
   }
 

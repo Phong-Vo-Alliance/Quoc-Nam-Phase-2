@@ -355,7 +355,6 @@ export function ViewAllTasksModal({
                   linkedTask={linkedTask}
                   onClick={() => {
                     // Future: Navigate to task detail or show preview
-                    console.log('Task clicked:', linkedTask.taskId);
                   }}
                 />
               ))}

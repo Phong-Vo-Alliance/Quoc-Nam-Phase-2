@@ -179,23 +179,6 @@ export const SIGNALR_CONFIG = {
 } as const;
 
 // ==========================================
-// Logging Utility
-// ==========================================
-
-/**
- * Log environment configuration (chỉ trong development)
- */
-if (isDevelopment && FEATURE_FLAGS.enableDebugLogs) {
-  console.group("🔧 Environment Configuration");
-  console.log("Environment:", APP_ENV);
-  console.log("API Endpoints:", API_ENDPOINTS);
-  console.log("Feature Flags:", FEATURE_FLAGS);
-  console.log("Security Flags:", SECURITY_FLAGS);
-  console.log("SignalR:", SIGNALR_CONFIG);
-  console.groupEnd();
-}
-
-// ==========================================
 // Validation (Runtime checks)
 // ==========================================
 

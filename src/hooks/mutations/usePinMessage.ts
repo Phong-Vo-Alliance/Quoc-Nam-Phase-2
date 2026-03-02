@@ -18,7 +18,6 @@ interface UsePinMessageOptions {
  * @example
  * const pinMsg = usePinMessage({
  *   conversationId: 'conv-123',
- *   onSuccess: () => console.log('Pinned!')
  * });
  * 
  * pinMsg.mutate({ messageId: 'msg-456' });
@@ -66,7 +65,6 @@ interface UseUnpinMessageOptions {
  * @example
  * const unpinMsg = useUnpinMessage({
  *   conversationId: 'conv-123',
- *   onSuccess: () => console.log('Unpinned!')
  * });
  * 
  * unpinMsg.mutate({ messageId: 'msg-456' });

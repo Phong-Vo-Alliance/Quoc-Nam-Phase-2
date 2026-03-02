@@ -20,7 +20,6 @@ interface UseCreateTaskOptions {
  * @example
  * const createTaskMutation = useCreateTask({
  *   onSuccess: (task) => {
- *     console.log('Task created:', task.id);
  *     closeModal();
  *   }
  * });
@@ -42,8 +41,6 @@ export function useCreateTask({
     mutationFn: (data: CreateTaskRequest) => createTask(data),
 
     onSuccess: (taskId) => {
-      console.log('useCreateTask onSuccess - taskId:', taskId);
-      
       // Call success callback with task ID
       onSuccess?.(taskId);
     },

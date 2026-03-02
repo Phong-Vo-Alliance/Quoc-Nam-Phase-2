@@ -16,6 +16,7 @@ export interface PinnedMessageDto {
   pinnedBy: string;
   pinnedAt: string; // ISO 8601 datetime
   message: ChatMessage;
+  parentMessageId?: string; // For replies, may be null for top-level messages
 }
 
 /**
@@ -48,6 +49,8 @@ export interface StarredMessageDto {
   messageId: string;
   starredAt: string; // ISO 8601 datetime
   message: ChatMessage;
+  parentMessageId?: string; // For replies, may be null for top-level messages
+  parentMessageContent?: string; // Optional content preview of parent message for context
 }
 
 /**

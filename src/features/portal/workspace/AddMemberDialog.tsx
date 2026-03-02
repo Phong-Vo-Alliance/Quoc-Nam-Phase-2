@@ -62,13 +62,6 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
   // Find the selected category and match with user's leader department
   const departmentId = useMemo(() => {
-    console.log("AddMemberDialog - Input check:", {
-      selectedCategoryId,
-      hasCategories: !!categories,
-      categoriesLength: categories?.length,
-      userDepartments: user?.departments,
-    });
-
     if (!selectedCategoryId || !categories || !user?.departments)
       return undefined;
 
@@ -76,11 +69,6 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
     const selectedCategory = categories.find(
       (cat) => cat.id === selectedCategoryId,
     );
-
-    console.log("AddMemberDialog - Selected category:", {
-      selectedCategory,
-      departmentIds: selectedCategory?.departmentIds,
-    });
 
     if (!selectedCategory?.departmentIds) return undefined;
 
@@ -91,27 +79,12 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
         selectedCategory.departmentIds?.includes(dept.departmentId),
     );
 
-    console.log("AddMemberDialog - Department matching:", {
-      selectedCategoryId,
-      categoryDepartmentIds: selectedCategory.departmentIds,
-      userDepartments: user.departments,
-      matchedDepartmentId: matchingDepartment?.departmentId,
-    });
-
     return matchingDepartment?.departmentId;
   }, [selectedCategoryId, categories, user]);
 
   // Fetch department members
   const { data, isLoading, isError, error } = useDepartmentMembers({
     departmentId,
-  });
-  console.log("AddMemberDialog - Department members:", {
-    departmentId,
-    data,
-    existingMemberIds,
-    isLoading,
-    isError,
-    error,
   });
   // Mutation for adding members
   const addMemberMutation = useAddGroupMember();
@@ -127,7 +100,6 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
     return data.filter((member) => {
       // Exclude existing members (compare userId, not member.id)
-      console.log("Checking member:", member.userId, existingMemberIds);
       if (existingMemberIds.includes(member.userId)) return false;
 
       // Search filter

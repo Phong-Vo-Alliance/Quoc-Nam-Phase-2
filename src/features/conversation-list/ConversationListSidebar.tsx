@@ -360,9 +360,13 @@ export const ConversationListSidebar: React.FC<
     }
   };
 
+  // Strip diacritics for accent-insensitive search (Vietnamese, etc.)
+  const removeDiacritics = (str: string): string =>
+    str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   // Search filter
   const match = (text?: unknown) => {
-    const qLower = q.trim().toLowerCase();
+    const qLower = removeDiacritics(q.trim().toLowerCase());
     if (!qLower) return true;
 
     let val = "";
@@ -377,7 +381,7 @@ export const ConversationListSidebar: React.FC<
       val = String(text as any);
     }
 
-    return val.toLowerCase().includes(qLower);
+    return removeDiacritics(val.toLowerCase()).includes(qLower);
   };
 
   // Filtered data
@@ -615,23 +619,31 @@ export const ConversationListSidebar: React.FC<
 
       if (
         tab === "group" &&
-        apiGroups.length > 0 &&
+        apiCategories.length > 0 &&
         selectedConversationId === undefined &&
         !hasAutoSelected
       ) {
-        const firstGroup = apiGroups[0];
-        const category = apiCategories.find((cat) =>
-          cat.conversations?.some((c) => c.conversationId === firstGroup.id),
-        );
+        // 🆕 FIX: Select first category's first conversation (not just first in flattened array)
+        const firstCategory = apiCategories[0];
+        const firstConversation = firstCategory.conversations?.[0];
 
-        handleGroupSelect(
-          firstGroup.id,
-          firstGroup.name,
-          category?.name || "",
-          category?.id || "",
-          firstGroup.unreadCount,
-        );
-        setHasAutoSelected(true);
+        if (firstConversation) {
+          handleGroupSelect(
+            firstConversation.conversationId,
+            firstConversation.conversationName,
+            firstCategory.name || "",
+            firstCategory.id || "",
+            firstConversation.unreadCount || 0,
+          );
+          setHasAutoSelected(true);
+          console.log(
+            "[Init] Auto-selected first category's first conversation:",
+            {
+              category: firstCategory.name,
+              conversation: firstConversation.conversationName,
+            },
+          );
+        }
       }
     }
   }, [

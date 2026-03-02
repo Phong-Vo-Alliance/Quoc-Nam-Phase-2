@@ -35,6 +35,7 @@ export type Phase1AFileItem = {
   senderName?: string;
   createdAt?: string;
   fileId?: string; // File ID from API for preview endpoints
+  parentMessageId: string | null; // For replies, may be null for top-level messages
 };
 
 export type FileManagerPhase1AMode = "media" | "docs";
@@ -91,6 +92,14 @@ export type FileManagerPhase1AProps = {
     isFetchingNextPage: boolean;
     fetchNextPage: () => Promise<unknown>;
   };
+  /** Conversation attachments from API */
+  conversationAttachment?: any;
+
+  /** Callback to open "Nhật ký công việc" by parent message ID with optional target message */
+  onOpenTaskLogByMessageId?: (
+    parentMessageId: string,
+    targetMessageId?: string,
+  ) => void;
 };
 
 const getDocIcon = (ext?: string) => {
@@ -347,7 +356,10 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
   onOpenAllFiles,
   messages,
   messagesQuery, // Phase 2: For auto-loading older messages
+  conversationAttachment,
+  onOpenTaskLogByMessageId,
 }) => {
+  React.useEffect(() => {}, [conversationAttachment]);
   const [previewFile, setPreviewFile] = React.useState<Phase1AFileItem | null>(
     null,
   );
@@ -356,9 +368,10 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
   /**
    * Phase 2: Jump to Message with Auto-Load
    * Scrolls to message in ChatMain, auto-loading older messages if needed
+   * Returns a Promise that resolves when the message is found and scrolled to
    */
   const handleJumpToMessage = React.useCallback(
-    async (messageId: string) => {
+    async (messageId: string): Promise<boolean> => {
       // Step 0: Navigate to chat tab first (close information panel)
       onNavigateToChat?.();
 
@@ -401,14 +414,14 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       if (messageElement) {
         // ✅ Found immediately - scroll and highlight
         scrollAndHighlight(messageElement);
-        return;
+        return true;
       }
 
       // Step 2: Message not loaded - trigger auto-load
       if (!messagesQuery) {
         // No messagesQuery provided, show warning
         toast.info("Tin nhắn có thể chưa được tải", { duration: 3000 });
-        return;
+        return false;
       }
 
       toast.info("Đang tải tin nhắn cũ hơn...", { duration: 3000 });
@@ -431,7 +444,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
             // ✅ Found after loading!
             scrollAndHighlight(messageElement);
             toast.success("Đã tìm thấy tin nhắn!", { duration: 2000 });
-            return;
+            return true;
           }
         } else {
           // No more pages to load
@@ -443,6 +456,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       toast.error("Không tìm thấy tin nhắn (có thể đã bị xóa)", {
         duration: 3000,
       });
+      return false;
     },
     [messagesQuery, onNavigateToChat],
   );
@@ -467,100 +481,67 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
     const media: Phase1AFileItem[] = [];
     const docs: Phase1AFileItem[] = [];
 
-    // Process messages in reverse order to get newest first
-    // (messageList is typically sorted oldest → newest from flattenMessages)
-    const messagesNewestFirst = [...messageList].reverse();
+    // Use conversationAttachment.items if available
+    const attachments =
+      conversationAttachment && Array.isArray(conversationAttachment.items)
+        ? conversationAttachment.items
+        : [];
 
-    messagesNewestFirst.forEach((m) => {
-      const attachmentList: {
-        name: string;
-        url: string;
-        type: AttachmentType;
-        size?: string;
-        fileId?: string;
-      }[] = [];
+    attachments.forEach((att: any, index: any) => {
+      const fileName = att.fileName || "unknown";
+      const fileId = att.fileId;
+      const ext = (fileName.split(".").pop() || "").toLowerCase();
+      const fileUrl = att.url || "";
+      const attType: AttachmentType =
+        att.contentType && att.contentType.includes("image")
+          ? "image"
+          : att.contentType && att.contentType.includes("pdf")
+            ? "pdf"
+            : att.contentType &&
+                (att.contentType.includes("word") ||
+                  att.contentType.includes("document"))
+              ? "word"
+              : att.contentType &&
+                  (att.contentType.includes("excel") ||
+                    att.contentType.includes("spreadsheet"))
+                ? "excel"
+                : "other";
 
-      // Priority 1: Use attachments field (from API - Swagger spec)
-      if (Array.isArray(m.attachments) && m.attachments.length > 0) {
-        m.attachments.forEach((att) => {
-          const fileName = att.fileName || att.name || "unknown";
-          const fileUrl = att.url || "";
-          const fileId = att.fileId; // Extract fileId for preview endpoints
-
-          // Map contentType to AttachmentType
-          let attType: AttachmentType = "other";
-          if (att.contentType) {
-            if (att.contentType.includes("image")) attType = "image";
-            else if (att.contentType.includes("pdf")) attType = "pdf";
-            else if (
-              att.contentType.includes("word") ||
-              att.contentType.includes("document")
-            )
-              attType = "word";
-            else if (
-              att.contentType.includes("excel") ||
-              att.contentType.includes("spreadsheet")
-            )
-              attType = "excel";
-          } else if (att.type) {
-            attType = att.type;
-          }
-
-          // Format file size
-          let sizeLabel = att.size;
-          if (att.fileSize && typeof att.fileSize === "number") {
-            const sizeInMB = att.fileSize / (1024 * 1024);
-            sizeLabel =
-              sizeInMB >= 1
-                ? `${sizeInMB.toFixed(2)} MB`
-                : `${(att.fileSize / 1024).toFixed(2)} KB`;
-          }
-
-          attachmentList.push({
-            name: fileName,
-            url: fileUrl,
-            type: attType,
-            size: sizeLabel,
-            fileId,
-          });
-        });
-      }
-      // Priority 2: Legacy files field (for backward compatibility)
-      else if (Array.isArray(m.files)) {
-        attachmentList.push(...m.files);
-      }
-      // Priority 3: Legacy fileInfo field (for backward compatibility)
-      else if (m.fileInfo) {
-        attachmentList.push(m.fileInfo);
+      // Format file size
+      let sizeLabel = undefined;
+      if (att.fileSize && typeof att.fileSize === "number") {
+        const sizeInMB = att.fileSize / (1024 * 1024);
+        sizeLabel =
+          sizeInMB >= 1
+            ? `${sizeInMB.toFixed(2)} MB`
+            : `${(att.fileSize / 1024).toFixed(2)} KB`;
       }
 
-      attachmentList.forEach((att, index) => {
-        const ext = (att.name.split(".").pop() || "").toLowerCase();
-        const dateLabel = m.createdAt
-          ? new Date(m.createdAt).toLocaleDateString("vi-VN")
-          : m.time;
-        const senderName = m.senderName || m.sender || "Unknown";
+      const dateLabel = att.createdAt
+        ? new Date(att.createdAt).toLocaleDateString("vi-VN")
+        : undefined;
+      const senderName = att.senderName || "Unknown";
 
-        const base: Phase1AFileItem = {
-          id: `${m.id}__${index}`,
-          name: att.name,
-          kind: "doc", // sẽ override bên dưới
-          url: att.url,
-          ext,
-          sizeLabel: att.size,
-          dateLabel,
-          messageId: m.id,
-          senderName,
-          createdAt: m.createdAt || m.time,
-          fileId: att.fileId,
-        };
+      const base: Phase1AFileItem = {
+        id: `${att.id || fileId || index}`,
+        name: fileName,
+        kind: "doc", // override below
+        url: fileUrl,
+        ext,
+        sizeLabel,
+        dateLabel,
+        messageId: att.messageId,
+        parentMessageId: att.parentMessageId,
+        senderName,
+        createdAt: att.createdAt,
+        fileId,
+      };
 
-        if (isMediaAttachment(att.type)) {
-          media.push({ ...base, kind: "image" });
-        } else if (isDocAttachment(att.type)) {
-          docs.push({ ...base, kind: "doc" });
-        }
-      });
+      if (isMediaAttachment(attType)) {
+        media.push({ ...base, kind: "image" });
+      } else if (isDocAttachment(attType)) {
+        docs.push({ ...base, kind: "doc" });
+      }
     });
 
     // Sort files by date - newest first (descending)
@@ -574,7 +555,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
     docs.sort(sortByDateDesc);
 
     return { mediaFiles: media, docFiles: docs };
-  }, [messageList]);
+  }, [conversationAttachment]);
 
   const allFiles = mode === "media" ? mediaFiles : docFiles;
   const limit = mode === "media" ? 6 : 3; // 6 media / 3 docs gần nhất
@@ -611,12 +592,51 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       // Close modal before jumping to message
       setShowAll(false);
 
-      // Phase 2: Use new jump to message with auto-load
-      if (messagesQuery) {
-        handleJumpToMessage(f.messageId);
-      } else if (onOpenSourceMessage) {
-        // Fallback to old behavior if messagesQuery not provided
-        onOpenSourceMessage(f.messageId);
+      // Check if this is a thread message (has parentMessageId)
+      if (f.parentMessageId) {
+        // 🆕 This is a thread message - first scroll to parent, then open thread
+        const parentMessageId = f.parentMessageId;
+        const threadMessageId = f.messageId;
+
+        // Step 1: Scroll to parent message in chat session
+        if (messagesQuery) {
+          handleJumpToMessage(parentMessageId)
+            .then(() => {
+              // Step 2: After scrolling, open thread with target message
+              // Open thread regardless of whether message was found
+              setTimeout(() => {
+                onOpenTaskLogByMessageId?.(parentMessageId, threadMessageId);
+              }, 300); // Small delay to ensure scroll completes
+            })
+            .catch((error) => {
+              console.error("Error scrolling to message:", error);
+              // Still open thread even if scroll fails
+              onOpenTaskLogByMessageId?.(parentMessageId, threadMessageId);
+            });
+        } else if (onOpenSourceMessage) {
+          onOpenSourceMessage(parentMessageId);
+          // Still open thread after navigation
+          setTimeout(() => {
+            onOpenTaskLogByMessageId?.(parentMessageId, threadMessageId);
+          }, 300);
+        } else {
+          // No scroll method available, just open thread
+          onOpenTaskLogByMessageId?.(parentMessageId, threadMessageId);
+        }
+      } else {
+        // This is a main chat message - navigate to it in chat
+        const targetMessageId = f.messageId;
+
+        if (messagesQuery) {
+          handleJumpToMessage(targetMessageId).catch((error) => {
+            console.error("Error scrolling to message:", error);
+          });
+        } else if (onOpenSourceMessage) {
+          onOpenSourceMessage(targetMessageId);
+        }
+
+        // Also try to open task log if this message has a thread
+        onOpenTaskLogByMessageId?.(targetMessageId);
       }
     }
   };

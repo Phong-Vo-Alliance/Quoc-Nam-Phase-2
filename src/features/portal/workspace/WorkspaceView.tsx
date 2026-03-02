@@ -25,6 +25,7 @@ import type {
   PinnedMessageDto,
   StarredMessageDto,
 } from "@/types/pinned_and_starred";
+import type { ChatMessage } from "@/types/messages";
 import type { TaskDetailResponse } from "@/types/tasks_api";
 import { MessageSquareIcon, ClipboardListIcon, UserIcon } from "lucide-react";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
@@ -37,6 +38,7 @@ import { useMessageRealtime } from "@/hooks/useMessageRealtime"; // 🆕 MOVED f
 import { useTaskNotifications } from "@/hooks/useTaskNotifications"; // 🆕 Task SignalR notifications
 import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime"; // 🆕 MOVED from ChatMainContainer
 import { useQuery } from "@tanstack/react-query";
+import { getConversationAttachments } from "@/api/attachments.api";
 import { useQueryClient } from "@tanstack/react-query";
 import { tasksKeys } from "@/hooks/queries/useTasks";
 import { checklistTemplatesApi } from "@/api/checklist-templates.api";
@@ -104,6 +106,8 @@ interface WorkspaceViewProps {
   tab: "info" | "order" | "tasks" | "chat";
   setTab: (v: "info" | "order" | "tasks" | "chat") => void;
   tasks: Task[];
+  threadUnreadCounts?: Record<string, number>;
+  threadCurrentSessionCounts?: Record<string, number>;
   // onChangeTaskStatus: (id: string, nextStatus: Task["status"]) => void;
   // onToggleChecklist: (taskId: string, itemId: string, done: boolean) => void;
   // onUpdateTaskChecklist: (taskId: string, next: ChecklistItem[]) => void;
@@ -143,11 +147,13 @@ interface WorkspaceViewProps {
 
   onReceiveInfo?: (message: Message) => void;
   receivedInfos?: ReceivedInfo[];
+  openThreadMessageId?: string; // ✅ NEW: ID of currently open thread to prevent unread badge flicker
   onTransferInfo?: (infoId: string, departmentId: string) => void;
   onAssignInfo?: (info: ReceivedInfo) => void;
   onAssignFromMessage?: (msg: Message) => void;
   openTransferSheet?: (info: ReceivedInfo) => void;
-  onOpenTaskLog?: (taskId: string) => void;
+  onOpenTaskLog?: (taskId: string, targetMessageId?: string) => void; // 🆕 Added targetMessageId for scroll-to-message
+  onThreadMessage?: (message: ChatMessage) => void;
   taskLogs?: Record<string, TaskLogMessage[]>;
   onOpenSourceMessage: (messageDto: StarredMessageDto | null) => void;
   onScrollComplete?: () => void;
@@ -165,6 +171,7 @@ interface WorkspaceViewProps {
     messageId: string;
     messageContent: string;
     conversationId: string;
+    confirmedInfoId?: string; // 🆕 FIX: Pass to mark confirmed info as finished
   }) => void;
 
   // Task management
@@ -187,7 +194,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     onSelectGroup,
     contacts,
     onSelectChat,
-
+    /** Callback to open image preview modal from chat */
     leftTab,
     setLeftTab,
 
@@ -202,6 +209,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     tab,
     setTab,
     tasks,
+    threadUnreadCounts,
+    threadCurrentSessionCounts,
     groupMembers,
     // onChangeTaskStatus,
     // onToggleChecklist,
@@ -231,11 +240,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
     onReceiveInfo,
     receivedInfos,
+    openThreadMessageId, // ✅ NEW: Track currently open thread
     onTransferInfo,
     onAssignInfo,
     onAssignFromMessage,
     openTransferSheet,
     onOpenTaskLog,
+    onThreadMessage,
     taskLogs,
     onOpenSourceMessage,
     layoutMode = "desktop",
@@ -279,27 +290,26 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   const selectedConversation = useConversationStore(
     (state) => state.selectedConversation,
   );
+  const { data: conversationAttachment } = useQuery({
+    queryKey: ["conversation-attachments", selectedConversation?.id],
+    queryFn: async () =>
+      selectedConversation?.id
+        ? await getConversationAttachments(selectedConversation.id)
+        : Promise.resolve({ items: [], hasMore: false }),
+    enabled: !!selectedConversation?.id,
+    staleTime: 1000 * 60,
+  });
   useEffect(() => {
     if (selectedConversation) {
       onSelectChat(selectedConversation);
     }
-  }, []);
+  }, [selectedConversation]);
+
   const setSelectedConversation = useConversationStore(
     (state) => state.setSelectedConversation,
   );
 
-  // console.log(
-  //   "🟣 [WorkspaceView] Current selectedConversation from store:",
-  //   selectedConversation,
-  // );
-
   // Track whenever selectedConversation changes
-  // React.useEffect(() => {
-  //   console.log(
-  //     "🟣🟣 [WorkspaceView useEffect] selectedConversation CHANGED to:",
-  //     selectedConversation,
-  //   );
-  // }, [selectedConversation]);
 
   // Track conversation name
   const [apiConversationName, setApiConversationName] = React.useState<
@@ -465,6 +475,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     conversationId: selectedConversation?.id || "",
     onNewMessage: undefined,
     onUserTyping: undefined,
+    onThreadMessage,
+    openThreadMessageId, // ✅ NEW: Pass currently open thread ID to prevent unread badge flicker
   });
 
   // 🆕 MOVED: Real-time category updates - moved here from ChatMainContainer to avoid re-renders
@@ -564,8 +576,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     }));
   }, [checklistTemplatesData]);
 
-  // console.log("chatMessages", selectedConversation);
-  // console.log("chatMessages", chatMessages);
   // Transform API members to local format and use as groupMembers
   const apiGroupMembers = React.useMemo(() => {
     if (!membersFromAPI || membersFromAPI.length === 0) {
@@ -607,7 +617,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     (taskId: string, assignTo: string) => {
       // Find the task from API data
       const task = apiTasks.find((t) => t.id === taskId);
-      console.log("Reassigning task:", task);
       if (!task) {
         console.error(`Task with id ${taskId} not found`);
         return;
@@ -675,7 +684,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     },
     [onSelectChat, setSelectedConversation],
   );
-  // console.log(selectedConversation);
   const resolvePinnedTime = (msg: Message) => {
     if (msg.createdAt && !isNaN(Date.parse(msg.createdAt)))
       return msg.createdAt;
@@ -695,10 +703,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       selectedConversation?.id === pendingScrollMessage.message.conversationId
     ) {
       // Conversation has loaded, now scroll to message
-      console.log(
-        "🎯 Conversation loaded, scrolling to message:",
-        pendingScrollMessage.messageId,
-      );
       setScrollToMessage(pendingScrollMessage);
       setPendingScrollMessage(null);
     }
@@ -744,25 +748,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                       return;
                     }
 
-                    console.log("Navigating to starred message:", {
-                      conversationId,
-                      categoryId: category.id,
-                      currentConversationId: selectedConversation?.id,
-                    });
-
                     // Check if we're already in the correct conversation
                     if (selectedConversation?.id === conversationId) {
                       // Same conversation - scroll immediately
-                      console.log(
-                        "🎯 Already in correct conversation, scrolling immediately",
-                      );
                       setScrollToMessage(messageDto);
                     } else {
                       // Different conversation - navigate first, then scroll after load
-                      console.log(
-                        "🎯 Different conversation, navigating first...",
-                      );
-
                       // Set pending scroll
                       setPendingScrollMessage(messageDto);
 
@@ -851,9 +842,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                           : undefined
                       }
                       onCreateTaskFromMessage={onCreateTaskFromMessage}
+                      onTaskLogClick={onOpenTaskLog}
+                      openThreadMessageId={openThreadMessageId}
+                      threadUnreadCounts={threadUnreadCounts}
+                      threadCurrentSessionCounts={threadCurrentSessionCounts}
+                      onMessagesLoaded={(messages) => {
+                        setMessages(messages);
+                      }}
                       onConfirmInfoSuccess={() => {
-                        // Mobile: Switch to work tab
-                        setMobileTab("work");
+                        setShowRight(true);
                         setTab("order");
                       }}
                     />
@@ -901,6 +898,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 messages={chatMessages}
                 messagesQuery={messagesQuery}
                 isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
+                conversationAttachment={conversationAttachment}
               />
             </div>
           )}
@@ -1047,23 +1045,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 return;
               }
 
-              console.log("Navigating to starred message:", {
-                conversationId,
-                categoryId: category.id,
-                currentConversationId: selectedConversation?.id,
-              });
-
               // Check if we're already in the correct conversation
               if (selectedConversation?.id === conversationId) {
                 // Same conversation - scroll immediately
-                console.log(
-                  "Already in correct conversation, scrolling immediately",
-                );
                 setScrollToMessage(messageDto);
               } else {
                 // Different conversation - navigate first, then scroll after load
-                console.log("Different conversation, navigating first...");
-
                 // Set pending scroll
                 setPendingScrollMessage(messageDto);
 
@@ -1121,6 +1108,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           <ChatMainContainer
             key={selectedConversation.id}
             conversationId={selectedConversation.id}
+            threadCurrentSessionCounts={threadCurrentSessionCounts}
             conversationName={chatTitle}
             conversationType={
               selectedConversation.type === "group" ? "GRP" : "DM"
@@ -1154,8 +1142,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 : undefined
             }
             onCreateTaskFromMessage={onCreateTaskFromMessage}
+            onTaskLogClick={onOpenTaskLog}
+            openThreadMessageId={openThreadMessageId}
+            threadUnreadCounts={threadUnreadCounts}
+            onMessagesLoaded={(messages) => {
+              setMessages(messages);
+            }}
             onConfirmInfoSuccess={() => {
-              // Desktop: Open right panel if closed + switch to order tab
               setShowRight(true);
               setTab("order");
             }}
@@ -1220,6 +1213,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             messages={chatMessages}
             messagesQuery={messagesQuery}
             isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
+            conversationAttachment={conversationAttachment}
           />
         </div>
       )}

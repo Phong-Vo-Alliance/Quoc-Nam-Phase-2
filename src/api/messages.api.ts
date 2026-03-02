@@ -8,6 +8,7 @@ import type {
   SendChatMessageResponse,
   LinkTaskToMessageRequest,
   LinkTaskToMessageResponse,
+  ThreadDto,
 } from "@/types/messages";
 
 interface GetMessagesParams {
@@ -120,16 +121,10 @@ export const linkTaskToMessage = async (
   taskId: string,
 ): Promise<LinkTaskToMessageResponse> => {
   const payload: LinkTaskToMessageRequest = { taskId };
-  console.log("API: Calling PATCH /api/messages/{messageId}/link-task", {
-    messageId,
-    taskId,
-    payload,
-  });
   const response = await apiClient.patch<LinkTaskToMessageResponse>(
     `/api/messages/${messageId}/link-task`,
     payload,
   );
-  console.log("API: Response from link-task:", response.data);
   return response.data;
 };
 
@@ -188,6 +183,35 @@ export const getMessagesAfter = async (params: {
         limit,
       },
     },
+  );
+
+  return response.data;
+};
+
+/**
+ * GET /api/messages/{id}/thread
+ * Fetch thread messages for a parent message
+ *
+ * @param messageId - UUID of the parent message
+ * @param limit - Number of replies to fetch (default: 50)
+ * @param cursor - Pagination cursor for loading more replies
+ * @returns Thread data with parent message and replies
+ */
+export const getMessageThread = async (params: {
+  messageId: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<ThreadDto> => {
+  const { messageId, limit = 50, cursor } = params;
+
+  const queryParams: Record<string, unknown> = { limit };
+  if (cursor) {
+    queryParams.cursor = cursor;
+  }
+
+  const response = await apiClient.get<ThreadDto>(
+    `/api/messages/${messageId}/thread`,
+    { params: queryParams },
   );
 
   return response.data;

@@ -18,6 +18,8 @@ interface UseMessageRealtimeOptions {
   conversationId: string;
   onNewMessage?: (message: ChatMessage) => void;
   onUserTyping?: (event: UserTypingEvent) => void;
+  onThreadMessage?: (message: ChatMessage) => void;
+  openThreadMessageId?: string; // ✅ NEW: ID of currently open thread to prevent unread badge flicker
 }
 
 interface TypingUser {
@@ -49,11 +51,21 @@ export function useMessageRealtime({
   conversationId,
   onNewMessage,
   onUserTyping,
+  onThreadMessage,
+  openThreadMessageId, // ✅ NEW: Currently open thread parent message ID
 }: UseMessageRealtimeOptions) {
   const queryClient = useQueryClient();
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
-  const { isConnected } = useSignalRConnection();
+  const processedMessageIdsRef = useRef<Set<string>>(new Set());
+  const signalRConnection = useSignalRConnection();
+  const isConnected = signalRConnection?.isConnected ?? false;
   const currentUserId = useAuthStore((state) => state.user?.id);
+
+  // ✅ FIX: Use ref to store current conversationId to avoid stale closure
+  const conversationIdRef = useRef(conversationId);
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   // Normalize contentType from SignalR (number) to match API format (string)
   // Backend SignalR sends: 1 = TXT, 2 = IMG, 3 = FILE
@@ -86,23 +98,89 @@ export function useMessageRealtime({
         ),
       };
 
-      // Only handle messages for this conversation
-      if (message.conversationId !== conversationId) {
+      if (processedMessageIdsRef.current.has(message.id)) {
         return;
       }
 
-      console.log("[MessageRealtime] Processing MESSAGE_SENT:", {
-        messageId: message.id?.substring(0, 8),
-        conversationId: message.conversationId?.substring(0, 8),
-        contentType: message.contentType,
-        isOwnMessage: message.senderId === currentUserId,
-      });
+      processedMessageIdsRef.current.add(message.id);
+      if (processedMessageIdsRef.current.size > 500) {
+        const trimmed = new Set(
+          Array.from(processedMessageIdsRef.current).slice(-200),
+        );
+        processedMessageIdsRef.current = trimmed;
+      }
+
+      // Only handle messages for this conversation
+      // ✅ FIX: Use ref to get latest conversationId to avoid stale closure
+      const currentConversationId = conversationIdRef.current;
+      if (message.conversationId !== currentConversationId) {
+        return;
+      }
+
+      // Invalidate attachments query if message has attachments (IMG/FILE)
+      // So ConversationDetailPanel right panel updates with new files/images
+      // This handles BOTH main conversation messages AND thread messages
+      if (
+        message.attachments?.length ||
+        message.contentType === "IMG" ||
+        message.contentType === "FILE"
+      ) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation-attachments", currentConversationId],
+        });
+      }
+
+      if (message.parentMessageId) {
+        // ✅ Update parent message's replyCount AND unreadReplyCount in cache
+        // 1. replyCount: ALWAYS increment for ALL thread messages (own or received)
+        // 2. unreadReplyCount: Only increment for messages from others when thread is not open
+        const isOwnMessage = message.senderId === currentUserId;
+        const isThreadCurrentlyOpen =
+          message.parentMessageId === openThreadMessageId;
+
+        // Always update replyCount, conditionally update unreadReplyCount
+        queryClient.setQueryData<{
+          pages: GetMessagesResponse[];
+          pageParams: (string | undefined)[];
+        }>(messageKeys.conversation(currentConversationId), (old) => {
+          if (!old || !old.pages.length) return old;
+
+          // Find and update the parent message's counts
+          const newPages = old.pages.map((page) => ({
+            ...page,
+            items: page.items.map((msg) => {
+              if (msg.id !== message.parentMessageId) return msg;
+
+              const updatedMsg = {
+                ...msg,
+                // ✅ ALWAYS increment replyCount for total reply count display
+                replyCount: (msg.replyCount || 0) + 1,
+              };
+
+              // Only increment unreadReplyCount if from someone else AND thread is NOT open
+              if (!isOwnMessage && !isThreadCurrentlyOpen) {
+                updatedMsg.unreadReplyCount = (msg.unreadReplyCount || 0) + 1;
+              }
+
+              return updatedMsg;
+            }),
+          }));
+
+          return {
+            ...old,
+            pages: newPages,
+          };
+        });
+
+        onThreadMessage?.(message);
+        return;
+      }
 
       // 1. Add message to MESSAGE cache
       queryClient.setQueryData<{
         pages: GetMessagesResponse[];
         pageParams: (string | undefined)[];
-      }>(messageKeys.conversation(conversationId), (old) => {
+      }>(messageKeys.conversation(currentConversationId), (old) => {
         if (!old || !old.pages.length) return old;
 
         // Check if message already exists (prevent duplicates)
@@ -110,7 +188,6 @@ export function useMessageRealtime({
           page.items.some((item) => item.id === message.id),
         );
         if (exists) {
-          console.log("[MessageRealtime] Message already in cache, skipping");
           return old;
         }
 
@@ -137,7 +214,6 @@ export function useMessageRealtime({
 
       // 4. Special handling: Refetch tasks if SYS message (system-generated task update)
       if (message.contentType === "SYS" && message.conversationId) {
-        console.log("[MessageRealtime] SYS message detected, refetching tasks");
         queryClient.refetchQueries({
           queryKey: tasksKeys.list({ conversationId: message.conversationId }),
         });
@@ -145,14 +221,22 @@ export function useMessageRealtime({
 
       onNewMessage?.(message);
     },
-    [conversationId, queryClient, onNewMessage, currentUserId],
+    [
+      // ✅ FIX: Removed conversationId from deps - now using conversationIdRef instead
+      queryClient,
+      onNewMessage,
+      onThreadMessage,
+      currentUserId,
+      openThreadMessageId, // ✅ NEW: Re-run when open thread changes
+    ],
   );
 
   // Handle typing indicator event - User started typing
   const handleUserTyping = useCallback(
     (event: UserTypingEvent) => {
       // Only handle typing for this conversation
-      if (event.conversationId !== conversationId) return;
+      // ✅ FIX: Use ref to get latest conversationId
+      if (event.conversationId !== conversationIdRef.current) return;
 
       setTypingUsers((prev) => {
         // Add or update typing user
@@ -174,22 +258,22 @@ export function useMessageRealtime({
 
       onUserTyping?.(event);
     },
-    [conversationId, onUserTyping],
+    [onUserTyping],
   );
 
   // Handle typing stopped event - User stopped typing
-  const handleUserStoppedTyping = useCallback(
-    (event: UserTypingEvent) => {
-      // Only handle typing for this conversation
-      if (event.conversationId !== conversationId) return;
+  const handleUserStoppedTyping = useCallback((event: UserTypingEvent) => {
+    // Only handle typing for this conversation
+    // ✅ FIX: Use ref to get latest conversationId
+    if (event.conversationId !== conversationIdRef.current) return;
 
-      // Remove typing user
-      setTypingUsers((prev) => prev.filter((u) => u.userId !== event.userId));
-    },
-    [conversationId],
-  );
+    // Remove typing user
+    setTypingUsers((prev) => prev.filter((u) => u.userId !== event.userId));
+  }, []);
 
   // Setup SignalR listeners when connected
+  // ✅ FIX: This effect re-runs when conversationId or handleMessageSent changes,
+  // ensuring fresh conversationId reference in the event handler
   useEffect(() => {
     // Only subscribe when connected
     if (!isConnected) {
@@ -204,28 +288,23 @@ export function useMessageRealtime({
     );
 
     // Also subscribe to legacy event names for backward compatibility
-    chatHub.on<ChatMessage>(SIGNALR_EVENTS.NEW_MESSAGE, handleMessageSent);
-    chatHub.on<ChatMessage>(SIGNALR_EVENTS.RECEIVE_MESSAGE, handleMessageSent);
+    // chatHub.on<ChatMessage>(SIGNALR_EVENTS.NEW_MESSAGE, handleMessageSent);
+    // chatHub.on<ChatMessage>(SIGNALR_EVENTS.RECEIVE_MESSAGE, handleMessageSent);
     chatHub.on<UserTypingEvent>(SIGNALR_EVENTS.USER_TYPING, handleUserTyping);
     chatHub.on<UserTypingEvent>(
       SIGNALR_EVENTS.USER_STOPPED_TYPING,
       handleUserStoppedTyping,
     );
-
-    // ❌ REMOVED: Duplicate group join
-    // Conversation group is already joined by useConversationRealtime (global)
-    // No need to join again here - just listen to events
-
     // Cleanup
     return () => {
       chatHub.off(
         SIGNALR_EVENTS.MESSAGE_SENT,
         handleMessageSent as (...args: unknown[]) => void,
       );
-      chatHub.off(
-        SIGNALR_EVENTS.NEW_MESSAGE,
-        handleMessageSent as (...args: unknown[]) => void,
-      );
+      // chatHub.off(
+      //   SIGNALR_EVENTS.NEW_MESSAGE,
+      //   handleMessageSent as (...args: unknown[]) => void,
+      // );
       chatHub.off(
         SIGNALR_EVENTS.RECEIVE_MESSAGE,
         handleMessageSent as (...args: unknown[]) => void,
@@ -241,8 +320,8 @@ export function useMessageRealtime({
       // ❌ REMOVED: Group leave (never joined in this hook)
     };
   }, [
-    conversationId,
-    handleMessageSent,
+    conversationId, // ✅ Re-subscribe when conversation changes
+    handleMessageSent, // ✅ Re-subscribe when handleMessageSent changes (includes conversationId via deps)
     handleUserTyping,
     handleUserStoppedTyping,
     isConnected,

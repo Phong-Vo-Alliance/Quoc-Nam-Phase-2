@@ -42,7 +42,6 @@ interface UseSendMessageOptions {
  * const sendMsg = useSendMessage({
  *   workspaceId: 'ws-123',
  *   conversationId: 'conv-123',
- *   onSuccess: (msg) => console.log('Sent:', msg.id)
  * });
  *
  * // Send normal message
@@ -136,17 +135,15 @@ export function useSendMessage({
         editedAt: null,
         linkedTaskId: null,
         reactions: [],
-        attachments: data.attachment
-          ? [
-              {
-                id: `temp-attachment-${crypto.randomUUID()}`,
-                fileId: data.attachment.fileId,
-                fileName: data.attachment.fileName || null,
-                fileSize: data.attachment.fileSize || 0,
-                contentType: data.attachment.contentType || null,
-                createdAt: new Date().toISOString(),
-              },
-            ]
+        attachments: data.attachments?.length
+          ? data.attachments.map((att) => ({
+              id: `temp-attachment-${crypto.randomUUID()}`,
+              fileId: att.fileId,
+              fileName: att.fileName || null,
+              fileSize: att.fileSize || 0,
+              contentType: att.contentType || null,
+              createdAt: new Date().toISOString(),
+            }))
           : [],
         replyCount: 0,
         isStarred: false,
@@ -156,6 +153,7 @@ export function useSendMessage({
         // Client-side fields
         sendStatus: "sending",
         retryCount: 0,
+        unreadReplyCount: 0,
       };
 
       // Add to cache
@@ -223,8 +221,8 @@ export function useSendMessage({
       const failedMessage: import("@/utils/storage").FailedMessage = {
         id: crypto.randomUUID(),
         content: variables.content || "",
-        attachedFileIds: variables.attachment
-          ? [variables.attachment.fileId]
+        attachedFileIds: variables.attachments?.length
+          ? variables.attachments.map((att) => att.fileId)
           : [],
         workspaceId,
         conversationId,
@@ -246,35 +244,47 @@ export function useSendMessage({
       // Cancel timeout
       cancelTimeout();
 
-      // Remove temp message from cache (SignalR will add real message)
-      if (context?.tempMessageId) {
-        queryClient.setQueryData<{ pages: Array<{ data: ChatMessage[] }> }>(
-          ["messages", conversationId],
-          (old) => {
-            if (!old) return old;
+      // ✅ FIX Phase 3: Replace temp message with real server message immediately
+      // INSTEAD OF: Removing temp message and waiting for SignalR to add real message
+      // DO THIS: Replace temp message with real message data from server
+      // This ensures message is visible even if SignalR is delayed
+      // ✅ Use data.conversationId from server response to ensure correct conversation cache
+      const targetConversationId = data.conversationId;
 
-            return {
-              ...old,
-              pages: old.pages.map((page) => ({
-                ...page,
-                data: page.data.filter(
-                  (msg) => msg.id !== context.tempMessageId,
-                ),
-              })),
-            };
-          },
-        );
+      if (context?.tempMessageId) {
+        queryClient.setQueryData<{
+          pages: Array<{ data: ChatMessage[] }>;
+        }>(["messages", targetConversationId], (old) => {
+          if (!old) return old;
+
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              data: page.data.map((msg) =>
+                msg.id === context.tempMessageId
+                  ? {
+                      ...data, // Use real message from server
+                      sendStatus: undefined, // Remove client-only fields
+                      retryCount: undefined,
+                    }
+                  : msg,
+              ),
+            })),
+          };
+        });
       }
 
       // Clear draft on successful send
-      deleteDraft(conversationId);
+      deleteDraft(targetConversationId);
 
-      // TIMEOUT CHECK: Verify message appears in cache within 3s
+      // TIMEOUT CHECK: Verify message appears in cache within 1.5s
+      // ✅ FIX: Reduced from 3s to 1.5s for faster recovery
       // This handles cases where SignalR is delayed or disconnected
       setTimeout(() => {
         const currentCache = queryClient.getQueryData<{
           pages: Array<{ data: ChatMessage[] }>;
-        }>(["messages", conversationId]);
+        }>(["messages", targetConversationId]);
 
         // Check if message exists in cache (by ID or content+time match)
         const messageExists = currentCache?.pages.some((page) =>
@@ -288,15 +298,24 @@ export function useSendMessage({
         );
 
         if (!messageExists) {
-          console.warn("Message not in cache after 3s, refetching...", {
-            messageId: data.id,
-            conversationId,
-          });
           queryClient.invalidateQueries({
-            queryKey: ["messages", conversationId],
+            queryKey: ["messages", targetConversationId],
+            refetchType: "active",
           });
+        } else {
+          console.log(
+            `[useSendMessage] Message ${data.id} confirmed in cache for conversation ${targetConversationId}`,
+          );
         }
-      }, 3000); // 3s timeout (Decision 2)
+      }, 1500); // ✅ FIX: Reduced from 3000ms to 1500ms
+
+      // Invalidate attachments query if message has attachments
+      // So ConversationDetailPanel right panel updates with new files/images
+      if (variables.attachments?.length) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation-attachments", targetConversationId],
+        });
+      }
 
       // Message will be added by SignalR listener in useMessageRealtime
       // Just call the success callback if provided

@@ -40,7 +40,7 @@ export default function ImagePreviewModal({
         setImageUrl(blobUrl);
       } catch (err) {
         setError(
-          err instanceof Error ? err : new Error("Failed to load preview")
+          err instanceof Error ? err : new Error("Failed to load preview"),
         );
       } finally {
         setIsLoading(false);
@@ -72,7 +72,7 @@ export default function ImagePreviewModal({
       })
       .catch((err) => {
         setError(
-          err instanceof Error ? err : new Error("Failed to load preview")
+          err instanceof Error ? err : new Error("Failed to load preview"),
         );
         setIsLoading(false);
       });

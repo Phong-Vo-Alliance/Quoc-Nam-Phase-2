@@ -18,6 +18,30 @@ import { toast } from "sonner";
 import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import type { ConversationMember } from "@/types/conversations";
 import type { TaskDetailResponse } from "@/types/tasks_api";
+import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
+
+// Vietnamese labels for task statuses
+const STATUS_LABELS_VI: Record<string, string> = {
+  todo: "Chưa xử lý",
+  doing: "Đang xử lý",
+  need_to_verified: "Chờ duyệt",
+  needtoverified: "Chờ duyệt",
+  finished: "Hoàn thành",
+};
+
+// Event payload for InformationConfirmedCreated (from Task Hub)
+interface InformationConfirmedCreatedEvent {
+  id: string;
+  conversationId: string;
+  messageId: string;
+  content: string;
+  confirmedBy: string;
+  confirmedAt: string;
+  statusCode: string;
+  isFinished: boolean;
+}
+import { GetMessagesResponse } from "@/types/messages";
+import { messageKeys } from "./queries";
 
 export function useTaskNotifications() {
   const queryClient = useQueryClient();
@@ -26,8 +50,6 @@ export function useTaskNotifications() {
 
   const handleTaskUpdate = useCallback(
     (payload: TaskUpdatePayload) => {
-      console.log("[TaskNotifications] TasksUpdated event received:", payload);
-
       // Get old task data from cache BEFORE invalidating (to capture old status)
       let oldTaskData: TaskDetailResponse | undefined;
 
@@ -42,7 +64,6 @@ export function useTaskNotifications() {
           if (oldTaskData) break;
         }
       }
-
       // If not found in lists, try task detail cache
       if (!oldTaskData) {
         oldTaskData = queryClient.getQueryData<TaskDetailResponse>(
@@ -62,6 +83,39 @@ export function useTaskNotifications() {
         });
       }
 
+      if (payload.changeType === "created") {
+        queryClient.setQueryData<{
+          pages: GetMessagesResponse[];
+          pageParams: (string | undefined)[];
+        }>(messageKeys.conversation(payload.conversationId ?? ""), (old) => {
+          if (!old || !old.pages.length) return old;
+
+          // Check if message already exists (prevent duplicates)
+          const exists = old.pages.some((page) =>
+            page.items.some((item) => item.id === payload.messageId),
+          );
+          if (exists) {
+            const r = {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                items: page.items.map((item) => {
+                  if (item.id === payload.messageId) {
+                    const _r = {
+                      ...item,
+                      linkedTaskId: payload.task.id,
+                      taskId: payload.task.id,
+                    };
+                    return _r;
+                  }
+                  return item;
+                }),
+              })),
+            };
+            return r;
+          }
+        });
+      }
       // 3. Invalidate the specific task detail if it's being viewed
       queryClient.invalidateQueries({
         queryKey: tasksKeys.detail(payload.taskId),
@@ -112,14 +166,13 @@ export function useTaskNotifications() {
           break;
 
         case "status_changed": {
-          const oldStatus =
-            oldTaskData?.status?.code ||
-            oldTaskData?.status?.label ||
-            "Unknown";
           const newStatus = payload.task.statusCode;
+          const newStatusLabel =
+            STATUS_LABELS_VI[newStatus?.toLowerCase()] || newStatus;
           const changedByUserName = getUserName(payload.changedByUserId);
+
           toast.info(
-            `Công việc "${taskTitle}" đã thay đổi trạng thái bởi ${changedByUserName}: ${oldStatus} → ${newStatus}`,
+            `${changedByUserName} đã chuyển trạng thái công việc ${taskTitle} sang ${newStatusLabel}.`,
           );
           break;
         }
@@ -149,14 +202,24 @@ export function useTaskNotifications() {
           break;
 
         default:
-          console.log(
-            "[TaskNotifications] Unhandled task change type:",
-            payload.changeType,
-          );
           toast.info(`Công việc "${taskTitle}" đã được cập nhật`);
       }
     },
     [queryClient, currentUserId],
+  );
+
+  // Handle InformationConfirmedCreated event (new confirmed info)
+  const handleInformationConfirmedCreated = useCallback(
+    (event: InformationConfirmedCreatedEvent) => {
+      // Invalidate all information confirmed queries to refetch fresh data
+      queryClient.invalidateQueries({
+        queryKey: informationConfirmedKeys.all,
+      });
+
+      // Optional: Show toast notification (uncomment if needed)
+      // toast.info(`Thông tin mới được tiếp nhận`);
+    },
+    [queryClient],
   );
 
   // Monitor TaskHub connection state
@@ -178,23 +241,25 @@ export function useTaskNotifications() {
   // Subscribe to TasksUpdated event only when TaskHub is connected
   useEffect(() => {
     if (!isTaskHubConnected) {
-      console.log(
-        "[TaskNotifications] TaskHub not connected, skipping subscription",
-      );
       return;
     }
-
-    console.log(
-      "[TaskNotifications] TaskHub connected - Subscribing to TasksUpdated event",
-    );
 
     // Subscribe to TasksUpdated event
     taskHub.onTasksUpdated(handleTaskUpdate);
 
+    // Subscribe to InformationConfirmedCreated event (for realtime confirmed info updates)
+    taskHub.on(
+      "InformationConfirmedCreated",
+      handleInformationConfirmedCreated,
+    );
+
     // Cleanup: Unsubscribe on unmount or disconnection
     return () => {
-      console.log("[TaskNotifications] Unsubscribing from TasksUpdated event");
       taskHub.offTasksUpdated();
+      taskHub.off(
+        "InformationConfirmedCreated",
+        handleInformationConfirmedCreated,
+      );
     };
-  }, [isTaskHubConnected, handleTaskUpdate]);
+  }, [isTaskHubConnected, handleTaskUpdate, handleInformationConfirmedCreated]);
 }

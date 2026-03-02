@@ -53,10 +53,6 @@ export function useExcelPreview(fileId: string, options?: ExcelPreviewOptions) {
   return useQuery<ExcelPreviewDto, Error>({
     queryKey: excelPreviewKeys.file(fileId, options),
     queryFn: () => {
-      console.log(
-        "[useExcelPreview] Fetching Excel preview for fileId:",
-        fileId
-      );
       return previewExcelFile(fileId, options);
     },
     enabled: !!fileId && fileId.trim() !== "",

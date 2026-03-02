@@ -156,7 +156,6 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(
     // Handle input change - simplified, @ detection moved to event listener
     const handleInputChange = useCallback(
       (newValue: string) => {
-        console.log("📝 handleInputChange called with:", newValue);
         onChange(newValue);
         // @ detection now handled by direct input event listener
       },
@@ -303,21 +302,9 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(
 
       // 🔧 FIX: Listen directly to input event to catch all text changes
       const handleInputEvent = () => {
-        console.log(
-          "🎯 Input event triggered, textarea value:",
-          textarea.value,
-        );
-
         const cursorPosition = textarea.selectionStart || 0;
         const textBeforeCursor = textarea.value.slice(0, cursorPosition);
         const lastAtIndex = textBeforeCursor.lastIndexOf("@");
-
-        console.log("🔍 @ Detection Debug:", {
-          value: textarea.value,
-          cursorPosition,
-          textBeforeCursor,
-          lastAtIndex,
-        });
 
         if (lastAtIndex !== -1) {
           // Check if @ is at valid position (start of text or after whitespace)
@@ -327,24 +314,12 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(
             /[\s\n\r\t]/.test(charBeforeAt) ||
             charBeforeAt === undefined;
 
-          console.log("🔍 @ Validation:", {
-            charBeforeAt,
-            charCode: charBeforeAt?.charCodeAt(0),
-            isValidAtPosition,
-          });
-
           if (isValidAtPosition) {
             // Get text after @ up to cursor
             const searchQuery = textBeforeCursor.slice(lastAtIndex + 1);
 
-            console.log("🔍 Search Query:", {
-              searchQuery,
-              hasWhitespace: /[\s\n\r\t]/.test(searchQuery),
-            });
-
             // Show dropdown if query doesn't contain whitespace (active mention)
             if (!/[\s\n\r\t]/.test(searchQuery)) {
-              console.log("✅ Showing mention dropdown");
               setShowMentionDropdown(true);
               setMentionSearchQuery(searchQuery);
               setMentionStartIndex(lastAtIndex);
@@ -355,7 +330,6 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(
         }
 
         // Hide dropdown if no valid @ context
-        console.log("❌ Hiding mention dropdown");
         setShowMentionDropdown(false);
       };
 

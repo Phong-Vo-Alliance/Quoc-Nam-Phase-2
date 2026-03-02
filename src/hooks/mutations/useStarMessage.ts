@@ -18,7 +18,6 @@ interface UseStarMessageOptions {
  * @example
  * const starMsg = useStarMessage({
  *   conversationId: 'conv-123',
- *   onSuccess: () => console.log('Starred!')
  * });
  *
  * starMsg.mutate({ messageId: 'msg-456' });
@@ -69,29 +68,36 @@ interface UseUnstarMessageOptions {
  * @example
  * const unstarMsg = useUnstarMessage({
  *   conversationId: 'conv-123',
- *   onSuccess: () => console.log('Unstarred!')
  * });
  *
  * unstarMsg.mutate({ messageId: 'msg-456' });
+ * // Or with dynamic conversationId:
+ * unstarMsg.mutate({ messageId: 'msg-456', conversationId: 'conv-789' });
  */
 export function useUnstarMessage({
-  conversationId,
+  conversationId: defaultConversationId,
   onSuccess,
   onError,
 }: UseUnstarMessageOptions = {}) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ messageId }: { messageId: string }) =>
-      unstarMessage(messageId),
+    mutationFn: ({
+      messageId,
+    }: {
+      messageId: string;
+      conversationId?: string;
+    }) => unstarMessage(messageId),
 
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       // Invalidate all starred messages cache
       queryClient.invalidateQueries({
         queryKey: pinnedStarredKeys.starred,
       });
 
       // Invalidate messages cache to update isStarred flag
+      // Use conversationId from mutation call if provided, else use default from hook options
+      const conversationId = variables.conversationId || defaultConversationId;
       if (conversationId) {
         queryClient.invalidateQueries({
           queryKey: messageKeys.conversation(conversationId),

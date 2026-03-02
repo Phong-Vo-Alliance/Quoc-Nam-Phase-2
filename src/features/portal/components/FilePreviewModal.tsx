@@ -15,7 +15,6 @@ export type PreviewFile = FileAttachment | null;
 function getFileExtension(fileName: string): string {
   const parts = fileName.split(".");
   const ext = parts.length > 1 ? parts[parts.length - 1].toLowerCase() : "";
-  console.log("[getFileExtension]", { fileName, parts, extension: ext });
   return ext;
 }
 
@@ -45,23 +44,8 @@ export const FilePreviewModal: React.FC<{
   // Get fileId: prioritize file.id, fallback to extracting from URL
   const fileId = file.id || extractFileIdFromUrl(file.url);
 
-  // Debug logging
-  console.log("[FilePreviewModal] File info:", {
-    fileName: file.name,
-    fileUrl: file.url,
-    fileId,
-    extension,
-    fileType: file.type,
-    isWordFile,
-    isExcelFile,
-  });
-
   // Phase 5: Word/Excel Preview (MUST CHECK FIRST - before PDF/Image fallback)
   if (isWordFile || isExcelFile) {
-    console.log(
-      "[FilePreviewModal] Rendering Phase 5 preview:",
-      isWordFile ? "Word" : "Excel"
-    );
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-7xl h-[90vh] p-0 overflow-hidden">
@@ -85,7 +69,6 @@ export const FilePreviewModal: React.FC<{
   }
 
   // Phase 1-4: PDF/Image Preview (fallback for non-Word/Excel files)
-  console.log("[FilePreviewModal] Rendering Phase 1-4 preview:", file.type);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">

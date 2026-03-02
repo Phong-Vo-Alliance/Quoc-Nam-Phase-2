@@ -203,6 +203,7 @@ export function useUpdateChecklistTemplate() {
         description?: string | null;
         conversationId?: string;
         items?: Array<string>;
+        isDefault?: boolean;
       };
     }) => updateChecklistTemplate(templateId, payload),
     onSuccess: (_data, variables) => {

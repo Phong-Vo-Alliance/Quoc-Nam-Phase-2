@@ -1,1 +1,2 @@
 export { InfoTabContent } from "./InfoTabContent";
+

@@ -5,7 +5,7 @@
  *
  * Supported patterns:
  * 1. "[Nội dung] đã được tiếp nhận bởi [user] lúc [time]"
- *    → Highlight: user
+ *    → Bold: Nội dung, Highlight: user
  *
  * 2. "Công việc [tên công việc] đã được tạo bởi [user-create] và giao cho [user]"
  *    → Highlight: user-create, user
@@ -29,14 +29,31 @@
  *    → Highlight: username (email)
  *
  * 9. "[content]" đã được tiếp nhận bởi [username] (without time)
- *    → Highlight: username
+ *    → Bold: content, Highlight: username
+ *
+ * 10. "[username] đã đánh dấu mục [item-name]"
+ *    → Highlight: username, Bold: item-name
+ *
+ * 11. "[username] đã bỏ đánh dấu mục [item-name]"
+ *    → Highlight: username, Bold: item-name
+ *
+ * 12. "[assignee-name] đã chuyển trạng thái công việc [task-name] sang [status]"
+ *    → Highlight: assignee-name, Bold: task-name, Status color: status
  */
 
 import React from "react";
 
 export interface SystemMessagePart {
-  type: "text" | "highlight" | "time" | "task-name";
+  type:
+    | "text"
+    | "highlight"
+    | "time"
+    | "task-name"
+    | "item-name"
+    | "status"
+    | "content-name"; // For content in receive info messages
   content: string;
+  statusType?: "pending" | "in-progress" | "completed" | "cancelled"; // For status highlighting
 }
 
 /**
@@ -55,15 +72,15 @@ export function parseSystemMessageContent(
   // Pattern 1: "[Nội dung] đã được tiếp nhận bởi [user] lúc [time]"
   // Regex: captures content in quotes, "đã được tiếp nhận bởi", username, "lúc", time
   const receiveInfoPattern =
-    /^(.+?)đã được tiếp nhận bởi\s+(.+?)\s+lúc\s+(\d{1,2}:\d{2})$/;
+    /^(.+?)\s+đã được tiếp nhận bởi\s+(.+?)\s+lúc\s+(\d{1,2}:\d{2})$/;
 
   // Pattern 2: "Công việc [tên] đã được tạo bởi [creator] và giao cho [assignee]"
   const createTaskPattern =
-    /^Công việc\s+"(.+?)"\s+đã được tạo bởi\s+(.+?)\s+và giao cho\s+(.+)$/;
+    /^Công việc\s+(.+?)\s+đã được tạo bởi\s+(.+?)\s+và giao cho\s+(.+)$/;
 
   // Pattern 3: "Công việc [tên] đã được chuyển giao cho [user]"
   const transferTaskPattern =
-    /^Công việc\s+"(.+?)"\s+đã được chuyển giao cho\s+(.+)$/;
+    /^Công việc\s+(.+?)\s+đã được chuyển giao cho\s+(.+)$/;
 
   // Pattern 4: "[user] đã thêm [user2] vào nhóm"
   const addMemberPattern = /^(.+?)\s+đã thêm\s+(.+?)\s+vào nhóm$/;
@@ -76,22 +93,47 @@ export function parseSystemMessageContent(
 
   // Pattern 7: "Công việc [tên] đã được tạo và giao cho [user]" (without creator)
   const createTaskSimplePattern =
-    /^Công việc\s+"(.+?)"\s+đã được tạo và giao cho\s+(.+)$/;
+    /^Công việc\s+(.+?)\s+đã được tạo và giao cho\s+(.+)$/;
 
   // Pattern 8: "[username] ([email]) đã được thêm vào nhóm"
   const addMemberWithEmailPattern =
     /^(.+?)\s+\(([^)]+)\)\s+đã được thêm vào nhóm$/;
 
-  // Pattern 9: "[content]" đã được tiếp nhận bởi [username] (without time)
-  const receiveInfoNoTimePattern = /^(.+?)đã được tiếp nhận bởi\s+(.+?)$/;
+  // Pattern 9: "[content] đã được tiếp nhận bởi [username]" (without time)
+  const receiveInfoNoTimePattern = /^(.+?)\s+đã được tiếp nhận bởi\s+(.+?)$/;
+
+  // Pattern 10: "[username] đã đánh dấu mục [item-name]" (with or without quotes)
+  const markItemPattern = /^(.+?)\s+đã đánh dấu mục\s+(.+)$/;
+
+  // Pattern 11: "[username] đã bỏ đánh dấu mục [item-name]" (with or without quotes)
+  const unmarkItemPattern = /^(.+?)\s+đã bỏ đánh dấu mục\s+(.+)$/;
+
+  // Pattern 12: "[assignee-name] đã chuyển trạng thái công việc [task-name] sang [status]"
+  // Status mapping for color highlighting
+  const statusMapping: Record<
+    string,
+    "pending" | "in-progress" | "completed" | "cancelled"
+  > = {
+    "Chờ xử lý": "pending",
+    "Đang xử lý": "in-progress",
+    "Hoàn thành": "completed",
+    "Đã hủy": "cancelled",
+    "Chưa bắt đầu": "pending",
+    "Đã xong": "completed",
+  };
+
+  const changeStatusPattern =
+    /^(.+?)\s+đã chuyển trạng thái công việc\s+(.+?)\s+sang\s+(.+)$/;
 
   let match: RegExpMatchArray | null;
 
   // Try Pattern 1: Receive Info
   if ((match = content.match(receiveInfoPattern))) {
     const [, contentDesc, username, time] = match;
-    parts.push({ type: "text", content: contentDesc });
-    parts.push({ type: "text", content: "đã được tiếp nhận bởi " });
+    // Remove surrounding quotes if present
+    const cleanContent = contentDesc.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "content-name", content: cleanContent });
+    parts.push({ type: "text", content: " đã được tiếp nhận bởi " });
     parts.push({ type: "highlight", content: username });
     parts.push({ type: "text", content: " lúc " });
     parts.push({ type: "time", content: time });
@@ -101,9 +143,11 @@ export function parseSystemMessageContent(
   // Try Pattern 2: Create Task
   if ((match = content.match(createTaskPattern))) {
     const [, taskName, creator, assignee] = match;
-    parts.push({ type: "text", content: 'Công việc "' });
-    parts.push({ type: "task-name", content: taskName });
-    parts.push({ type: "text", content: '" đã được tạo bởi ' });
+    // Remove surrounding quotes if present
+    const cleanTaskName = taskName.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "text", content: "Công việc " });
+    parts.push({ type: "task-name", content: cleanTaskName });
+    parts.push({ type: "text", content: " đã được tạo bởi " });
     parts.push({ type: "highlight", content: creator });
     parts.push({ type: "text", content: " và giao cho " });
     parts.push({ type: "highlight", content: assignee });
@@ -113,9 +157,11 @@ export function parseSystemMessageContent(
   // Try Pattern 3: Transfer Task
   if ((match = content.match(transferTaskPattern))) {
     const [, taskName, assignee] = match;
-    parts.push({ type: "text", content: 'Công việc "' });
-    parts.push({ type: "task-name", content: taskName });
-    parts.push({ type: "text", content: '" đã được chuyển giao cho ' });
+    // Remove surrounding quotes if present
+    const cleanTaskName = taskName.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "text", content: "Công việc " });
+    parts.push({ type: "task-name", content: cleanTaskName });
+    parts.push({ type: "text", content: " đã được chuyển giao cho " });
     parts.push({ type: "highlight", content: assignee });
     return parts;
   }
@@ -151,9 +197,11 @@ export function parseSystemMessageContent(
   // Try Pattern 7: Create Task Simple (without creator)
   if ((match = content.match(createTaskSimplePattern))) {
     const [, taskName, assignee] = match;
-    parts.push({ type: "text", content: 'Công việc "' });
-    parts.push({ type: "task-name", content: taskName });
-    parts.push({ type: "text", content: '" đã được tạo và giao cho ' });
+    // Remove surrounding quotes if present
+    const cleanTaskName = taskName.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "text", content: "Công việc " });
+    parts.push({ type: "task-name", content: cleanTaskName });
+    parts.push({ type: "text", content: " đã được tạo và giao cho " });
     parts.push({ type: "highlight", content: assignee });
     return parts;
   }
@@ -170,9 +218,50 @@ export function parseSystemMessageContent(
   // Note: This must be AFTER Pattern 1 (with time) to avoid matching incorrectly
   if ((match = content.match(receiveInfoNoTimePattern))) {
     const [, contentDesc, username] = match;
-    parts.push({ type: "text", content: contentDesc });
-    parts.push({ type: "text", content: "đã được tiếp nhận bởi " });
+    // Remove surrounding quotes if present
+    const cleanContent = contentDesc.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "content-name", content: cleanContent });
+    parts.push({ type: "text", content: " đã được tiếp nhận bởi " });
     parts.push({ type: "highlight", content: username.trim() });
+    return parts;
+  }
+
+  // Try Pattern 10: Mark Item
+  if ((match = content.match(markItemPattern))) {
+    const [, username, itemName] = match;
+    // Remove surrounding quotes if present
+    const cleanItemName = itemName.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "highlight", content: username });
+    parts.push({ type: "text", content: " đã đánh dấu mục " });
+    parts.push({ type: "item-name", content: cleanItemName });
+    return parts;
+  }
+
+  // Try Pattern 11: Unmark Item
+  if ((match = content.match(unmarkItemPattern))) {
+    const [, username, itemName] = match;
+    // Remove surrounding quotes if present
+    const cleanItemName = itemName.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "highlight", content: username });
+    parts.push({ type: "text", content: " đã bỏ đánh dấu mục " });
+    parts.push({ type: "item-name", content: cleanItemName });
+    return parts;
+  }
+
+  // Try Pattern 12: Change Status
+  if ((match = content.match(changeStatusPattern))) {
+    const [, assigneeName, taskName, status] = match;
+    // Remove surrounding quotes if present
+    const cleanTaskName = taskName.trim().replace(/^["']|["']$/g, "");
+    const cleanStatus = status.trim().replace(/^["']|["']$/g, "");
+    parts.push({ type: "highlight", content: assigneeName });
+    parts.push({ type: "text", content: " đã chuyển trạng thái công việc " });
+    parts.push({ type: "task-name", content: cleanTaskName });
+    parts.push({ type: "text", content: " sang " });
+
+    // Determine status type for color coding
+    const statusType = statusMapping[cleanStatus] || "pending";
+    parts.push({ type: "status", content: cleanStatus, statusType });
     return parts;
   }
 
@@ -198,6 +287,34 @@ export interface RenderSystemMessageOptions {
    * @default "font-medium"
    */
   taskNameClassName?: string;
+
+  /**
+   * Class for item names (starred items, etc.)
+   * @default "font-bold text-gray-800"
+   */
+  itemNameClassName?: string;
+
+  /**
+   * Class for content names (received content)
+   * @default "font-bold text-gray-800"
+   */
+  contentNameClassName?: string;
+
+  /**
+   * Classes for status by type
+   * @default {
+   *   pending: "font-semibold text-amber-600 bg-amber-100 px-1 rounded",
+   *   "in-progress": "font-semibold text-blue-600 bg-blue-100 px-1 rounded",
+   *   completed: "font-semibold text-green-600 bg-green-100 px-1 rounded",
+   *   cancelled: "font-semibold text-gray-600 bg-gray-100 px-1 rounded"
+   * }
+   */
+  statusClassNames?: {
+    pending?: string;
+    "in-progress"?: string;
+    completed?: string;
+    cancelled?: string;
+  };
 }
 
 /**
@@ -219,6 +336,14 @@ export function renderSystemMessageWithHighlights(
     highlightClassName = "font-semibold text-gray-900",
     timeClassName = "text-gray-500",
     taskNameClassName = "font-medium",
+    itemNameClassName = "font-medium text-gray-800",
+    contentNameClassName = "font-medium text-gray-800",
+    statusClassNames = {
+      pending: "font-semibold text-amber-600 bg-amber-100 px-1 rounded",
+      "in-progress": "font-semibold text-blue-600 bg-blue-100 px-1 rounded",
+      completed: "font-semibold text-green-600 bg-green-100 px-1 rounded",
+      cancelled: "font-semibold text-gray-600 bg-gray-100 px-1 rounded",
+    },
   } = options;
 
   const parts = parseSystemMessageContent(content);
@@ -251,6 +376,28 @@ export function renderSystemMessageWithHighlights(
           case "task-name":
             return (
               <span key={index} className={taskNameClassName}>
+                {part.content}
+              </span>
+            );
+          case "item-name":
+            return (
+              <span key={index} className={itemNameClassName}>
+                {part.content}
+              </span>
+            );
+          case "content-name":
+            return (
+              <span key={index} className={contentNameClassName}>
+                {part.content}
+              </span>
+            );
+          case "status":
+            const statusClass =
+              part.statusType && statusClassNames[part.statusType]
+                ? statusClassNames[part.statusType]
+                : statusClassNames.pending;
+            return (
+              <span key={index} className={statusClass}>
                 {part.content}
               </span>
             );

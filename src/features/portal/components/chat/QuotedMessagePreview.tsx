@@ -265,6 +265,8 @@ export default function QuotedMessagePreview({
                 src={thumbnailUrl}
                 alt={firstImage.fileName || "Image"}
                 className="w-full h-full object-cover"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
                 data-testid="quoted-preview-image-thumbnail"
               />
             ) : (

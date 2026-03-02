@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { renderHook } from "@testing-library/react";
-import { useWatermarkStyles } from "../Watermark";
+import { renderHook, render, screen } from "@testing-library/react";
+import { useWatermarkStyles, WatermarkOverlay } from "../Watermark";
 import type { WatermarkInfoDto } from "@/types/filePreview";
 
 describe("useWatermarkStyles", () => {
@@ -15,7 +15,7 @@ describe("useWatermarkStyles", () => {
     expect(result.current).toHaveProperty("backgroundImage");
     expect(result.current).toHaveProperty("backgroundRepeat", "repeat");
     expect(result.current).toHaveProperty("backgroundPosition", "0 0");
-    expect(result.current).toHaveProperty("backgroundSize", "400px 300px");
+    expect(result.current).toHaveProperty("backgroundSize", "300px 200px");
     expect(result.current).toHaveProperty("backgroundAttachment", "local");
   });
 
@@ -66,7 +66,7 @@ describe("useWatermarkStyles", () => {
     expect(result.current.backgroundSize).toBe("300px 200px");
   });
 
-  it("should handle missing userIdentifier gracefully", () => {
+  it("should return empty object when userIdentifier is null", () => {
     const emptyWatermark: WatermarkInfoDto = {
       userIdentifier: null as any,
       timestamp: "2026-01-12T10:30:00Z",
@@ -74,7 +74,66 @@ describe("useWatermarkStyles", () => {
 
     const { result } = renderHook(() => useWatermarkStyles(emptyWatermark));
 
-    expect(result.current).toHaveProperty("backgroundImage");
-    expect(result.current.backgroundImage).toContain("data:image/svg+xml");
+    // Should return empty object when no valid userIdentifier
+    expect(result.current).toEqual({});
+  });
+});
+
+describe("WatermarkOverlay", () => {
+  const mockWatermark: WatermarkInfoDto = {
+    userIdentifier: "user@example.com",
+    timestamp: "2026-01-12T10:30:00Z",
+  };
+
+  it("should render overlay div with correct test id", () => {
+    render(<WatermarkOverlay watermark={mockWatermark} />);
+
+    expect(screen.getByTestId("watermark-overlay")).toBeInTheDocument();
+  });
+
+  it("should have pointer-events none to allow clicks through", () => {
+    render(<WatermarkOverlay watermark={mockWatermark} />);
+
+    const overlay = screen.getByTestId("watermark-overlay");
+    expect(overlay).toHaveStyle({ pointerEvents: "none" });
+  });
+
+  it("should have z-index to render on top of content", () => {
+    render(<WatermarkOverlay watermark={mockWatermark} />);
+
+    const overlay = screen.getByTestId("watermark-overlay");
+    expect(overlay).toHaveStyle({ zIndex: "10" });
+  });
+
+  it("should have absolute positioning to cover parent", () => {
+    render(<WatermarkOverlay watermark={mockWatermark} />);
+
+    const overlay = screen.getByTestId("watermark-overlay");
+    expect(overlay).toHaveStyle({
+      position: "absolute",
+      top: "0px",
+      left: "0px",
+      right: "0px",
+      bottom: "0px",
+    });
+  });
+
+  it("should return null when no watermark provided", () => {
+    const { container } = render(<WatermarkOverlay watermark={null} />);
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("should return null when watermark has no userIdentifier", () => {
+    const emptyWatermark: WatermarkInfoDto = {
+      userIdentifier: "",
+      timestamp: "2026-01-12T10:30:00Z",
+    };
+
+    const { container } = render(
+      <WatermarkOverlay watermark={emptyWatermark} />,
+    );
+
+    expect(container.firstChild).toBeNull();
   });
 });

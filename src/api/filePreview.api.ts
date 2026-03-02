@@ -181,7 +181,6 @@ import type {
  * @example
  * try {
  *   const preview = await previewWordFile("abc-123-def");
- *   console.log(preview.htmlContent); // <p>Document content...</p>
  * } catch (error) {
  *   console.error("Failed to load Word preview:", error.message);
  * }
@@ -233,7 +232,6 @@ export async function previewWordFile(fileId: string): Promise<WordPreviewDto> {
  * try {
  *   const preview = await previewExcelFile("abc-123-def", { includeStyles: true });
  *   preview.sheets.forEach(sheet => {
- *     console.log(`Sheet: ${sheet.name}, Rows: ${sheet.rowCount}`);
  *   });
  * } catch (error) {
  *   console.error("Failed to load Excel preview:", error.message);
@@ -252,13 +250,6 @@ export async function previewExcelFile(
     const url = `/api/Files/${fileId}/preview/excel${
       params.toString() ? `?${params.toString()}` : ""
     }`;
-
-    console.log("[previewExcelFile] Calling API:", {
-      baseURL: FILE_API_BASE_URL,
-      url,
-      fileId,
-      options,
-    });
 
     const response = await fileApiClient.get<ExcelPreviewDto>(url, {
       responseType: "json",

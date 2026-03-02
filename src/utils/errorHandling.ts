@@ -39,13 +39,13 @@ export function classifyError(error: unknown): ClassifiedError {
 
   // Client-side validation errors (check FIRST before navigator.onLine)
   if (error instanceof Error) {
-    if (error.message === "FILE_TOO_LARGE") {
-      return {
-        type: "FILE_TOO_LARGE",
-        message: "File quá lớn. Vui lòng chọn file nhỏ hơn 20MB.",
-        isRetryable: false,
-      };
-    }
+    // if (error.message === "FILE_TOO_LARGE") {
+    //   return {
+    //     type: "FILE_TOO_LARGE",
+    //     message: "File quá lớn. Vui lòng chọn file nhỏ hơn 20MB.",
+    //     isRetryable: false,
+    //   };
+    // }
 
     if (error.message === "UNSUPPORTED_FILE_TYPE") {
       return {

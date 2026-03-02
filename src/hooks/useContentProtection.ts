@@ -21,8 +21,8 @@ interface UseContentProtectionOptions {
  * @param options - Configuration options
  */
 export function useContentProtection(
-  elementRef: RefObject<HTMLElement>,
-  options: UseContentProtectionOptions = {}
+  elementRef: RefObject<HTMLElement | null>,
+  options: UseContentProtectionOptions = {},
 ) {
   const { filename, enabled = true } = options;
 

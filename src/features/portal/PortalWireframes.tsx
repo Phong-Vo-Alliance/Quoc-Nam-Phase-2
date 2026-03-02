@@ -23,6 +23,7 @@ import type {
   TaskLogMessage,
 } from "./types";
 import type { StarredMessageDto } from "@/types/pinned_and_starred";
+import type { ChatMessage } from "@/types/messages";
 import { WorkspaceView } from "./workspace/WorkspaceView";
 import { TeamMonitorView } from "./lead/TeamMonitorView";
 import { MainSidebar } from "./components/MainSidebar";
@@ -30,10 +31,13 @@ import { ViewModeSwitcher } from "@/features/portal/components/ViewModeSwitcher"
 import { DepartmentTransferSheet } from "@/components/sheet/DepartmentTransferSheet";
 import { AssignTaskSheet } from "@/components/sheet/AssignTaskSheet";
 import { taskKeys } from "@/hooks/queries/keys/taskKeys";
+import { useTasks } from "@/hooks/queries/useTasks";
+import { useCategories } from "@/hooks/queries/useCategories";
 import { checklistTemplateKeys } from "@/hooks/queries/useChecklistTemplates";
 import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
 import type { ChecklistTemplateMap, ChecklistTemplateItem } from "./types";
 import { TaskLogThreadSheet } from "./workspace/TaskLogThreadSheet";
+import MessageSkeleton from "./components/MessageSkeleton";
 import { usePinnedMessages } from "@/hooks/queries/usePinnedMessages";
 import {
   usePinMessage,
@@ -43,6 +47,12 @@ import {
   useStarMessage,
   useUnstarMessage,
 } from "@/hooks/mutations/useStarMessage";
+import {
+  useUpdateTaskStatus,
+  useToggleCheckItem,
+  useUpdateCheckItem,
+} from "@/hooks/mutations/useTaskMutations";
+import { useCreateTask } from "@/hooks/mutations/useCreateTask";
 // TODO: Migrate wireframe to use categories API instead of mock data
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { WorkTypeManagerDialog } from "./worktype-manager";
@@ -51,6 +61,7 @@ import { useTabTitle } from "@/hooks/useTabTitle"; // 🆕 For tab title with un
 import { sendMessage } from "@/api/messages.api";
 import { buildReceiveInfoContent } from "@/utils/receiveInfoMessage";
 import type { SendChatMessageRequest } from "@/types/messages";
+import { useSignalRConnection } from "@/providers/SignalRProvider";
 
 // ⚠️ TODO (2026-02-03): This file is a wireframe/demo page
 // Should migrate to use useCategories instead of useGroups, or deprecate if not needed
@@ -60,6 +71,9 @@ type PortalMode = "desktop" | "mobile";
 interface PortalWireframesProps {
   portalMode?: PortalMode;
 }
+
+// Stable empty array to prevent useEffect infinite loops
+const EMPTY_TASKS: Task[] = [];
 
 export default function PortalWireframes({
   portalMode = "desktop",
@@ -74,19 +88,6 @@ export default function PortalWireframes({
   const queryClient = useQueryClient();
 
   // Handle task creation - invalidate queries and close modal
-  const handleTaskCreated = () => {
-    // Invalidate only the specific queries that need to be refreshed
-    if (currentConversationId) {
-      queryClient.invalidateQueries({
-        queryKey: taskKeys.linkedTasks(currentConversationId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: checklistTemplateKeys.list(currentConversationId),
-      });
-    }
-    // Close the modal
-    closeModal();
-  };
 
   // ---------- shared UI state ----------
   const [tab, setTab] = useState<"info" | "order" | "tasks" | "chat">("info");
@@ -161,8 +162,8 @@ export default function PortalWireframes({
   } | null>(null);
 
   // Get current conversation ID for API queries
-  const currentConversationId =
-    selectedChat?.type === "group" ? selectedChat.id : undefined;
+  // 🐛 FIX: Include DM conversations (was only using "group" type, causing cache not to invalidate for DM)
+  const currentConversationId = selectedChat?.id;
 
   // Danh sách "dạng checklist" (sub work type) của work type được chọn
   // Use first workType from selected group as default
@@ -178,7 +179,21 @@ export default function PortalWireframes({
   // Messages will be loaded from API - start with empty array
   // TODO: Replace with useMessages() hook when conversation is selected
   const [messages, setMessages] = React.useState<Message[]>([]);
+  // console.log(messages, "messages state in PortalWireframes");
 
+  const handleTaskCreated = () => {
+    // Invalidate only the specific queries that need to be refreshed
+    if (currentConversationId) {
+      queryClient.invalidateQueries({
+        queryKey: taskKeys.linkedTasks(currentConversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: checklistTemplateKeys.list(currentConversationId),
+      });
+    }
+    // Close the modal
+    closeModal();
+  };
   // (1) Contacts will be loaded from API
   // `groups` state is managed above and updated when `useGroups` returns
   const [contacts] = React.useState<
@@ -202,8 +217,27 @@ export default function PortalWireframes({
   const [taskLogSheet, setTaskLogSheet] = useState<{
     open: boolean;
     taskId?: string;
+    messageId?: string; // ✅ Parent message ID for thread unread tracking
+    targetMessageId?: string; // 🆕 NEW: Target message ID to scroll to in thread
   }>({ open: false });
+  const [threadUnreadCounts, setThreadUnreadCounts] = useState<
+    Record<string, number>
+  >({});
+  const [threadCurrentSessionCounts, setThreadCurrentSessionCounts] = useState<
+    Record<string, number>
+  >({});
+  const [threadIncomingMessage, setThreadIncomingMessage] =
+    useState<ChatMessage | null>(null);
 
+  const tasksQuery = useTasks({
+    conversationId: currentConversationId,
+    enabled: !!currentConversationId,
+  });
+  // Use stable empty array reference to prevent useEffect infinite loop
+  const rawTasks = tasksQuery.data ?? EMPTY_TASKS;
+  const rawTasksFetched = tasksQuery.isFetched;
+  const rawTasksRef = useRef(rawTasks);
+  const taskLogSheetRef = useRef(taskLogSheet);
   const [taskLogs, setTaskLogs] = useState<Record<string, TaskLogMessage[]>>(
     {},
   );
@@ -238,9 +272,39 @@ export default function PortalWireframes({
   const [checklistTemplates, setChecklistTemplates] =
     React.useState<ChecklistTemplateMap>({});
 
-  // Tasks state - will be populated from API
-  // TODO: Implement useTasks() hook to fetch tasks from API
-  const [tasks, setTasks] = React.useState<Task[]>([]);
+  // Tasks state - fetched from API using useTasks hook
+  const categoriesQuery = useCategories();
+  const signalRConnection = useSignalRConnection();
+  const isChatHubConnected = signalRConnection?.isConnected ?? false;
+  const isRawTasksReady = currentConversationId ? rawTasksFetched : true;
+  const isWorkspaceReady =
+    isRawTasksReady && categoriesQuery.isFetched && isChatHubConnected;
+  useEffect(() => {
+    rawTasksRef.current = rawTasks;
+    if (rawTasks.length === 0) {
+      return;
+    }
+
+    const resetCounts = rawTasks.reduce<Record<string, number>>((acc, task) => {
+      acc[task.id] = 0;
+      return acc;
+    }, {});
+
+    // setThreadUnreadCounts(resetCounts);
+    // setThreadCurrentSessionCounts(resetCounts);
+  }, [rawTasks]);
+
+  useEffect(() => {
+    taskLogSheetRef.current = taskLogSheet;
+  }, [taskLogSheet]);
+
+  const [_Tasks, _setTasks] = React.useState<Task[]>([]);
+
+  // Task mutation hooks
+  const updateTaskStatusMutation = useUpdateTaskStatus();
+  const toggleCheckItemMutation = useToggleCheckItem();
+  const updateCheckItemMutation = useUpdateCheckItem();
+  const createTaskMutation = useCreateTask();
 
   // Subscribe to auth store for reactive updates (fullName may update after login)
   const authUser = useAuthStore((state) => state.user);
@@ -487,22 +551,27 @@ export default function PortalWireframes({
   //   setTasks(prev => enrichTasks(prev, selectedGroup?.workTypes ?? []));
   // }, [selectedGroup]);
 
+  // Enrich tasks with workTypeName and progressText
+  const enrichedTasks = React.useMemo(() => {
+    return rawTasks.map((t) => {
+      const wt = selectedGroup?.workTypes?.find((w) => w.id === t.workTypeId);
+      return {
+        ...t,
+        workTypeName: wt?.name ?? t.workTypeId,
+        progressText: t.checklist?.length
+          ? `${t.checklist.filter((c) => c.done).length}/${
+              t.checklist.length
+            } mục`
+          : "Không có checklist",
+      };
+    });
+  }, [rawTasks, selectedGroup]);
+
   React.useEffect(() => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        const wt = selectedGroup?.workTypes?.find((w) => w.id === t.workTypeId);
-        return {
-          ...t,
-          workTypeName: wt?.name ?? t.workTypeId,
-          progressText: t.checklist?.length
-            ? `${t.checklist.filter((c) => c.done).length}/${
-                t.checklist.length
-              } mục`
-            : "Không có checklist",
-        };
-      }),
-    );
-  }, [selectedGroup]);
+    _setTasks(enrichedTasks);
+  }, [enrichedTasks]);
+
+  const tasks = _Tasks;
 
   // Fetch conversation members from API
   const { data: conversationMembersData } = useConversationMembers({
@@ -519,7 +588,7 @@ export default function PortalWireframes({
     if (!conversationMembersData) return [];
     return conversationMembersData.map((member) => ({
       id: member.userId,
-      name: member.userName,
+      name: member.userInfo.fullName || member.userName || "Unknown",
       role: member.role === "leader" ? "Leader" : "Member",
     }));
   }, [conversationMembersData]);
@@ -555,13 +624,10 @@ export default function PortalWireframes({
 
   // Handlers cập nhật Task (status & checklist)
   const handleChangeTaskStatus = (id: string, nextStatus: Task["status"]) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, status: nextStatus, updatedAt: new Date().toISOString() }
-          : t,
-      ),
-    );
+    updateTaskStatusMutation.mutate({
+      taskId: id,
+      status: nextStatus.code,
+    });
   };
 
   const handleToggleChecklist = (
@@ -569,23 +635,11 @@ export default function PortalWireframes({
     itemId: string,
     done: boolean,
   ) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              checklist: t.checklist?.map((c) =>
-                c.id === itemId ? { ...c, done } : c,
-              ),
-              updatedAt: new Date().toISOString(),
-            }
-          : t,
-      ),
-    );
+    toggleCheckItemMutation.mutate({ taskId, itemId });
   };
 
   const handleUpdateTaskChecklist = (taskId: string, next: ChecklistItem[]) => {
-    setTasks((prev) => {
+    _setTasks((prev) => {
       return prev.map((t) => {
         if (t.id !== taskId) return t;
 
@@ -595,7 +649,7 @@ export default function PortalWireframes({
           updatedAt: new Date().toISOString(),
         };
 
-        // enrich progressText ngay lập tức
+        // enrich progressText ngay lap tuc
         const wt = selectedGroup?.workTypes?.find(
           (w) => w.id === updated.workTypeId,
         );
@@ -617,7 +671,7 @@ export default function PortalWireframes({
     workTypeId: string,
     tpl: ChecklistTemplateItem[],
   ) => {
-    setTasks((prev) =>
+    _setTasks((prev) =>
       prev.map((t) =>
         t.workTypeId === workTypeId && t.status.code === "todo"
           ? {
@@ -854,8 +908,6 @@ export default function PortalWireframes({
   const confirmClose = () => {
     if (closeTargetId) {
       handleClose(closeTargetId);
-      if (closeNote.trim())
-        console.log("[close-note]", closeTargetId, closeNote);
     }
     setCloseNote("");
     setCloseTargetId(null);
@@ -988,90 +1040,61 @@ export default function PortalWireframes({
     checklistVariantId?: string;
     checklistVariantName?: string;
   }): void => {
-    // Xác định WorkType & variant (ưu tiên variant được chọn từ AssignTaskSheet)
-    const wt = selectedGroup?.workTypes?.[0];
-
-    let variantId = checklistVariantId;
-    let variantName = checklistVariantName;
-
-    if (!variantId) {
-      const defaultVariant =
-        wt?.checklistVariants?.find((v) => v.isDefault) ??
-        wt?.checklistVariants?.[0];
-
-      variantId = defaultVariant?.id;
-      variantName = defaultVariant?.name;
-    }
-
-    const tplItems =
-      variantId && wt && checklistTemplates[wt.id]?.[variantId]
-        ? checklistTemplates[wt.id][variantId]
-        : [];
-
-    const newTask: Task = {
-      id: "task_" + Date.now(),
-      title,
-      description: title,
-      groupId: selectedGroup?.id ?? "",
-      messageId: messageId ?? "",
-      assignTo: currentUserId, // Assign to current user
-      assignFrom: currentUser,
-      workTypeId: wt?.id ?? "",
-      workTypeName: wt?.name,
-      // checklistVariantId: variantId, // TODO: Add to Task type if needed
-      // checklistVariantName: variantName,
-      status: {
-        id: "1",
-        code: "todo",
-        label: "Chưa làm",
-        level: 1,
-        color: "#999",
+    // Create task via API
+    createTaskMutation.mutate(
+      {
+        title,
+        description: title,
+        priority: "Normal", // Default priority
+        assignTo: assignTo ?? currentUserId,
+        conversationId: currentConversationId ?? undefined,
+        messageId: messageId ?? null,
+        checklistTemplateId: checklistVariantId ?? null,
+        dueDate: null,
       },
-      checklist: tplItems.map((it) => ({
-        id: "chk_" + Math.random().toString(36).slice(2),
-        label: it.label,
-        done: false,
-      })),
+      {
+        onSuccess: (taskResponse) => {
+          // Extract task ID from response
+          const taskId = taskResponse.id;
 
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+          // 2. Initialize taskLogs IMMEDIATELY
+          setTaskLogs((prev) => ({
+            ...prev,
+            [taskId]: [],
+          }));
 
-    setTasks((prev) => [...prev, newTask]);
+          // Liên kết task mới với message gốc (nếu có)
+          if (messageId) {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === messageId ? { ...m, taskId } : m)),
+            );
+          }
 
-    // 2. Initialize taskLogs IMMEDIATELY
-    setTaskLogs((prev) => ({
-      ...prev,
-      [newTask.id]: [],
-    }));
+          // 4. Update UI state
+          setTab("tasks");
+          setShowRight(true);
 
-    // Liên kết task mới với message gốc (nếu có)
-    if (messageId) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === messageId ? { ...m, taskId: newTask.id } : m,
-        ),
-      );
-    }
+          // 5. Nếu assign từ ReceivedInfo → đổi trạng thái
+          if (assignSheet.source === "receivedInfo" && assignSheet.info) {
+            setReceivedInfos((prev) =>
+              prev.map((i) =>
+                i.id === assignSheet.info!.id
+                  ? { ...i, status: "assigned" }
+                  : i,
+              ),
+            );
+          }
 
-    // 4. Update UI state
-    setTab("tasks");
-    setShowRight(true);
-
-    // 5. Nếu assign từ ReceivedInfo → đổi trạng thái
-    if (assignSheet.source === "receivedInfo" && assignSheet.info) {
-      setReceivedInfos((prev) =>
-        prev.map((i) =>
-          i.id === assignSheet.info!.id ? { ...i, status: "assigned" } : i,
-        ),
-      );
-    }
-
-    pushToast("Đã giao công việc.", "success");
-    // 🆕 Close mobile received info screen if open
-    setAssignSheet({ open: false });
-
-    pushToast("Đã giao công việc.", "success");
+          pushToast("Đã giao công việc.", "success");
+          // 🆕 Close mobile received info screen if open
+          setAssignSheet({ open: false });
+        },
+        onError: (error) => {
+          console.error("Failed to create task:", error);
+          pushToast("Không thể tạo công việc.", "error");
+        },
+      },
+    );
   };
 
   // Handler:  Update group's workTypes
@@ -1193,34 +1216,24 @@ export default function PortalWireframes({
 
   //DEBUG:
   // const leaderGroups = React.useMemo(() => {
-  //   console.log("DEBUG leaderGroups:", {
-  //     currentUserId,
-  //     totalGroups: groups.length,
-  //     groupsWithMembers: groups.filter(g => g.members && g.members.length > 0).length,
-  //     sampleGroup: groups[0],
-  //   });
-
   //   const filtered = groups.filter((g) => {
   //     const hasLeader = g.members?.some((m) => {
-  //       console.log("  Checking member:", m, "against userId:", currentUserId);
   //       return m.userId === currentUserId && m.role === "leader";
   //     });
 
-  //     console.log(`  Group "${g.name}": hasLeader=${hasLeader}`);
   //     return hasLeader;
   //   });
 
-  //   console.log("Filtered leaderGroups:", filtered.length, filtered);
   //   return filtered;
   // }, [groups, currentUserId]);
 
   // --- Task log sheet: task + message gốc + danh sách log ---
   const activeTaskLogTask = React.useMemo(
     () =>
-      taskLogSheet.taskId
+      taskLogSheet
         ? tasks.find((t) => t.id === taskLogSheet.taskId)
         : undefined,
-    [tasks, taskLogSheet.taskId],
+    [tasks, taskLogSheet],
   );
 
   const activeTaskLogSourceMessage = React.useMemo(() => {
@@ -1233,9 +1246,36 @@ export default function PortalWireframes({
       ? taskLogs[taskLogSheet.taskId]
       : [];
 
+  const handleThreadMessage = React.useCallback((message: ChatMessage) => {
+    if (!message.parentMessageId) return;
+    const latestTasks = rawTasksRef.current;
+    if (latestTasks.length === 0) return;
+    const task = latestTasks.find(
+      (t) => t.messageId === message.parentMessageId,
+    );
+    if (!task) return;
+    setThreadCurrentSessionCounts((prev) => ({
+      ...prev,
+      [task.id]: (prev[task.id] ?? 0) + 1,
+    }));
+    const latestSheet = taskLogSheetRef.current;
+    if (latestSheet.open && latestSheet.taskId === task.id) {
+      setThreadIncomingMessage(message);
+      setThreadUnreadCounts((prev) => ({
+        ...prev,
+        [task.id]: 0,
+      }));
+      return;
+    }
+    setThreadUnreadCounts((prev) => ({
+      ...prev,
+      [task.id]: (prev[task.id] ?? 0) + 1,
+    }));
+  }, []);
+
   // --- Logout handler ---
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
   };
 
@@ -1296,112 +1336,134 @@ export default function PortalWireframes({
       {/* Nội dung chính */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {view === "workspace" ? (
-          <WorkspaceView
-            layoutMode={portalMode === "mobile" ? "mobile" : "desktop"}
-            groups={groups}
-            messages={messages}
-            setMessages={setMessages}
-            onSelectGroup={handleSelectGroup}
-            contacts={contacts}
-            onSelectChat={handleSelectChat}
-            onClearSelectedChat={onClearSelectedChat}
-            leftTab={leftTab}
-            setLeftTab={setLeftTab}
-            available={available}
-            myWork={myWork}
-            groupMembers={groupMembers}
-            showAvail={showAvail}
-            setShowAvail={setShowAvail}
-            showMyWork={showMyWork}
-            setShowMyWork={setShowMyWork}
-            handleClaim={handleClaim}
-            handleTransfer={handleTransfer}
-            openCloseModalFor={openCloseModalFor}
-            showRight={showRight}
-            setShowRight={setShowRight}
-            showSearch={showSearch}
-            setShowSearch={setShowSearch}
-            q={q}
-            setQ={setQ}
-            searchInputRef={searchInputRef}
-            openPreview={openPreview}
-            tab={tab}
-            setTab={setTab}
-            // showPinned={showPinned}
-            // setShowPinned={setShowPinned}
-            workspaceMode={workspaceMode}
-            setWorkspaceMode={setWorkspaceMode}
-            viewMode={viewMode}
-            pinnedMessages={pinnedMessages as any}
-            onClosePinned={() => setWorkspaceMode("default")}
-            onUnpinMessage={handleUnpinMessage}
-            onOpenPinnedMessage={handleOpenPinnedMessage}
-            onShowPinnedToast={onShowPinnedToast}
-            // onTogglePin={handleTogglePin} // TODO: Add to WorkspaceViewProps if needed
-            onToggleStar={handleToggleStar}
-            workTypes={(selectedGroup?.workTypes ?? []).map((w) => ({
-              id: w.id,
-              name: w.name,
-            }))}
-            selectedWorkTypeId={currentConversationId!}
-            onChangeWorkType={() => {}} // No-op: workType selection handled by conversation selection
-            currentUserId={currentUserId}
-            currentUserName={currentUser}
-            // Tasks & callbacks để RightPanel dùng thật
-            tasks={tasks}
-            onChangeTaskStatus={handleChangeTaskStatus}
-            onToggleChecklist={handleToggleChecklist}
-            onUpdateTaskChecklist={handleUpdateTaskChecklist}
-            applyTemplateToTasks={applyTemplateToTasks}
-            checklistTemplates={checklistTemplates}
-            setChecklistTemplates={setChecklistTemplates}
-            // Tiếp nhận thông tin
-            onReceiveInfo={handleReceiveInfo}
-            onTransferInfo={handleTransferInfo}
-            receivedInfos={receivedInfos}
-            onAssignInfo={onAssignInfo}
-            onAssignFromMessage={onAssignFromMessage}
-            openTransferSheet={openTransferSheet}
-            onOpenTaskLog={(taskId) => {
-              setTaskLogSheet({ open: true, taskId });
-            }}
-            taskLogs={taskLogs}
-            onOpenSourceMessage={handleOpenSourceMessage}
-            onScrollComplete={handleScrollComplete}
-            scrollToMessageId={scrollToMessage?.messageId}
-            onOpenQuickMsg={() => {
-              // Mobile: tạm hiển thị toast, có thể thay bằng mở QuickMessageManager khi bạn muốn mount ở mobile
-              pushToast(
-                "Tin nhắn nhanh: tính năng đang phát triển cho mobile.",
-                "info",
-              );
-            }}
-            onOpenPinned={() => {
-              setWorkspaceMode("pinned");
-            }}
-            onOpenTodoList={() => {
-              pushToast(
-                "Việc cần làm: tính năng đang phát triển cho mobile.",
-                "info",
-              );
-            }}
-            checklistVariants={checklistVariants}
-            defaultChecklistVariantId={defaultChecklistVariantId}
-            onCreateTaskFromMessage={(payload) => {
-              // Open AssignTaskSheet from ChatMainContainer
-              setAssignSheet({
-                open: true,
-                source: "message",
-                message: {
-                  id: payload.messageId,
-                  content: payload.messageContent,
-                } as Message,
-                info: undefined,
-              });
-            }}
-            onReassignTask={undefined} // hoặc implement nếu cần
-            onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
-          />
+          true ? (
+            <WorkspaceView
+              layoutMode={portalMode === "mobile" ? "mobile" : "desktop"}
+              groups={groups}
+              messages={messages}
+              setMessages={setMessages}
+              onSelectGroup={handleSelectGroup}
+              contacts={contacts}
+              onSelectChat={handleSelectChat}
+              onClearSelectedChat={onClearSelectedChat}
+              leftTab={leftTab}
+              setLeftTab={setLeftTab}
+              available={available}
+              myWork={myWork}
+              groupMembers={groupMembers}
+              showAvail={showAvail}
+              setShowAvail={setShowAvail}
+              showMyWork={showMyWork}
+              setShowMyWork={setShowMyWork}
+              handleClaim={handleClaim}
+              handleTransfer={handleTransfer}
+              openCloseModalFor={openCloseModalFor}
+              showRight={showRight}
+              setShowRight={setShowRight}
+              showSearch={showSearch}
+              setShowSearch={setShowSearch}
+              q={q}
+              setQ={setQ}
+              searchInputRef={searchInputRef}
+              openPreview={openPreview}
+              tab={tab}
+              setTab={setTab}
+              workspaceMode={workspaceMode}
+              setWorkspaceMode={setWorkspaceMode}
+              viewMode={viewMode}
+              pinnedMessages={pinnedMessages as any}
+              onClosePinned={() => setWorkspaceMode("default")}
+              onUnpinMessage={handleUnpinMessage}
+              onOpenPinnedMessage={handleOpenPinnedMessage}
+              onShowPinnedToast={onShowPinnedToast}
+              onToggleStar={handleToggleStar}
+              workTypes={(selectedGroup?.workTypes ?? []).map((w) => ({
+                id: w.id,
+                name: w.name,
+              }))}
+              selectedWorkTypeId={currentConversationId!}
+              onChangeWorkType={() => {}} // No-op: workType selection handled by conversation selection
+              currentUserId={currentUserId}
+              currentUserName={currentUser}
+              // Tasks & callbacks để RightPanel dùng thật
+              tasks={tasks}
+              threadUnreadCounts={threadUnreadCounts}
+              onChangeTaskStatus={handleChangeTaskStatus}
+              onToggleChecklist={handleToggleChecklist}
+              onUpdateTaskChecklist={handleUpdateTaskChecklist}
+              applyTemplateToTasks={applyTemplateToTasks}
+              checklistTemplates={checklistTemplates}
+              setChecklistTemplates={setChecklistTemplates}
+              // Tiếp nhận thông tin
+              onReceiveInfo={handleReceiveInfo}
+              onTransferInfo={handleTransferInfo}
+              receivedInfos={receivedInfos}
+              openThreadMessageId={taskLogSheet.messageId} // ✅ NEW: Pass currently open thread to prevent unread badge flicker
+              onAssignInfo={onAssignInfo}
+              onAssignFromMessage={onAssignFromMessage}
+              openTransferSheet={openTransferSheet}
+              onOpenTaskLog={(taskId, targetMessageId) => {
+                const task = tasks.find((t) => t.id === taskId);
+                setTaskLogSheet({
+                  open: true,
+                  taskId,
+                  messageId: task?.messageId ?? undefined, // ✅ Parent message ID for thread unread tracking
+                  targetMessageId, // 🆕 NEW: Target message to scroll to in thread
+                });
+                setThreadUnreadCounts((prev) => ({
+                  ...prev,
+                  [taskId]: 0,
+                }));
+                // if(!threadCurrentSessionCounts[taskId]) {
+                //   setThreadCurrentSessionCounts((prev) => ({
+                //     ...prev,
+                //     [taskId]: 0,
+                //   }));
+                // }
+              }}
+              onThreadMessage={handleThreadMessage}
+              taskLogs={taskLogs}
+              onOpenSourceMessage={handleOpenSourceMessage}
+              onScrollComplete={handleScrollComplete}
+              scrollToMessageId={scrollToMessage?.messageId}
+              onOpenQuickMsg={() => {
+                // Mobile: tạm hiển thị toast, có thể thay bằng mở QuickMessageManager khi bạn muốn mount ở mobile
+                pushToast(
+                  "Tin nhắn nhanh: tính năng đang phát triển cho mobile.",
+                  "info",
+                );
+              }}
+              onOpenPinned={() => {
+                setWorkspaceMode("pinned");
+              }}
+              onOpenTodoList={() => {
+                pushToast(
+                  "Việc cần làm: tính năng đang phát triển cho mobile.",
+                  "info",
+                );
+              }}
+              checklistVariants={checklistVariants}
+              defaultChecklistVariantId={defaultChecklistVariantId}
+              onCreateTaskFromMessage={(payload) => {
+                // Open AssignTaskSheet from ChatMainContainer
+                setAssignSheet({
+                  open: true,
+                  source: "message",
+                  message: {
+                    id: payload.messageId,
+                    content: payload.messageContent,
+                  } as Message,
+                  info: undefined,
+                  confirmedInfoId: payload.confirmedInfoId, // 🆕 FIX: Pass confirmedInfoId to mark as finished
+                });
+              }}
+              onReassignTask={undefined} // hoặc implement nếu cần
+              onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
+              threadCurrentSessionCounts={threadCurrentSessionCounts}
+            />
+          ) : (
+            <MessageSkeleton />
+          )
         ) : (
           <TeamMonitorView
             leadThreads={leadThreads}
@@ -1458,13 +1520,22 @@ export default function PortalWireframes({
 
         <TaskLogThreadSheet
           open={taskLogSheet.open}
-          onClose={() => setTaskLogSheet({ open: false })}
+          onClose={() => {
+            setTaskLogSheet({ open: false });
+            setThreadIncomingMessage(null);
+          }}
           task={activeTaskLogTask}
-          sourceMessage={activeTaskLogSourceMessage}
-          messages={activeTaskLogMessages}
-          currentUserId={currentUserId}
+          incomingThreadMessage={threadIncomingMessage}
+          onConsumeIncomingMessage={() => setThreadIncomingMessage(null)}
           members={groupMembers}
-          onSend={handleSendTaskLogMessage}
+          targetMessageId={taskLogSheet.targetMessageId} // 🆕 NEW: Pass target message ID
+          onConsumeTargetMessage={() => {
+            // 🆕 NEW: Clear target after scrolling
+            setTaskLogSheet((prev) => ({
+              ...prev,
+              targetMessageId: undefined,
+            }));
+          }}
         />
 
         {/* Toasts */}

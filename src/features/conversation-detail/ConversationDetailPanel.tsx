@@ -93,7 +93,7 @@ export interface ConversationDetailPanelProps {
     template: ChecklistTemplateItem[],
   ) => void;
   taskLogs?: Record<string, TaskLogMessage[]>;
-  onOpenTaskLog?: (taskId: string) => void;
+  onOpenTaskLog?: (taskId: string, targetMessageId?: string) => void; // 🆕 NEW: Added optional targetMessageId
   onOpenSourceMessage?: (messageDto: StarredMessageDto | null) => void;
   checklistVariants?: ChecklistVariant[];
   messages?: MessageLike[];
@@ -104,6 +104,8 @@ export interface ConversationDetailPanelProps {
     isFetchingNextPage: boolean;
     fetchNextPage: () => Promise<unknown>;
   };
+  /** Conversation attachments from API */
+  conversationAttachment?: any;
 }
 
 /* =============== Main Component =============== */
@@ -138,6 +140,7 @@ export const ConversationDetailPanel: React.FC<
   checklistVariants,
   messages = [],
   messagesQuery,
+  conversationAttachment,
 }) => {
   /* =============== Store Data =============== */
   const categoryName = useConversationStore((s) => s.getConversationCategory());
@@ -387,7 +390,7 @@ export const ConversationDetailPanel: React.FC<
         messageId: info.messageId,
         groupId: info.conversationId,
         title: info.content?.substring(0, 60) || "Không có nội dung",
-        sender: "Đã xác nhận",
+        sender: info.senderName || "Không rõ",
         createdAt: info.createdAt,
         status: "waiting", // Always waiting since we filter isFinished=false
       })),
@@ -453,6 +456,8 @@ export const ConversationDetailPanel: React.FC<
             content: payload.messageContent,
             statusCode: "pending",
             confirmedBy: payload.assignTo,
+            senderId: user.id,
+            senderName: user.fullName || user.identifier || "",
           });
         }
 
@@ -534,6 +539,7 @@ export const ConversationDetailPanel: React.FC<
             createdAt: sourceMessage.createdAt || new Date().toISOString(),
           })),
           replyCount: 0,
+          unreadReplyCount: 0, // ✅ NEW: Required field for thread unread tracking
           isStarred: false,
           isPinned: false,
           threadPreview: null,
@@ -544,6 +550,27 @@ export const ConversationDetailPanel: React.FC<
       onOpenSourceMessage?.(messageDto);
     },
     [messages, onOpenSourceMessage],
+  );
+
+  // Lookup task by its root messageId and open "Nhật ký công việc"
+  const handleOpenTaskLogByMessageId = React.useCallback(
+    (parentMessageId: string, targetMessageId?: string) => {
+      // Check if parentMessageId is a task's root message
+      const linkedTask = tasks.find((t) => t.messageId === parentMessageId);
+      if (linkedTask) {
+        onOpenTaskLog?.(linkedTask.id, targetMessageId); // 🆕 Pass targetMessageId
+        return;
+      }
+      // Fallback: check if the source message itself has a linkedTaskId
+      const sourceMessage = messages.find((m) => m.id === parentMessageId);
+      if (sourceMessage && (sourceMessage as any).linkedTaskId) {
+        const taskByLinked = tasks.find((t) => t.id === (sourceMessage as any).linkedTaskId);
+        if (taskByLinked) {
+          onOpenTaskLog?.(taskByLinked.id, targetMessageId); // 🆕 Pass targetMessageId
+        }
+      }
+    },
+    [tasks, messages, onOpenTaskLog],
   );
 
   /* =============== Main Render =============== */
@@ -581,6 +608,9 @@ export const ConversationDetailPanel: React.FC<
               members={members}
               setShowAddMemberDialog={setShowAddMemberDialog}
               isLoading={isLoading}
+              conversationAttachment={conversationAttachment}
+              onNavigateToChat={() => {}}
+              onOpenTaskLogByMessageId={handleOpenTaskLogByMessageId}
             />
           </>
         )}
@@ -608,6 +638,8 @@ export const ConversationDetailPanel: React.FC<
                 tasks={tasksByWorkRaw}
                 selectedWorkTypeId={selectedWorkTypeId}
                 effectiveUserId={effectiveUserId}
+                conversationId={selectedConversation?.id}
+                workspaceId={selectedConversation?.id}
               />
             )}
 
@@ -665,6 +697,8 @@ export const ConversationDetailPanel: React.FC<
                 onOpenTaskLog={onOpenTaskLog}
                 onOpenSourceMessage={onOpenSourceMessage}
                 messages={messages}
+                conversationId={selectedConversation?.id}
+                workspaceId={selectedConversation?.id}
               />
             )}
           </>

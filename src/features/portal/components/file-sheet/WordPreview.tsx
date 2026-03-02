@@ -9,7 +9,7 @@
 
 import { useWordPreview } from "@/hooks/queries/useWordPreview";
 import { AlertCircle } from "lucide-react";
-import { useWatermarkStyles } from "./Watermark";
+import { SecureWatermarkContainer } from "./Watermark";
 import PreviewHeader from "./PreviewHeader";
 import { useEffect } from "react";
 
@@ -46,9 +46,6 @@ export default function WordPreview({
 }: WordPreviewProps) {
   const { data, isLoading, isError, error, refetch } = useWordPreview(fileId);
 
-  // Generate watermark styles (always call hook, pass data?.watermark safely)
-  const watermarkStyles = useWatermarkStyles(data?.watermark);
-
   // Inject CSS styles once to avoid re-render
   useEffect(() => {
     if (!data?.cssStyles) return;
@@ -60,16 +57,7 @@ export default function WordPreview({
 
     const styleElement = document.createElement("style");
     styleElement.id = styleId;
-    styleElement.textContent = `
-      ${data.cssStyles}
-      
-      /* Force transparent backgrounds to show watermark */
-      .word-content-${fileId},
-      .word-content-${fileId} * {
-        background: transparent !important;
-        background-color: transparent !important;
-      }
-    `;
+    styleElement.textContent = data.cssStyles;
     document.head.appendChild(styleElement);
 
     // Cleanup only when component unmounts
@@ -129,24 +117,22 @@ export default function WordPreview({
 
         {/* Success State */}
         {data && !isLoading && !isError && (
-          <div
-            className="relative overflow-y-auto bg-white p-6 select-none"
-            style={{
-              ...watermarkStyles,
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              MozUserSelect: "none",
-              msUserSelect: "none",
-              pointerEvents: "none",
-            }}
+          <SecureWatermarkContainer
+            watermark={data.watermark}
+            contentId={fileId}
+            className="overflow-y-auto bg-white p-6 select-none"
             data-testid="word-preview-content"
           >
             {/* Document Content */}
             <div
-              className={`word-content-${fileId} prose max-w-none relative z-0`}
+              className={`word-content-${fileId} prose max-w-none`}
+              style={{
+                pointerEvents: "none",
+                userSelect: "none",
+              }}
               dangerouslySetInnerHTML={{ __html: data.htmlContent }}
             />
-          </div>
+          </SecureWatermarkContainer>
         )}
 
         {/* Empty State (no data) */}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Star, StarOff, Quote, ImageIcon, File, Loader2 } from "lucide-react";
@@ -16,6 +16,10 @@ import { PinnedMessage, FileAttachment } from "@/features/portal/types";
 import { useStarredMessages } from "@/hooks/queries/useStarredMessages";
 import { useUnstarMessage } from "@/hooks/mutations/useStarMessage";
 import { useCategories } from "@/hooks/queries/useCategories"; // Fetch categories (contains conversations)
+import {
+  useDirectMessages,
+  flattenDirectMessages,
+} from "@/hooks/queries/useDirectMessages"; // Fetch DM conversations
 import type { StarredMessageDto } from "@/types/pinned_and_starred";
 
 /**
@@ -79,6 +83,13 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
   // Fetch categories data (contains all conversations)
   const { data: categoriesData } = useCategories();
 
+  // 🆕 Fetch DM conversations for starred message lookup
+  const directMessagesQuery = useDirectMessages();
+  const directConversations = React.useMemo(
+    () => flattenDirectMessages(directMessagesQuery.data),
+    [directMessagesQuery.data],
+  );
+
   // Fetch ALL starred messages from API (không filter theo conversation)
   const {
     data: starredData,
@@ -112,7 +123,12 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
     return sortedData.map((starred: StarredMessageDto): PinnedMessage => {
       const msg = starred.message;
 
-      // Find category and conversation info by conversationId
+      // 🆕 First check if it's a DM conversation
+      const dmConversation = directConversations.find(
+        (dm) => dm.id === msg.conversationId,
+      );
+
+      // Find category and conversation info by conversationId (for GRP)
       const category = categoriesData?.find((cat) =>
         cat.conversations?.some(
           (conv) => conv.conversationId === msg.conversationId,
@@ -129,16 +145,25 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
         messageType = "file";
       // SYS và TASK messages hiển thị dạng text
 
+      // 🆕 DM: Show "Tin nhắn cá nhân với [name]" instead of Category • Conversation
+      const isDM = !!dmConversation;
+      const groupName = isDM
+        ? `Tin nhắn cá nhân với ${dmConversation.name}`
+        : category?.name || "[Category]";
+      const workTypeName = isDM
+        ? undefined // No workTypeName for DM
+        : conversation?.conversationName || "[Conversation]";
+
       return {
         id: msg.id,
         sender: msg.senderFullName || msg.senderName || "Unknown",
         content: msg.content || "",
         time: msg.sentAt,
         type: messageType,
-        groupName: category?.name || "[Category]", // Category name or fallback
-        groupId: category?.id, // Category ID
-        workTypeName: conversation?.conversationName || "[Conversation]", // Conversation name
-        workTypeId: conversation?.conversationId, // Conversation ID
+        groupName, // Category name or "Tin nhắn cá nhân với [name]"
+        groupId: isDM ? undefined : category?.id, // Category ID (not for DM)
+        workTypeName, // Conversation name (undefined for DM)
+        workTypeId: isDM ? undefined : conversation?.conversationId, // Conversation ID (not for DM)
         chatId: msg.conversationId, // Add chatId for navigation
         fileInfo: msg.attachments?.[0]
           ? {
@@ -153,8 +178,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
           : undefined,
       };
     });
-  }, [starredData, categoriesData]);
-  // console.log(messages);
+  }, [starredData, categoriesData, directConversations]);
   const grouped = React.useMemo(() => {
     const groups: Record<string, PinnedMessage[]> = {};
     messages.forEach((m: PinnedMessage) => {
@@ -268,10 +292,6 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
 
                           if (originalStarred) {
                             // Pass the full StarredMessageDto to parent for handleScrollToMessage
-                            console.log(
-                              "Opening starred message:",
-                              originalStarred,
-                            );
                             onOpenChat(originalStarred);
                           } else {
                             console.warn(
