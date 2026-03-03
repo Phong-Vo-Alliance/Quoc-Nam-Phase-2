@@ -50,6 +50,39 @@ import type { QuotedMessageData } from "@/stores/replyStore"; // 🆕 NEW: Reply
 import QuotedMessagePreview from "@/features/portal/components/chat/QuotedMessagePreview"; // 🆕 NEW: Reply preview
 
 /**
+ * Merge two blocks of thread replies (around-block + latest-block).
+ * Both inputs must already be in ASC order (oldest first).
+ * Deduplicates by ID, sorts chronologically, and detects gaps.
+ */
+function mergeThreadBlocks(
+  aroundReplies: ChatMessage[],
+  latestReplies: ChatMessage[],
+): { messages: ChatMessage[]; hasGap: boolean } {
+  const idMap = new Map<string, ChatMessage>();
+  for (const msg of aroundReplies) idMap.set(msg.id, msg);
+  for (const msg of latestReplies) idMap.set(msg.id, msg);
+
+  const merged = Array.from(idMap.values()).sort(
+    (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+  );
+
+  if (aroundReplies.length === 0 || latestReplies.length === 0) {
+    return { messages: merged, hasGap: false };
+  }
+
+  const overlapCount = aroundReplies.filter((r) =>
+    latestReplies.some((l) => l.id === r.id),
+  ).length;
+  const newestAroundTime = new Date(
+    aroundReplies[aroundReplies.length - 1].sentAt,
+  ).getTime();
+  const oldestLatestTime = new Date(latestReplies[0].sentAt).getTime();
+  const hasGap = overlapCount === 0 && newestAroundTime < oldestLatestTime;
+
+  return { messages: merged, hasGap };
+}
+
+/**
  * Helper: Format timestamp for display
  */
 function formatTime(dateStr: string): string {
@@ -127,8 +160,15 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   >(new Map());
   const [isUploading, setIsUploading] = useState(false);
   const [currentMentions, setCurrentMentions] = useState<MentionInputDto[]>([]);
+
+  // Gap-fill state: when around-block and latest-block don't overlap
+  const [hasGapBelow, setHasGapBelow] = useState(false);
+  const [gapAfterCursor, setGapAfterCursor] = useState<string | null>(null);
+  const [isLoadingGapFill, setIsLoadingGapFill] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const gapRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const mentionInputRef = useRef<MentionInputHandle>(null);
@@ -136,71 +176,67 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   // ✅ FIX: Track if this is the initial load to prevent auto-scroll on load more
   const isInitialLoadRef = useRef(true);
 
+  // Capture targetMessageId at open-time to avoid re-fetch when onConsumeTargetMessage clears it
+  const initialTargetRef = useRef<string | undefined>(undefined);
+
+  // Track the oldest message ID of the initial latest-block for gap-fill stop condition
+  const latestBlockOldestIdRef = useRef<string | null>(null);
+
   // 🆕 NEW: Local reply state for thread (separate from global replyStore)
   const [threadReplyTarget, setThreadReplyTarget] =
     useState<QuotedMessageData | null>(null);
 
   const parentMessageId = task?.messageId;
 
-  // 🆕 NEW: Scroll to and highlight a specific message in thread
-  const scrollToAndHighlightThreadMessage = useCallback((messageId: string) => {
-    const element = document.querySelector(
-      `[data-testid="message-bubble-${messageId}"]`,
-    );
-    if (!element) return false;
-
-    // Scroll to center
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    // Apply highlight (same style as ChatMainContainer)
-    const highlightTarget = element as HTMLElement;
-    const originalBg = highlightTarget.style.backgroundColor;
-    const originalBorder = highlightTarget.style.border;
-    const originalTransition = highlightTarget.style.transition;
-
-    // Apply highlight: amber background + border
-    highlightTarget.style.transition =
-      "background-color 0.3s ease, border 0.3s ease";
-    highlightTarget.style.backgroundColor = "#fef3c7"; // amber-100
-    highlightTarget.style.border = "2px solid #fbbf24"; // amber-400
-
-    setTimeout(() => {
-      // Fade out then restore
-      highlightTarget.style.backgroundColor = originalBg;
-      highlightTarget.style.border = originalBorder;
-      setTimeout(() => {
-        highlightTarget.style.transition = originalTransition;
-      }, 500);
-    }, 2000);
-
-    return true;
-  }, []);
-
   // ✅ NEW: Mark thread as read when opened (only if unreadReplyCount > 0)
   const markAsRead = useMarkConversationAsRead();
   const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 🆕 NEW: Handle targetMessageId - scroll to and highlight target message after loading
+  // ✅ FIX: Instant scroll to target message via useLayoutEffect (before paint — no jitter)
+  useLayoutEffect(() => {
+    if (!open || !initialTargetRef.current || !threadData || loading) return;
+
+    const el = document.querySelector(
+      `[data-testid="message-bubble-${initialTargetRef.current}"]`,
+    );
+    if (el) {
+      el.scrollIntoView({ behavior: "auto", block: "center" });
+      isInitialLoadRef.current = false;
+    }
+  }, [open, threadData?.parentMessage?.id, loading]);
+
+  // ✅ FIX: Highlight animation + consume target (after paint, separate from scroll)
   useEffect(() => {
     if (!open || !targetMessageId || !threadData || loading) return;
 
-    // Wait for DOM to render messages
     const timer = setTimeout(() => {
-      const success = scrollToAndHighlightThreadMessage(targetMessageId);
-      if (success) {
-        onConsumeTargetMessage?.(); // Clear target after successful scroll
-      }
-    }, 300); // Wait for render
+      const el = document.querySelector(
+        `[data-testid="message-bubble-${targetMessageId}"]`,
+      ) as HTMLElement | null;
+      if (!el) return;
+
+      // Apply highlight only (scroll already done by useLayoutEffect above)
+      const originalBg = el.style.backgroundColor;
+      const originalBorder = el.style.border;
+      const originalTransition = el.style.transition;
+
+      el.style.transition = "background-color 0.3s ease, border 0.3s ease";
+      el.style.backgroundColor = "#fef3c7";
+      el.style.border = "2px solid #fbbf24";
+
+      setTimeout(() => {
+        el.style.backgroundColor = originalBg;
+        el.style.border = originalBorder;
+        setTimeout(() => {
+          el.style.transition = originalTransition;
+        }, 500);
+      }, 2000);
+
+      onConsumeTargetMessage?.();
+    }, 100);
 
     return () => clearTimeout(timer);
-  }, [
-    open,
-    targetMessageId,
-    threadData,
-    loading,
-    scrollToAndHighlightThreadMessage,
-    onConsumeTargetMessage,
-  ]);
+  }, [open, targetMessageId, threadData, loading, onConsumeTargetMessage]);
 
   // Mark as read when thread FULLY LOADED (after messages are fetched)
   // Use the LAST (newest) message ID for mark-read API
@@ -283,30 +319,81 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   }, [open, loading]);
 
   // Fetch thread messages when sheet opens
+  // When targetMessageId is provided, also fetch around the target and merge
   useEffect(() => {
     if (!open || !parentMessageId) {
       setThreadData(null);
       setError(null);
-      setThreadReplyTarget(null); // Clear reply target when closing
+      setThreadReplyTarget(null);
+      setHasGapBelow(false);
+      setGapAfterCursor(null);
+      setIsLoadingGapFill(false);
+      latestBlockOldestIdRef.current = null;
       return;
     }
+
+    // Capture targetMessageId at open-time so clearing it later won't re-trigger this effect
+    initialTargetRef.current = targetMessageId;
 
     let isMounted = true;
 
     const fetchThread = async () => {
       setLoading(true);
       setError(null);
+      setHasGapBelow(false);
+      setGapAfterCursor(null);
+
       try {
-        const data = await getMessageThread({ messageId: parentMessageId });
-        if (isMounted) {
-          // Reverse replies array to show newest messages at bottom (standard chat UX)
-          const reversedReplies = data.replies
-            ? [...data.replies].reverse()
-            : [];
-          setThreadData({
-            ...data,
-            replies: reversedReplies,
-          });
+        const capturedTarget = initialTargetRef.current;
+
+        if (capturedTarget) {
+          // Parallel fetch: latest 50 + around target
+          const [latestData, aroundData] = await Promise.all([
+            getMessageThread({ messageId: parentMessageId }),
+            getMessageThread({ messageId: parentMessageId, aroundMessageId: capturedTarget }),
+          ]);
+
+          if (!isMounted) return;
+
+          // Reverse both (API returns DESC → we need ASC)
+          const latestReplies = latestData.replies ? [...latestData.replies].reverse() : [];
+          const aroundReplies = aroundData.replies ? [...aroundData.replies].reverse() : [];
+
+          // Check if target is already in the latest block
+          const targetInLatest = latestReplies.some((r) => r.id === capturedTarget);
+
+          if (targetInLatest) {
+            // Target is within latest 50 → use existing behavior, no gap
+            setThreadData({ ...latestData, replies: latestReplies });
+          } else {
+            // Merge both blocks (inputs are already ASC)
+            const { messages: merged, hasGap } = mergeThreadBlocks(aroundReplies, latestReplies);
+
+            if (hasGap) {
+              setHasGapBelow(true);
+              // Cursor = newest message in around-block (last element since ASC)
+              const newestAround = aroundReplies[aroundReplies.length - 1];
+              if (newestAround) setGapAfterCursor(newestAround.id);
+              // Track oldest message of latest-block for gap-fill stop condition
+              if (latestReplies.length > 0) {
+                latestBlockOldestIdRef.current = latestReplies[0].id;
+              }
+            }
+
+            // Use aroundData.nextCursor for "load older" since around-block has the oldest messages
+            setThreadData({
+              ...aroundData,
+              replies: merged,
+              nextCursor: aroundData.nextCursor,
+            });
+          }
+        } else {
+          // Normal fetch: latest 50 only
+          const data = await getMessageThread({ messageId: parentMessageId });
+          if (!isMounted) return;
+
+          const reversedReplies = data.replies ? [...data.replies].reverse() : [];
+          setThreadData({ ...data, replies: reversedReplies });
         }
       } catch (err) {
         console.error("Failed to fetch thread:", err);
@@ -326,7 +413,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [open, parentMessageId]);
+  }, [open, parentMessageId]); // Note: targetMessageId NOT in deps — captured via ref to avoid double-fetch
 
   // Load more messages using cursor (for pagination when scrolling up)
   // ✅ FIX: Preserve scroll position after loading older messages
@@ -344,7 +431,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     try {
       const moreData = await getMessageThread({
         messageId: parentMessageId,
-        cursor: threadData.nextCursor,
+        beforeMessageId: threadData.nextCursor,
       });
 
       if (moreData.replies && moreData.replies.length > 0) {
@@ -372,26 +459,11 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
           });
         });
 
-        // ✅ STEP 2: Restore scroll position after DOM updates
-        // Double RAF to ensure layout is complete
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const scrollHeightAfter = container.scrollHeight;
-            const heightDifference = scrollHeightAfter - scrollHeightBefore;
-
-            // Adjust scroll position to maintain user's view
-            // (older messages added at top push content down)
-            // Special case: If user was at the very top (scrollTop = 0),
-            // keep them near the top to see the newly loaded messages
-            if (scrollTopBefore === 0) {
-              // Scroll to show the first newly loaded message (not absolute top)
-              container.scrollTop = Math.min(100, heightDifference);
-            } else {
-              // Normal case: maintain the same view
-              container.scrollTop = scrollTopBefore + heightDifference;
-            }
-          });
-        });
+        // ✅ STEP 2: Restore scroll position immediately after flushSync
+        // flushSync guarantees DOM is updated, reading scrollHeight forces layout recalc
+        const scrollHeightAfter = container.scrollHeight;
+        const heightDifference = scrollHeightAfter - scrollHeightBefore;
+        container.scrollTop = scrollTopBefore + heightDifference;
       }
     } catch (err) {
       console.error("Failed to load more thread messages:", err);
@@ -400,6 +472,79 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
       setIsLoadingMore(false);
     }
   }, [parentMessageId, threadData?.nextCursor, isLoadingMore]);
+
+  // Gap-fill: load messages between around-block and latest-block
+  // ✅ FIX: Use flushSync + scroll preservation (same pattern as handleLoadMore)
+  // ✅ FIX: Stop when loaded messages overlap with initial latest-block
+  const handleLoadMoreDownward = useCallback(async () => {
+    if (!parentMessageId || !gapAfterCursor || isLoadingGapFill || !hasGapBelow) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // Save scroll metrics BEFORE loading
+    const scrollHeightBefore = container.scrollHeight;
+    const scrollTopBefore = container.scrollTop;
+
+    setIsLoadingGapFill(true);
+    try {
+      const moreData = await getMessageThread({
+        messageId: parentMessageId,
+        afterMessageId: gapAfterCursor,
+      });
+
+      if (moreData.replies && moreData.replies.length > 0) {
+        // API returns DESC → reverse to ASC
+        const newReplies = [...moreData.replies].reverse();
+
+        // Check overlap with initial latest-block → gap is filled
+        const reachedLatestBlock = latestBlockOldestIdRef.current
+          ? newReplies.some((m) => m.id === latestBlockOldestIdRef.current)
+          : false;
+
+        flushSync(() => {
+          setThreadData((prev) => {
+            if (!prev) return prev;
+            const existingIds = new Set((prev.replies ?? []).map((m) => m.id));
+            const uniqueNew = newReplies.filter((m) => !existingIds.has(m.id));
+            const all = [...(prev.replies ?? []), ...uniqueNew].sort(
+              (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+            );
+            return { ...prev, replies: all };
+          });
+        });
+
+        // Restore scroll position after DOM update
+        const scrollHeightAfter = container.scrollHeight;
+        const heightDifference = scrollHeightAfter - scrollHeightBefore;
+        container.scrollTop = scrollTopBefore + heightDifference;
+
+        if (reachedLatestBlock) {
+          // Gap fully filled — newly loaded messages overlap with latest-block
+          setHasGapBelow(false);
+          setGapAfterCursor(null);
+        } else {
+          // Update cursor for next batch
+          const newestNew = newReplies[newReplies.length - 1];
+          if (newestNew) setGapAfterCursor(newestNew.id);
+
+          // Fallback: fewer than limit also means done
+          if ((moreData.replies?.length ?? 0) < 50) {
+            setHasGapBelow(false);
+            setGapAfterCursor(null);
+          }
+        }
+      } else {
+        // No more messages in gap
+        setHasGapBelow(false);
+        setGapAfterCursor(null);
+      }
+    } catch (err) {
+      console.error("Failed to fill gap:", err);
+    } finally {
+      setIsLoadingGapFill(false);
+    }
+  }, [parentMessageId, gapAfterCursor, isLoadingGapFill, hasGapBelow]);
 
   // Listen for ThreadUpdated events
   useEffect(() => {
@@ -492,7 +637,8 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
       threadData &&
       threadData.replies &&
       threadData.replies.length > 0 &&
-      isInitialLoadRef.current
+      isInitialLoadRef.current &&
+      !initialTargetRef.current // Don't auto-scroll to bottom when we have a target to scroll to
     ) {
       // Instant scroll (no animation) to bottom when thread first opens
       bottomRef.current?.scrollIntoView({ behavior: "auto" });
@@ -500,14 +646,16 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     }
   }, [open, threadData?.parentMessage?.id]); // Only trigger when thread opens or switches
 
-  // ✅ Reset flag when thread closes (for next open)
+  // ✅ Reset flags when thread closes (for next open)
   useEffect(() => {
     if (!open) {
-      isInitialLoadRef.current = true; // Reset for next open
+      isInitialLoadRef.current = true;
+      previousReplyCountRef.current = 0; // Reset to prevent stale count from causing scroll-to-bottom on re-open
     }
   }, [open]);
 
   // Auto-scroll to bottom when NEW messages arrive (smooth animation)
+  // Skip when loading older messages (isLoadingMore) — scroll position is handled by handleLoadMore
   const previousReplyCountRef = useRef<number>(0);
   useEffect(() => {
     if (!open || !threadData) return;
@@ -516,16 +664,16 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     const previousCount = previousReplyCountRef.current;
 
     // Only scroll smoothly when new messages arrive (count increases)
-    if (previousCount > 0 && currentCount > previousCount) {
+    // Skip if we're loading older messages, filling a gap, or navigating to a target message
+    if (previousCount > 0 && currentCount > previousCount && !isLoadingMore && !isLoadingGapFill && !initialTargetRef.current) {
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-        // Don't force hide button - scroll detection will update it
       }, 100);
     }
 
     // Update ref for next comparison
     previousReplyCountRef.current = currentCount;
-  }, [open, threadData?.replies?.length]);
+  }, [open, threadData?.replies?.length, isLoadingMore]);
 
   // Detect scroll position to show/hide GoToBottom button
   useEffect(() => {
@@ -555,6 +703,24 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
 
     return () => container?.removeEventListener("scroll", handleScroll);
   }, [threadData?.replies]); // Re-check when replies array changes (not length)
+
+  // IntersectionObserver: auto-trigger gap-fill when gap element scrolls into view
+  useEffect(() => {
+    const el = gapRef.current;
+    if (!el || !hasGapBelow) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          handleLoadMoreDownward();
+        }
+      },
+      { root: messagesContainerRef.current, threshold: 0.1 },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasGapBelow, handleLoadMoreDownward]);
 
   // Handler for go-to-bottom button
   const handleGoToBottom = useCallback(() => {
@@ -913,46 +1079,92 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
                     // Render system messages differently
                     if (msg.contentType === "SYS") {
                       return (
-                        <SystemMessageBubble
-                          key={msg.id}
-                          message={msg}
-                          formatTime={formatTime}
-                        />
+                        <React.Fragment key={msg.id}>
+                          <SystemMessageBubble
+                            message={msg}
+                            formatTime={formatTime}
+                          />
+                          {/* Gap-fill trigger: rendered after the message matching gapAfterCursor */}
+                          {hasGapBelow && gapAfterCursor === msg.id && (
+                            <div
+                              ref={gapRef}
+                              className="flex justify-center py-3"
+                              data-testid="gap-fill-trigger"
+                            >
+                              {isLoadingGapFill ? (
+                                <span className="flex items-center gap-1 text-xs text-gray-500">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Đang tải thêm tin nhắn...
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={handleLoadMoreDownward}
+                                  className="px-3 py-1.5 text-xs text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                                >
+                                  Tải thêm tin nhắn
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </React.Fragment>
                       );
                     }
 
                     // Render regular messages with grouping
                     return (
-                      <MessageBubbleSimple
-                        key={msg.id}
-                        message={msg}
-                        isOwn={msg.senderId === user?.id}
-                        formatTime={formatTime}
-                        isFirstInGroup={groupedMsg.isFirstInGroup}
-                        isMiddleInGroup={groupedMsg.isMiddleInGroup}
-                        isLastInGroup={groupedMsg.isLastInGroup}
-                        onFilePreviewClick={(fileId, fileName) => {
-                          setFilePreviewId(fileId);
-                          setFilePreviewName(fileName);
-                        }}
-                        onImageClick={(images, initialIndex) => {
-                          // Phase 2.1: Gallery mode navigation
-                          setPreviewImages(images);
-                          setPreviewInitialIndex(initialIndex);
-                          setPreviewFileId(
-                            images[initialIndex]?.fileId || null,
-                          );
-                        }}
-                        onReply={(replyData) => {
-                          // Set local reply target for thread (not global)
-                          setThreadReplyTarget(replyData);
-                          // Focus input after setting reply target
-                          // Use 100ms delay to ensure focus happens after all DOM updates complete
-                          setTimeout(() => {
-                            mentionInputRef.current?.focus();
-                          }, 100);
-                        }}
-                      />
+                      <React.Fragment key={msg.id}>
+                        <MessageBubbleSimple
+                          message={msg}
+                          isOwn={msg.senderId === user?.id}
+                          formatTime={formatTime}
+                          isFirstInGroup={groupedMsg.isFirstInGroup}
+                          isMiddleInGroup={groupedMsg.isMiddleInGroup}
+                          isLastInGroup={groupedMsg.isLastInGroup}
+                          onFilePreviewClick={(fileId, fileName) => {
+                            setFilePreviewId(fileId);
+                            setFilePreviewName(fileName);
+                          }}
+                          onImageClick={(images, initialIndex) => {
+                            // Phase 2.1: Gallery mode navigation
+                            setPreviewImages(images);
+                            setPreviewInitialIndex(initialIndex);
+                            setPreviewFileId(
+                              images[initialIndex]?.fileId || null,
+                            );
+                          }}
+                          onReply={(replyData) => {
+                            // Set local reply target for thread (not global)
+                            setThreadReplyTarget(replyData);
+                            // Focus input after setting reply target
+                            // Use 100ms delay to ensure focus happens after all DOM updates complete
+                            setTimeout(() => {
+                              mentionInputRef.current?.focus();
+                            }, 100);
+                          }}
+                        />
+                        {/* Gap-fill trigger: rendered after the message matching gapAfterCursor */}
+                        {hasGapBelow && gapAfterCursor === msg.id && (
+                          <div
+                            ref={gapRef}
+                            className="flex justify-center py-3"
+                            data-testid="gap-fill-trigger"
+                          >
+                            {isLoadingGapFill ? (
+                              <span className="flex items-center gap-1 text-xs text-gray-500">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Đang tải thêm tin nhắn...
+                              </span>
+                            ) : (
+                              <button
+                                onClick={handleLoadMoreDownward}
+                                className="px-3 py-1.5 text-xs text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                              >
+                                Tải thêm tin nhắn
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </React.Fragment>

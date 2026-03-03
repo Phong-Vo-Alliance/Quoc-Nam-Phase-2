@@ -43,7 +43,8 @@ export function useCategoriesRealtime(
 ) {
   const queryClient = useQueryClient();
   const currentUserId = useAuthStore((state) => state.user?.id);
-  const { isConnected } = useSignalRConnection();
+  const signalRContext = useSignalRConnection();
+  const isConnected = signalRContext?.isConnected ?? false;
 
   // Track joined conversations to prevent duplicate joins
   const joinedConversationsRef = useRef<Set<string>>(new Set());
@@ -315,7 +316,7 @@ export function useCategoriesRealtime(
 
         // Show toast notification
         toast.info(
-          `${addedMember.userInfo.fullName || addedMember.userName} đã được add vào ${conversationName}`,
+          `${addedMember.userInfo.fullName || addedMember.userName} đã được thêm vào ${conversationName}`,
         );
       } catch (error) {
         console.error("[CategoryRealtime] Error handling MemberAdded:", error);
@@ -371,14 +372,10 @@ export function useCategoriesRealtime(
           (dept) => dept.departmentId === departmentId,
         );
 
-        const departmentName = categoryName
-          .replace(department?.departmentName || departmentId, "")
-          .trim()
-          .replace(/^-/, "")
-          .trim();
-
         // Show toast notification
-        toast.info(`Nhóm của bạn đã được kết nối với ${departmentName}`);
+        toast.info(
+          `Phòng ban ${department?.departmentName ?? ""} của bạn đã được thêm vào nhóm ${categoryName}`,
+        );
       } catch (error) {
         console.error(
           "[CategoryRealtime] Error handling CategoryDepartmentLinked:",

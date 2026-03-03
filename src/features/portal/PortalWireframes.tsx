@@ -588,7 +588,7 @@ export default function PortalWireframes({
     if (!conversationMembersData) return [];
     return conversationMembersData.map((member) => ({
       id: member.userId,
-      name: member.userInfo.fullName || member.userName || "Unknown",
+      name: member.userInfo?.fullName || member.userName || "Unknown",
       role: member.role === "leader" ? "Leader" : "Member",
     }));
   }, [conversationMembersData]);

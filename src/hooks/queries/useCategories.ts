@@ -76,7 +76,7 @@ export function useCategories() {
           (conv): ConversationWithUnread => ({
             ...conv,
             // ✅ Preserve existing unread count, or initialize to 0 for new conversations
-            unreadCount: existingUnreadCounts.get(conv.conversationId) ?? 0,
+            unreadCount: existingUnreadCounts.get(conv.conversationId) ?? conv.unreadCount ?? 0,
           }),
         ),
       }));

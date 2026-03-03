@@ -67,6 +67,8 @@ export interface ConversationInfoDto {
   memberCount: number;
   /** Last message object (null if no messages yet) */
   lastMessage: LastMessageDto | null;
+  /** Number of unread messages (from API) */
+  unreadCount: number;
 }
 
 /**

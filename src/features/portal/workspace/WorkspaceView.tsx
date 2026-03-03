@@ -32,6 +32,10 @@ import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useAllTasks } from "@/hooks/queries/useTasks";
 import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW: Fetch categories first before messages
+import {
+  useDirectMessages,
+  flattenDirectMessages,
+} from "@/hooks/queries/useDirectMessages";
 import { useUpdateTask } from "@/hooks/mutations";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useMessageRealtime } from "@/hooks/useMessageRealtime"; // 🆕 MOVED from ChatMainContainer
@@ -47,6 +51,7 @@ import {
   sortMembersWithLeadersFirst,
 } from "@/utils/memberTransform";
 import { transformTasksToLocal } from "@/utils/taskTransform";
+import { saveSelectedConversation, saveSelectedCategory } from "@/utils/storage";
 import { useConversationStore, type ChatTarget } from "@/stores";
 
 // Note: ChatTarget type moved to conversationStore
@@ -469,6 +474,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   // This ensures categories are available for ChatMainContainer and maintains proper hook order
   const categoriesQuery = useCategories();
 
+  // DM conversations for starred message navigation
+  const directMessagesQuery = useDirectMessages();
+  const directConversations = React.useMemo(
+    () => flattenDirectMessages(directMessagesQuery.data),
+    [directMessagesQuery.data],
+  );
+
   // 🆕 MOVED: Real-time message updates - moved here from ChatMainContainer to avoid re-renders
   // Only subscribe when a conversation is selected
   useMessageRealtime({
@@ -730,10 +742,32 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                     onClosePinned || (() => props.setWorkspaceMode("default"))
                   }
                   onOpenChat={(messageDto) => {
-                    // Get category from messageDto
                     const conversationId = messageDto.message.conversationId;
 
-                    // Find category that contains this conversation
+                    // Check if it's a DM conversation first
+                    const dmConversation = directConversations.find(
+                      (dm) => dm.id === conversationId,
+                    );
+
+                    if (dmConversation) {
+                      if (selectedConversation?.id === conversationId) {
+                        setScrollToMessage(messageDto);
+                      } else {
+                        setPendingScrollMessage(messageDto);
+                        saveSelectedConversation(conversationId);
+                        saveSelectedCategory("");
+                        const dmTarget: ChatTarget = {
+                          type: "dm",
+                          id: conversationId,
+                          name: dmConversation.name,
+                        };
+                        setSelectedConversation(dmTarget);
+                        onSelectChat(dmTarget);
+                      }
+                      return;
+                    }
+
+                    // Group conversation - find category
                     const category = categoriesQuery.data?.find((cat) =>
                       cat.conversations?.some(
                         (conv) => conv.conversationId === conversationId,
@@ -748,26 +782,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                       return;
                     }
 
-                    // Check if we're already in the correct conversation
                     if (selectedConversation?.id === conversationId) {
-                      // Same conversation - scroll immediately
                       setScrollToMessage(messageDto);
                     } else {
-                      // Different conversation - navigate first, then scroll after load
-                      // Set pending scroll
                       setPendingScrollMessage(messageDto);
-
-                      // Navigate to conversation
-                      const categoryTarget = {
-                        type: "group" as const,
+                      const categoryTarget: ChatTarget = {
+                        type: "group",
                         id: conversationId,
                         categoryId: category.id,
                       };
-
                       setSelectedConversation(categoryTarget);
                       onSelectChat(categoryTarget);
-
-                      // The useEffect will trigger scroll after conversation loads
                     }
                   }}
                   onPreview={(file) => openPreview?.(file as any)}
@@ -1027,10 +1052,32 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           <PinnedMessagesPanel
             onClose={onClosePinned || (() => props.setWorkspaceMode("default"))}
             onOpenChat={(messageDto) => {
-              // Get category from messageDto
               const conversationId = messageDto.message.conversationId;
 
-              // Find category that contains this conversation
+              // Check if it's a DM conversation first
+              const dmConversation = directConversations.find(
+                (dm) => dm.id === conversationId,
+              );
+
+              if (dmConversation) {
+                if (selectedConversation?.id === conversationId) {
+                  setScrollToMessage(messageDto);
+                } else {
+                  setPendingScrollMessage(messageDto);
+                  saveSelectedConversation(conversationId);
+                  saveSelectedCategory("");
+                  const dmTarget: ChatTarget = {
+                    type: "dm",
+                    id: conversationId,
+                    name: dmConversation.name,
+                  };
+                  setSelectedConversation(dmTarget);
+                  onSelectChat(dmTarget);
+                }
+                return;
+              }
+
+              // Group conversation - find category
               const category = categoriesQuery.data?.find((cat) =>
                 cat.conversations?.some(
                   (conv) => conv.conversationId === conversationId,
@@ -1045,26 +1092,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 return;
               }
 
-              // Check if we're already in the correct conversation
               if (selectedConversation?.id === conversationId) {
-                // Same conversation - scroll immediately
                 setScrollToMessage(messageDto);
               } else {
-                // Different conversation - navigate first, then scroll after load
-                // Set pending scroll
                 setPendingScrollMessage(messageDto);
-
-                // Navigate to conversation
-                const categoryTarget = {
-                  type: "group" as const,
+                const categoryTarget: ChatTarget = {
+                  type: "group",
                   id: conversationId,
                   categoryId: category.id,
                 };
-
                 setSelectedConversation(categoryTarget);
                 onSelectChat(categoryTarget);
-
-                // The useEffect will trigger scroll after conversation loads
               }
             }}
             onPreview={(file) => openPreview?.(file as any)}

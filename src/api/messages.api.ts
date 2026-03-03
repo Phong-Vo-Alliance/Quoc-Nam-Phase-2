@@ -194,20 +194,24 @@ export const getMessagesAfter = async (params: {
  *
  * @param messageId - UUID of the parent message
  * @param limit - Number of replies to fetch (default: 50)
- * @param cursor - Pagination cursor for loading more replies
+ * @param beforeMessageId - Message ID for loading older replies (pagination)
+ * @param afterMessageId - Message ID for loading newer replies (gap-fill)
+ * @param aroundMessageId - Message ID to fetch replies around (jump-to-message)
  * @returns Thread data with parent message and replies
  */
 export const getMessageThread = async (params: {
   messageId: string;
   limit?: number;
-  cursor?: string;
+  beforeMessageId?: string;
+  afterMessageId?: string;
+  aroundMessageId?: string;
 }): Promise<ThreadDto> => {
-  const { messageId, limit = 50, cursor } = params;
+  const { messageId, limit = 50, beforeMessageId, afterMessageId, aroundMessageId } = params;
 
   const queryParams: Record<string, unknown> = { limit };
-  if (cursor) {
-    queryParams.cursor = cursor;
-  }
+  if (beforeMessageId) queryParams.beforeMessageId = beforeMessageId;
+  if (afterMessageId) queryParams.afterMessageId = afterMessageId;
+  if (aroundMessageId) queryParams.aroundMessageId = aroundMessageId;
 
   const response = await apiClient.get<ThreadDto>(
     `/api/messages/${messageId}/thread`,

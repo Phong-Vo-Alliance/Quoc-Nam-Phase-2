@@ -301,10 +301,14 @@ export const ConversationListSidebar: React.FC<
         ? (memberLeaderMap.get(otherUserId) ?? null)
         : null;
 
+      // ✅ FIX: Display other member's name, not the "DM: User1 <> User2" format
+      const displayName =
+        otherMember?.userInfo?.fullName || otherMember?.userName || conv.name; // Fallback to conv.name if no member info
+
       merged.push({
         id: conv.id,
         userId: otherUserId || conv.id,
-        name: conv.name,
+        name: displayName,
         email: null,
         isLeader,
         isOnline: false,
@@ -487,11 +491,14 @@ export const ConversationListSidebar: React.FC<
     [onSelectGroup, onSelectChat],
   );
 
-  const handleDirectSelect = (dm: DirectConversation) => {
-    onSelectChat({ type: "dm", id: dm.id, name: dm.name });
-    saveSelectedConversation(dm.id);
-    saveSelectedCategory("");
-  };
+  const handleDirectSelect = React.useCallback(
+    (dm: DirectConversation) => {
+      onSelectChat({ type: "dm", id: dm.id, name: dm.name });
+      saveSelectedConversation(dm.id);
+      saveSelectedCategory("");
+    },
+    [onSelectChat],
+  );
 
   const handleCreateConversation = async (contact: ContactItem) => {
     try {
@@ -499,14 +506,15 @@ export const ConversationListSidebar: React.FC<
         recipientId: contact.userId,
       });
 
+      // ✅ Optimistic update: Add conversation to cache immediately
       const directConversation: DirectConversation = {
         id: newConversation.id,
-        name: contact.name,
+        name: newConversation.name, // Keep API format, merge logic will extract display name
         type: "DM",
-        description: "",
-        avatarFileId: null,
-        createdBy: "",
-        createdByName: "",
+        description: newConversation.description || "",
+        avatarFileId: newConversation.avatarFileId,
+        createdBy: newConversation.createdBy,
+        createdByName: newConversation.createdByName,
         memberCount: 2,
         members: newConversation.members
           ? (newConversation.members as any)
@@ -619,12 +627,12 @@ export const ConversationListSidebar: React.FC<
 
       if (
         tab === "group" &&
-        apiCategories.length > 0 &&
+        filteredApiCategories.length > 0 &&
         selectedConversationId === undefined &&
         !hasAutoSelected
       ) {
-        // 🆕 FIX: Select first category's first conversation (not just first in flattened array)
-        const firstCategory = apiCategories[0];
+        // Select first visible category's first conversation (using sorted/filtered list to match UI order)
+        const firstCategory = filteredApiCategories[0];
         const firstConversation = firstCategory.conversations?.[0];
 
         if (firstConversation) {
@@ -645,15 +653,34 @@ export const ConversationListSidebar: React.FC<
           );
         }
       }
+
+      if (
+        tab === "dm" &&
+        filteredApiDirects.length > 0 &&
+        selectedConversationId === undefined &&
+        !hasAutoSelected
+      ) {
+        const firstDirect = filteredApiDirects[0];
+        if (firstDirect.hasConversation && firstDirect.conversation) {
+          handleDirectSelect(firstDirect.conversation);
+          setHasAutoSelected(true);
+          console.log("[Init] Auto-selected first DM conversation:", {
+            name: firstDirect.name,
+          });
+        }
+      }
     }
   }, [
     useApiData,
     apiGroups,
     apiDirects,
     apiCategories,
+    filteredApiCategories,
     hasAutoSelected,
     selectedConversationId,
     handleGroupSelect,
+    handleDirectSelect,
+    filteredApiDirects,
     categoriesQuery.isLoading,
     directsQuery.isLoading,
     tab,
@@ -674,6 +701,8 @@ export const ConversationListSidebar: React.FC<
       setInternalSelectedCategoryId(null);
       clearSelectedConversation();
       onClearSelectedChat?.();
+      setHasAutoSelected(false);
+      setQ("");
       prevTabRef.current = tab;
     }
   }, [tab, onClearSelectedChat, setActiveTabType, clearSelectedConversation]);
