@@ -146,9 +146,9 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(
       const query = mentionSearchQuery.toLowerCase();
       return otherMembers.filter((member) => {
         const fullName = (
-          member.userInfo.fullName || member.userName
+          member.userInfo?.fullName || member.userName
         ).toLowerCase();
-        const identifier = (member.userInfo.identifier || "").toLowerCase();
+        const identifier = (member.userInfo?.identifier || "").toLowerCase();
         return fullName.includes(query) || identifier.includes(query);
       });
     }, [members, mentionSearchQuery, currentUser?.id]);
@@ -167,7 +167,7 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(
       (member: ConversationMember) => {
         if (mentionStartIndex === -1) return;
 
-        const fullName = member.userInfo.fullName || member.userName;
+        const fullName = member.userInfo?.fullName || member.userName;
         const mentionText = `@${fullName}`;
 
         // 🔧 FIX: Calculate exact end position of @ query

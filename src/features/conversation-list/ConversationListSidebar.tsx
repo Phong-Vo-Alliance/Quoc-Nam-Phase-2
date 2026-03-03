@@ -110,6 +110,47 @@ const badgeUnread = (n?: number) =>
     </span>
   ) : null;
 
+/* ===================== NotificationBadge Component ===================== */
+interface NotificationBadgeProps {
+  count: number;
+  pulse?: boolean;
+  inline?: boolean;
+}
+
+const NotificationBadge: React.FC<NotificationBadgeProps> = ({
+  count,
+  pulse = false,
+  inline = false,
+}) => {
+  if (count <= 0) return null;
+
+  const displayCount = count >= 10 ? "9+" : count;
+
+  if (inline) {
+    return (
+      <span className="relative inline-flex h-4 w-4 items-center justify-center">
+        {pulse && (
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+        )}
+        <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 items-center justify-center text-[9px] font-bold text-white">
+          {displayCount}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center z-50">
+      {pulse && (
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+      )}
+      <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 items-center justify-center text-[9px] font-bold text-white">
+        {displayCount}
+      </span>
+    </span>
+  );
+};
+
 const dotOnline = (on: boolean) => (
   <span
     className={`inline-block h-2 w-2 rounded-full ${
@@ -172,6 +213,11 @@ export const ConversationListSidebar: React.FC<
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] =
     React.useState<string | null>(null);
+
+  // Track badge pulse state (pulse only once per session)
+  const [hasShownGroupBadge, setHasShownGroupBadge] = React.useState(false);
+  const [hasShownDmBadge, setHasShownDmBadge] = React.useState(false);
+
   const prevTabRef = React.useRef<"group" | "dm">(getInitialTab());
   const isAutoSwitchingTabRef = React.useRef(false);
   const contactsListRef = React.useRef<HTMLUListElement>(null);
@@ -267,6 +313,28 @@ export const ConversationListSidebar: React.FC<
   const apiDirects = React.useMemo(() => {
     return flattenDirectMessages(directsQuery.data);
   }, [directsQuery.data]);
+
+  // Total unread count for tab badges
+  const totalGroupUnread = React.useMemo(() => {
+    return apiGroups.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+  }, [apiGroups]);
+
+  const totalDmUnread = React.useMemo(() => {
+    return apiDirects.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+  }, [apiDirects]);
+
+  // Track when badge appears for the first time (for pulse animation)
+  React.useEffect(() => {
+    if (tab === "dm" && totalGroupUnread > 0 && !hasShownGroupBadge) {
+      setHasShownGroupBadge(true);
+    }
+  }, [tab, totalGroupUnread, hasShownGroupBadge]);
+
+  React.useEffect(() => {
+    if (tab === "group" && totalDmUnread > 0 && !hasShownDmBadge) {
+      setHasShownDmBadge(true);
+    }
+  }, [tab, totalDmUnread, hasShownDmBadge]);
 
   // Real-time updates for DMs
   useDirectsRealtime(apiDirects, selectedConversationId);
@@ -855,7 +923,16 @@ export const ConversationListSidebar: React.FC<
                 `}
                   disabled={isAnyTabLoading}
                 >
-                  Nhóm
+                  <span className="relative inline-flex items-center gap-1">
+                    Nhóm
+                    {tab === "dm" && totalGroupUnread > 0 && (
+                      <NotificationBadge
+                        count={totalGroupUnread}
+                        pulse={!hasShownGroupBadge}
+                        inline
+                      />
+                    )}
+                  </span>
                 </ToggleGroupItem>
                 <ToggleGroupItem
                   value="dm"
@@ -867,7 +944,16 @@ export const ConversationListSidebar: React.FC<
                 `}
                   disabled={isAnyTabLoading}
                 >
-                  Cá Nhân
+                  <span className="relative inline-flex items-center gap-1">
+                    Cá nhân
+                    {tab === "group" && totalDmUnread > 0 && (
+                      <NotificationBadge
+                        count={totalDmUnread}
+                        pulse={!hasShownDmBadge}
+                        inline
+                      />
+                    )}
+                  </span>
                 </ToggleGroupItem>
               </ToggleGroup>
             </div>
@@ -878,12 +964,40 @@ export const ConversationListSidebar: React.FC<
           <div className="flex items-center justify-between">
             <div className="font-medium">Tin nhắn</div>
             <div
-              className={`text-xs ${isAnyTabLoading ? "opacity-50 pointer-events-none" : ""}`}
+              className={`relative text-xs ${isAnyTabLoading ? "opacity-50 pointer-events-none" : ""}`}
             >
               <SegmentedTabs
                 tabs={[
-                  { key: "group", label: "Nhóm" },
-                  { key: "dm", label: "Cá nhân" },
+                  {
+                    key: "group",
+                    label: (
+                      <span className="relative inline-flex items-center gap-1">
+                        Nhóm
+                        {tab === "dm" && totalGroupUnread > 0 && (
+                          <NotificationBadge
+                            count={totalGroupUnread}
+                            pulse={!hasShownGroupBadge}
+                            inline
+                          />
+                        )}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "dm",
+                    label: (
+                      <span className="relative inline-flex items-center gap-1">
+                        Cá nhân
+                        {tab === "group" && totalDmUnread > 0 && (
+                          <NotificationBadge
+                            count={totalDmUnread}
+                            pulse={!hasShownDmBadge}
+                            inline
+                          />
+                        )}
+                      </span>
+                    ),
+                  },
                 ]}
                 active={tab}
                 onChange={(v) => {

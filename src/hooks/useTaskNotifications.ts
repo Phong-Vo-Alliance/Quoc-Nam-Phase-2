@@ -185,13 +185,17 @@ export function useTaskNotifications() {
           break;
         }
 
-        case "reassigned":
+        case "reassigned": {
+          const assigneeName = getUserName(payload.task.assignToUserId);
           if (isAssignedToMe) {
             toast.info(`Công việc "${taskTitle}" đã được giao lại cho bạn`);
           } else {
-            toast.info(`Công việc "${taskTitle}" đã được chuyển giao`);
+            toast.info(
+              `Công việc "${taskTitle}" đã được chuyển giao cho ${assigneeName}`,
+            );
           }
           break;
+        }
 
         case "updated":
           toast.info(`Công việc "${taskTitle}" đã được cập nhật`);

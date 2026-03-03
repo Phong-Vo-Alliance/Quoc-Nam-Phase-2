@@ -429,6 +429,7 @@ export const TaskCard: React.FC<{
                         createdAt: t.createdAt || new Date().toISOString(),
                       })),
                       replyCount: 0,
+                      unreadReplyCount: 0,
                       isStarred: false,
                       isPinned: false,
                       threadPreview: null,

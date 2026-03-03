@@ -316,7 +316,7 @@ export function useCategoriesRealtime(
 
         // Show toast notification
         toast.info(
-          `${addedMember.userInfo.fullName || addedMember.userName} đã được thêm vào ${conversationName}`,
+          `${addedMember.userInfo?.fullName || addedMember?.userName} đã được thêm vào ${conversationName}`,
         );
       } catch (error) {
         console.error("[CategoryRealtime] Error handling MemberAdded:", error);

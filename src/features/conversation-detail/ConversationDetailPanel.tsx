@@ -261,7 +261,7 @@ export const ConversationDetailPanel: React.FC<
     isError: isFilterError,
   } = useFilteredAssignees({
     conversationId: groupId || "",
-    enabled: hasLeaderPermissions() && leaderMode === "team",
+    enabled: hasLeaderPermissions(), // Enable cho cả team và mine mode
   });
 
   /* =============== Derived Data =============== */
@@ -304,13 +304,10 @@ export const ConversationDetailPanel: React.FC<
       });
   }, [myTasks]);
 
-  // LEADER MODE: Assignee options (filtered for team mode)
+  // LEADER MODE: Assignee options (filtered for both team and mine mode)
   const assigneeOptions = React.useMemo(
-    () =>
-      hasLeaderPermissions() && leaderMode === "team"
-        ? filteredMembers
-        : members,
-    [filteredMembers, members, leaderMode],
+    () => (hasLeaderPermissions() ? filteredMembers : members),
+    [filteredMembers, members],
   );
 
   // LEADER TEAM MODE: Team tasks by assignee filter
@@ -564,7 +561,9 @@ export const ConversationDetailPanel: React.FC<
       // Fallback: check if the source message itself has a linkedTaskId
       const sourceMessage = messages.find((m) => m.id === parentMessageId);
       if (sourceMessage && (sourceMessage as any).linkedTaskId) {
-        const taskByLinked = tasks.find((t) => t.id === (sourceMessage as any).linkedTaskId);
+        const taskByLinked = tasks.find(
+          (t) => t.id === (sourceMessage as any).linkedTaskId,
+        );
         if (taskByLinked) {
           onOpenTaskLog?.(taskByLinked.id, targetMessageId); // 🆕 Pass targetMessageId
         }

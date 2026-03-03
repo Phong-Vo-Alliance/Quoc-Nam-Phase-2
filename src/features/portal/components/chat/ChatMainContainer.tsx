@@ -17,7 +17,7 @@ import { useCreateInformationConfirmed } from "@/hooks/mutations/useCreateInform
 import { messageKeys } from "@/hooks/queries/keys/messageKeys"; // 🆕 NEW: Query keys
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW (CBN-002)
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers"; // 🆕 NEW: For confirmed info userName lookup
-import { useInformationConfirmed } from "@/hooks/queries/useInformationConfirmed"; // 🆕 NEW: Confirmed information query
+import { useAllInformationConfirmed } from "@/hooks/queries/useInformationConfirmed"; // 🆕 NEW: Confirmed information query (all, not filtered by user)
 import {
   useConversationStarredMessages,
   useStarredMessages,
@@ -582,8 +582,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     [directConversations, categoriesQuery.data],
   );
 
-  // 🆕 NEW: Fetch confirmed information for this conversation (leader only)
-  const { data: confirmedInfoData } = useInformationConfirmed(
+  // 🆕 NEW: Fetch ALL confirmed information for this conversation (leader only)
+  // Using /all endpoint to get confirmed info from all users, not just current user
+  const { data: confirmedInfoData } = useAllInformationConfirmed(
     {
       conversationId,
     },
@@ -1853,7 +1854,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
       // Build system message content using utility function
       const receiverName =
-        user.fullName || user.identifier || "Người tiếp nhận";
+        user?.fullName || user?.identifier || "Người tiếp nhận";
       const systemMessageContent = buildReceiveInfoContent(
         message,
         receiverName,

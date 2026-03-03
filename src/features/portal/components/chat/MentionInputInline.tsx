@@ -65,7 +65,10 @@ export interface MentionInputProps {
  * />
  * ```
  */
-export const MentionInputInline = forwardRef<MentionInputHandle, MentionInputProps>(
+export const MentionInputInline = forwardRef<
+  MentionInputHandle,
+  MentionInputProps
+>(
   (
     {
       value,
@@ -156,9 +159,9 @@ export const MentionInputInline = forwardRef<MentionInputHandle, MentionInputPro
       const query = mentionSearchQuery.toLowerCase();
       return otherMembers.filter((member) => {
         const fullName = (
-          member.userInfo.fullName || member.userName
+          member.userInfo?.fullName || member.userName
         ).toLowerCase();
-        const identifier = (member.userInfo.identifier || "").toLowerCase();
+        const identifier = (member.userInfo?.identifier || "").toLowerCase();
         return fullName.includes(query) || identifier.includes(query);
       });
     }, [members, mentionSearchQuery, currentUser?.id]);
@@ -366,7 +369,7 @@ export const MentionInputInline = forwardRef<MentionInputHandle, MentionInputPro
       (member: ConversationMember) => {
         if (mentionStartIndex === -1 || !editorRef.current) return;
 
-        const fullName = member.userInfo.fullName || member.userName;
+        const fullName = member.userInfo?.fullName || member.userName;
         const mentionText = `@${fullName}`; // Include @ in display text for styling
 
         const selection = window.getSelection();

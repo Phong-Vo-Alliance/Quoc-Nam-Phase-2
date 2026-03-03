@@ -7,7 +7,6 @@ import { ChatMainContainer } from "../components/chat";
 import { EmptyChatState } from "../components/EmptyChatState";
 import { QuickMessageManagerMobile } from "../components/QuickMessageManagerMobile";
 import { TodoListManagerMobile } from "../components/TodoListManagerMobile";
-import { PinnedMessagesManagerMobile } from "../components/PinnedMessagesManagerMobile";
 
 import type {
   Task,
@@ -51,7 +50,10 @@ import {
   sortMembersWithLeadersFirst,
 } from "@/utils/memberTransform";
 import { transformTasksToLocal } from "@/utils/taskTransform";
-import { saveSelectedConversation, saveSelectedCategory } from "@/utils/storage";
+import {
+  saveSelectedConversation,
+  saveSelectedCategory,
+} from "@/utils/storage";
 import { useConversationStore, type ChatTarget } from "@/stores";
 
 // Note: ChatTarget type moved to conversationStore
@@ -129,10 +131,8 @@ interface WorkspaceViewProps {
 
   workspaceMode: "default" | "pinned";
   setWorkspaceMode: (v: "default" | "pinned") => void;
-  pinnedMessages?: PinnedMessage[];
   onClosePinned?: () => void;
   onOpenPinnedMessage?: (messageDto: StarredMessageDto) => void;
-  onUnpinMessage: (id: string) => void;
   onShowPinnedToast: () => void;
   // [PHASE2-REMOVED] Desktop pin feature removed
   // onTogglePin?: (msg: Message) => void;
@@ -235,10 +235,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     onClearSelectedChat,
 
     workspaceMode,
-    pinnedMessages,
     onClosePinned,
     onOpenPinnedMessage,
-    onUnpinMessage,
     onShowPinnedToast,
     // [PHASE2-REMOVED] onTogglePin,
     onToggleStar,
@@ -645,7 +643,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           data: {
             title: task.title,
             description: task.description || null,
-            priority: task.priority?.id || "medium", // ✅ Extract id from TaskPriorityDto
+            priority: task.priority?.code || "low", // ✅ Use priority code (string), not ID
             dueDate: task.dueDate || null,
             conversationId: task.workTypeId || null,
             messageId: task.messageId || null,
@@ -724,8 +722,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     const [showQuickMessageMobile, setShowQuickMessageMobile] =
       React.useState(false);
     const [showTodoListMobile, setShowTodoListMobile] = React.useState(false);
-    const [showPinnedMessagesMobile, setShowPinnedMessagesMobile] =
-      React.useState(false);
+    // [REMOVED] showPinnedMessagesMobile - using starred messages instead
 
     return (
       <div
@@ -984,51 +981,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
           />
         )}
 
-        {/* ✅ NEW: Pinned Messages Modal */}
-        {showPinnedMessagesMobile && (
-          <PinnedMessagesManagerMobile
-            open={showPinnedMessagesMobile}
-            onClose={() => setShowPinnedMessagesMobile(false)}
-            pinnedMessages={pinnedMessages ?? []}
-            onUnpin={onUnpinMessage}
-            onOpenChat={(pin) => {
-              setShowPinnedMessagesMobile(false);
-              handleMobileSelectChat({ type: "group", id: pin.chatId });
-              // Set message to scroll to
-              setScrollToMessage({
-                messageId: pin.id,
-                message: {
-                  id: pin.id,
-                  conversationId: pin.chatId,
-                  content: pin.content,
-                  senderName: pin.sender,
-                  senderFullName: pin.sender,
-                  senderId: "",
-                  sentAt: pin.time,
-                  contentType:
-                    pin.type === "image"
-                      ? "IMG"
-                      : pin.type === "file"
-                        ? "FILE"
-                        : "TXT",
-                  attachments: pin.fileInfo
-                    ? [
-                        {
-                          fileId: pin.fileInfo.url,
-                          fileName: pin.fileInfo.name,
-                          fileSize: parseInt(pin.fileInfo.size || "0"),
-                          contentType:
-                            pin.fileInfo.type === "image" ? "IMG" : "FILE",
-                        },
-                      ]
-                    : undefined,
-                },
-                starredAt: pin.time,
-              } as StarredMessageDto);
-            }}
-            onPreview={(file) => openPreview?.(file as any)}
-          />
-        )}
+        {/* [REMOVED] Pinned Messages Modal - using starred messages instead */}
       </div>
     );
   }

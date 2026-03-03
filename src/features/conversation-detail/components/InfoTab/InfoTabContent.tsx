@@ -66,10 +66,18 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
             <div className="flex flex-col items-center text-center gap-1">
               <div className="text-sm font-semibold">{categoryName}</div>
               <div className="text-xs text-gray-700">
-                Đang xem thông tin cho{" "}
-                <span className="font-medium text-brand-600">
-                  Loại việc: {groupName}
-                </span>
+                {selectedWorkTypeId ? (
+                  <>
+                    Đang xem thông tin cho{" "}
+                    <span className="font-medium text-brand-600">
+                      Loại việc: {groupName}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-gray-500">
+                    Chọn loại việc để xem thông tin chi tiết
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -89,7 +97,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
                 />
               ))}
             </div>
-          ) : (
+          ) : selectedWorkTypeId ? (
             <FileManagerPhase1A
               mode="media"
               groupId={groupId}
@@ -101,6 +109,10 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
               messagesQuery={messagesQuery}
               conversationAttachment={conversationAttachment}
             />
+          ) : (
+            <div className="text-center py-2 text-sm text-gray-500">
+              Chọn loại việc để xem thông tin
+            </div>
           )}
         </RightAccordion>
       </div>
@@ -124,7 +136,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
                 </div>
               ))}
             </div>
-          ) : (
+          ) : selectedWorkTypeId ? (
             <FileManagerPhase1A
               mode="docs"
               groupId={groupId}
@@ -136,12 +148,16 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
               messagesQuery={messagesQuery}
               conversationAttachment={conversationAttachment}
             />
+          ) : (
+            <div className="text-center py-2 text-sm text-gray-500">
+              Chọn loại việc để xem thông tin
+            </div>
           )}
         </RightAccordion>
       </div>
 
-      {/* Thành viên (Leader only + Group chat only) */}
-      {hasLeaderPermissions() && !isDM && (
+      {/* Thanh vien (Leader only + Group chat only) */}
+      {hasLeaderPermissions() && !isDM ? (
         <div
           className="premium-accordion-wrapper"
           data-testid="members-section"
@@ -155,6 +171,10 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
                   <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
                 </div>
                 <div className="h-6 w-14 bg-gray-200 rounded animate-pulse" />
+              </div>
+            ) : !selectedWorkTypeId ? (
+              <div className="text-center py-2 text-sm text-gray-500">
+                Chọn loại việc để xem thông tin
               </div>
             ) : (
               <div className="flex items-center justify-between rounded-lg">
@@ -198,7 +218,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
             )}
           </RightAccordion>
         </div>
-      )}
+      ) : null}
 
       {/* Member List Modal - Only render when members exist */}
       {members.length > 0 && (

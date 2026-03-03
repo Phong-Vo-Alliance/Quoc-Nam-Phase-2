@@ -114,8 +114,8 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
     >
       {members.map((member, index) => {
         const isSelected = index === selectedIndex;
-        const fullName = member.userInfo.fullName || member.userName;
-        const identifier = member.userInfo.identifier || "";
+        const fullName = member.userInfo?.fullName || member.userName;
+        const identifier = member.userInfo?.identifier || "";
 
         return (
           <div

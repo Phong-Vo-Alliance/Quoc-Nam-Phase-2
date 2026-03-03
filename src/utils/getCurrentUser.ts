@@ -63,9 +63,9 @@ export async function getCurrentUser(): Promise<{
           return {
             id: user.id,
             identifier: user.identifier || user.email || "",
-            fullName: user.fullName, // ✅ Include fullName
-            departments: user.departments || [],
-            roles: user.roles || [],
+            fullName: user?.fullName, // ✅ Include fullName
+            departments: user?.departments || [],
+            roles: user?.roles || [],
           };
         }
       }
@@ -102,10 +102,10 @@ export async function getCurrentUser(): Promise<{
 
           return {
             id: parsed.state.user.id,
-            fullName: parsed.state.user.fullName, // ✅ Include fullName
-            identifier: parsed.state.user.identifier || "",
-            departments: parsed.state.user.departments || [],
-            roles: parsed.state.user.roles || [],
+            fullName: parsed.state.user?.fullName, // ✅ Include fullName
+            identifier: parsed.state.user?.identifier || "",
+            departments: parsed.state.user?.departments || [],
+            roles: parsed.state.user?.roles || [],
           };
         }
       }

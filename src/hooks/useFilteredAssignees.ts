@@ -159,7 +159,7 @@ export function useFilteredAssignees({
       return [
         {
           id: currentUserId,
-          name: currentUser.fullName || currentUser.identifier || "Tôi",
+          name: currentUser?.fullName || currentUser.identifier || "Tôi",
           role: "Leader" as const,
         },
       ];
@@ -177,7 +177,7 @@ export function useFilteredAssignees({
       return [
         {
           id: currentUserId,
-          name: currentUser.fullName || currentUser.identifier || "Tôi",
+          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
           role: "Leader" as const,
         },
       ];

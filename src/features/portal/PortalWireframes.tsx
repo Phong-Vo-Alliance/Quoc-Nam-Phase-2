@@ -38,11 +38,6 @@ import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
 import type { ChecklistTemplateMap, ChecklistTemplateItem } from "./types";
 import { TaskLogThreadSheet } from "./workspace/TaskLogThreadSheet";
 import MessageSkeleton from "./components/MessageSkeleton";
-import { usePinnedMessages } from "@/hooks/queries/usePinnedMessages";
-import {
-  usePinMessage,
-  useUnpinMessage,
-} from "@/hooks/mutations/usePinMessage";
 import {
   useStarMessage,
   useUnstarMessage,
@@ -355,63 +350,7 @@ export default function PortalWireframes({
     setTimeout(() => setShowPinnedToast(false), 2000);
   };
 
-  // Fetch pinned messages from API
-  const { data: pinnedMessagesData } = usePinnedMessages({
-    conversationId: currentConversationId || "",
-    enabled: !!currentConversationId,
-  });
-
-  // Transform API data to legacy PinnedMessage format for UI compatibility
-  const pinnedMessages = React.useMemo(() => {
-    if (!pinnedMessagesData || !selectedGroup) return [];
-
-    return pinnedMessagesData.map((pinned) => ({
-      id: pinned.messageId,
-      chatId: selectedGroup.id,
-      groupName: selectedGroup.name,
-      workTypeName: "", // Can be derived from message if needed
-      sender: pinned.message.senderName,
-      type:
-        pinned.message.contentType === "IMG"
-          ? "image"
-          : pinned.message.contentType === "FILE"
-            ? "file"
-            : "text",
-      content: pinned.message.content || "",
-      preview: pinned.message.content || "",
-      time: pinned.pinnedAt,
-      fileInfo: pinned.message.attachments?.[0]
-        ? {
-            name: pinned.message.attachments[0].fileName || "",
-            type: pinned.message.contentType === "IMG" ? "image" : "other",
-            url: `/api/files/${pinned.message.attachments[0].fileId}`, // Construct file URL
-            size: pinned.message.attachments[0].fileSize.toString(),
-          }
-        : undefined,
-    }));
-  }, [pinnedMessagesData, selectedGroup]);
-
-  // Pin/Unpin mutations
-  const pinMessageMutation = usePinMessage({
-    conversationId: currentConversationId || "",
-    onSuccess: () => {
-      pushToast("Đã ghim tin nhắn", "success");
-      onShowPinnedToast();
-    },
-    onError: (error) => {
-      pushToast(`Lỗi khi ghim tin nhắn: ${error.message}`, "error");
-    },
-  });
-
-  const unpinMessageMutation = useUnpinMessage({
-    conversationId: currentConversationId || "",
-    onSuccess: () => {
-      pushToast("Đã bỏ ghim tin nhắn", "success");
-    },
-    onError: (error) => {
-      pushToast(`Lỗi khi bỏ ghim: ${error.message}`, "error");
-    },
-  });
+  // [REMOVED] Pin/Unpin feature - using starred messages instead
 
   // Star/Unstar mutations
   const starMessageMutation = useStarMessage({
@@ -434,22 +373,9 @@ export default function PortalWireframes({
     },
   });
 
-  // Xử lý mở tin nhắn đã ghim
+  // Xử lý mở tin nhắn đã đánh dấu (starred)
   const [scrollToMessage, setScrollToMessage] =
     React.useState<StarredMessageDto | null>(null);
-
-  const handleUnpinMessage = (id: string) => {
-    unpinMessageMutation.mutate({ messageId: id });
-  };
-
-  // Handle pin/unpin toggle from message bubble
-  const handleTogglePin = (msg: Message) => {
-    if (msg.isPinned) {
-      unpinMessageMutation.mutate({ messageId: msg.id });
-    } else {
-      pinMessageMutation.mutate({ messageId: msg.id });
-    }
-  };
 
   // Handle star/unstar toggle from message bubble
   const handleToggleStar = (msg: Message) => {
@@ -461,14 +387,6 @@ export default function PortalWireframes({
   };
 
   // Simple handlers for API-based components (accept messageId and current state)
-  const handleTogglePinById = (messageId: string, isPinned: boolean) => {
-    if (isPinned) {
-      unpinMessageMutation.mutate({ messageId });
-    } else {
-      pinMessageMutation.mutate({ messageId });
-    }
-  };
-
   const handleToggleStarById = (messageId: string, isStarred: boolean) => {
     if (isStarred) {
       unstarMessageMutation.mutate({ messageId });
@@ -477,11 +395,11 @@ export default function PortalWireframes({
     }
   };
 
-  const handleOpenPinnedMessage = (messageDto: StarredMessageDto) => {
+  const handleOpenStarredMessage = (messageDto: StarredMessageDto) => {
     // 1) mở đúng hội thoại (group/private) theo conversationId
     setSelectedChat({ type: "group", id: messageDto.message.conversationId });
 
-    // 2) đóng panel pin
+    // 2) đóng panel starred
     setWorkspaceMode("default");
 
     // 3) set StarredMessageDto để ChatMain cuộn tới
@@ -588,7 +506,7 @@ export default function PortalWireframes({
     if (!conversationMembersData) return [];
     return conversationMembersData.map((member) => ({
       id: member.userId,
-      name: member.userInfo?.fullName || member.userName || "Unknown",
+      name: member.userInfo?.fullName || member?.userName || "Unknown",
       role: member.role === "leader" ? "Leader" : "Member",
     }));
   }, [conversationMembersData]);
@@ -1371,10 +1289,8 @@ export default function PortalWireframes({
               workspaceMode={workspaceMode}
               setWorkspaceMode={setWorkspaceMode}
               viewMode={viewMode}
-              pinnedMessages={pinnedMessages as any}
               onClosePinned={() => setWorkspaceMode("default")}
-              onUnpinMessage={handleUnpinMessage}
-              onOpenPinnedMessage={handleOpenPinnedMessage}
+              onOpenPinnedMessage={handleOpenStarredMessage}
               onShowPinnedToast={onShowPinnedToast}
               onToggleStar={handleToggleStar}
               workTypes={(selectedGroup?.workTypes ?? []).map((w) => ({

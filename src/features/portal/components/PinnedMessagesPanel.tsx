@@ -346,23 +346,16 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                           </span>
                           {/* Tin nhắn có hình ảnh */}
                           {msg.fileInfo && msg.fileInfo.type === "image" && (
-                            <div className="mt-2 max-w-[200px]">
+                            <div
+                              className="mt-2 max-w-[200px] pointer-events-none opacity-90"
+                              onClick={(e) => e.stopPropagation()} // Prevent triggering onOpenChat
+                            >
                               <MessageImage
                                 fileId={msg.fileInfo.url}
                                 fileName={msg.fileInfo.name || "image"}
                                 isInGrid={false}
                                 forceLoad={false}
-                                onPreviewClick={(fileId) => {
-                                  if (onPreview && msg.fileInfo) {
-                                    onPreview({
-                                      id: msg.fileInfo.id,
-                                      name: msg.fileInfo.name || "image",
-                                      url: msg.fileInfo.url,
-                                      type: msg.fileInfo.type,
-                                      size: msg.fileInfo.size,
-                                    });
-                                  }
-                                }}
+                                onPreviewClick={() => {}} // Disabled - no preview in pinned panel
                               />
                             </div>
                           )}
@@ -371,19 +364,11 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                           {msg.fileInfo && msg.fileInfo.type !== "image" && (
                             <div
                               className={cn(
-                                "mt-2 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors rounded-md p-2 border border-gray-200 min-w-0 max-w-full",
+                                "mt-2 flex items-center gap-3 rounded-md p-2 border border-gray-200 min-w-0 max-w-full opacity-90",
                               )}
                               onClick={(e) => {
                                 e.stopPropagation(); // Prevent triggering the parent onClick
-                                if (onPreview && msg.fileInfo) {
-                                  onPreview({
-                                    id: msg.fileInfo.id,
-                                    name: msg.fileInfo.name,
-                                    url: msg.fileInfo.url,
-                                    type: msg.fileInfo.type,
-                                    size: msg.fileInfo.size,
-                                  });
-                                }
+                                // Preview disabled in pinned panel
                               }}
                             >
                               {/* Icon container */}

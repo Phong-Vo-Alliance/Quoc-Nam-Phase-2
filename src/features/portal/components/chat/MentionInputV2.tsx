@@ -73,14 +73,14 @@ export interface MentionInputProps {
 
 /**
  * Chat input component with chip-based @mentions
- * 
+ *
  * Features:
  * - Displays mentions as removable chips above input
  * - Mentions are single deletable units (cannot split or edit)
  * - Converts chips back to inline text with proper positions when sending
  * - Supports keyboard navigation for dropdown
  * - Properly clears state after sending
- * 
+ *
  * @example
  * ```tsx
  * <MentionInput
@@ -96,7 +96,10 @@ export interface MentionInputProps {
  * />
  * ```
  */
-export const MentionInputV2 = forwardRef<HTMLTextAreaElement, MentionInputProps>(
+export const MentionInputV2 = forwardRef<
+  HTMLTextAreaElement,
+  MentionInputProps
+>(
   (
     {
       value,
@@ -135,9 +138,9 @@ export const MentionInputV2 = forwardRef<HTMLTextAreaElement, MentionInputProps>
       const query = mentionSearchQuery.toLowerCase();
       return members.filter((member) => {
         const fullName = (
-          member.userInfo.fullName || member.userName
+          member.userInfo?.fullName || member.userName
         ).toLowerCase();
-        const identifier = (member.userInfo.identifier || "").toLowerCase();
+        const identifier = (member.userInfo?.identifier || "").toLowerCase();
         return fullName.includes(query) || identifier.includes(query);
       });
     }, [members, mentionSearchQuery]);
@@ -184,7 +187,7 @@ export const MentionInputV2 = forwardRef<HTMLTextAreaElement, MentionInputProps>
       (member: ConversationMember) => {
         if (mentionStartIndex === -1) return;
 
-        const fullName = member.userInfo.fullName || member.userName;
+        const fullName = member.userInfo?.fullName || member.userName;
 
         // Remove "@query" from input text
         const beforeMention = value.slice(0, mentionStartIndex);
@@ -201,13 +204,13 @@ export const MentionInputV2 = forwardRef<HTMLTextAreaElement, MentionInputProps>
 
         setMentions((prev) => {
           const updated = [...prev, newMention];
-          
+
           // Notify parent
           if (onMentionsChange) {
             const mentionsForApi = buildMentionsForApi(newValue, updated);
             onMentionsChange(mentionsForApi);
           }
-          
+
           return updated;
         });
 
@@ -233,13 +236,13 @@ export const MentionInputV2 = forwardRef<HTMLTextAreaElement, MentionInputProps>
       (index: number) => {
         setMentions((prev) => {
           const updated = prev.filter((_, i) => i !== index);
-          
+
           // Notify parent
           if (onMentionsChange) {
             const mentionsForApi = buildMentionsForApi(value, updated);
             onMentionsChange(mentionsForApi);
           }
-          
+
           return updated;
         });
       },
