@@ -23,7 +23,10 @@ export const GroupSelector: React.FC<GroupSelectorProps> = ({
   );
 
   return (
-    <div className="flex flex-col max-h-[80vh]">
+    <div
+      className="flex flex-col max-h-[80vh]"
+      data-testid="manage-work-types-dialog"
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b">
         <DialogTitle className="text-lg font-semibold text-gray-900">
@@ -53,6 +56,7 @@ export const GroupSelector: React.FC<GroupSelectorProps> = ({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Tìm nhóm..."
             className="pl-9 pr-9"
+            data-testid="group-search-input"
           />
           {searchQuery && (
             <button
@@ -68,9 +72,12 @@ export const GroupSelector: React.FC<GroupSelectorProps> = ({
 
       {/* Group List */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="px-6 py-4 space-y-2">
+        <div className="px-6 py-4 space-y-2" data-testid="group-list-container">
           {filteredGroups.length === 0 ? (
-            <div className="text-center py-8 text-sm text-gray-400">
+            <div
+              className="text-center py-8 text-sm text-gray-400"
+              data-testid="group-list-empty-state"
+            >
               Không tìm thấy nhóm phù hợp
             </div>
           ) : (
@@ -81,6 +88,7 @@ export const GroupSelector: React.FC<GroupSelectorProps> = ({
                 className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 
                   hover:border-brand-300 hover:bg-brand-50 transition-all
                   focus:outline-none focus:ring-2 focus:ring-brand-200"
+                data-testid={`group-item-${group.id}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">

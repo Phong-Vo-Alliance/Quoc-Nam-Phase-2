@@ -26,7 +26,7 @@ export const SystemMessageBubble: React.FC<SystemMessageBubbleProps> = ({
       className="flex justify-center py-2"
       data-testid={`system-message-bubble-${message.id}`}
     >
-      <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full max-w-[80%] text-center">
+      <div className="flex items-center gap-2 text-xs text-gray-600 px-3 py-1.5 rounded-full max-w-[80%] text-center border-2 border-gray-100 system-message-pill">
         <span className="text-gray-700 break-words">
           {renderSystemMessageWithHighlights(message.content || "", {
             highlightClassName:
@@ -40,6 +40,18 @@ export const SystemMessageBubble: React.FC<SystemMessageBubbleProps> = ({
           {formatTime(message.sentAt)}
         </span>
       </div>
+      <style>{`
+        /* Default background for system message pill */
+        .system-message-pill {
+          background-color: rgb(243 244 246); /* gray-100 */
+        }
+
+        /* Highlight effect - riêng cho system message */
+        .system-message-highlighted {        
+          background-color: rgb(254 240 138) !important; /* yellow-200 */
+          border-color: rgb(251 146 60) !important; /* orange-400 border */
+        }
+      `}</style>
     </div>
   );
 };

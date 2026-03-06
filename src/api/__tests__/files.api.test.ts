@@ -4,11 +4,13 @@ import { fileApiClient } from "../fileClient";
 import {
   uploadFile,
   getImageThumbnail,
+  getImageThumbnailInfo,
   getImagePreview,
   createBlobUrl,
   revokeBlobUrl,
 } from "../files.api";
 import type { UploadFileResult } from "@/types/files";
+import type { ThumbnailInfoDto } from "@/types/filePreview";
 
 describe("files.api", () => {
   let mockAxios: MockAdapter;
@@ -97,7 +99,7 @@ describe("files.api", () => {
 
       // Verify URL contains sourceEntityId
       expect(mockAxios.history.post[0].url).toContain(
-        `sourceEntityId=${entityId}`
+        `sourceEntityId=${entityId}`,
       );
     });
 
@@ -130,7 +132,7 @@ describe("files.api", () => {
         uploadFile({
           file: mockFile,
           sourceModule: 1,
-        })
+        }),
       ).rejects.toThrow();
     });
 
@@ -146,7 +148,7 @@ describe("files.api", () => {
         uploadFile({
           file: mockFile,
           sourceModule: 1,
-        })
+        }),
       ).rejects.toThrow();
     });
 
@@ -162,7 +164,7 @@ describe("files.api", () => {
         uploadFile({
           file: mockFile,
           sourceModule: 1,
-        })
+        }),
       ).rejects.toThrow();
     });
 
@@ -178,7 +180,7 @@ describe("files.api", () => {
         uploadFile({
           file: mockFile,
           sourceModule: 1,
-        })
+        }),
       ).rejects.toThrow();
     });
 
@@ -189,39 +191,51 @@ describe("files.api", () => {
         uploadFile({
           file: mockFile,
           sourceModule: 1,
-        })
+        }),
       ).rejects.toThrow();
     });
   });
 
   describe("getImageThumbnail()", () => {
-    it("should fetch thumbnail with correct endpoint and params", async () => {
-      // GIVEN: Mock API returns blob
-      const mockBlob = new Blob(["fake-thumbnail"], { type: "image/jpeg" });
+    const mockThumbnailDto: ThumbnailInfoDto = {
+      fileId: "file-123",
+      fileName: "photo.jpg",
+      imageBase64: btoa("fake-thumbnail-data"),
+      contentType: "image/jpeg",
+      canDownload: true,
+      hasWatermark: true,
+      size: "large",
+      fromCache: false,
+    };
+
+    it("should fetch thumbnail and convert base64 to Blob", async () => {
+      // GIVEN: Mock API returns JSON ThumbnailInfoDto
+      // Note: use regex because fileClient interceptor appends ?t=timestamp
       mockAxios
-        .onGet("/api/Files/file-123/watermarked-thumbnail")
-        .reply(200, mockBlob);
+        .onGet(/\/api\/Files\/file-123\/watermarked-thumbnail/)
+        .reply(200, mockThumbnailDto);
 
       // WHEN: Call API with fileId and size
       const result = await getImageThumbnail("file-123", "large");
 
-      // THEN: Returns blob
+      // THEN: Returns Blob converted from base64
       expect(result).toBeInstanceOf(Blob);
       expect(result.type).toBe("image/jpeg");
 
-      // Verify request was made
+      // Verify request params (no responseType: "blob")
       const request = mockAxios.history.get[0];
-      expect(request.url).toBe("/api/Files/file-123/watermarked-thumbnail");
+      expect(request.url).toContain(
+        "/api/Files/file-123/watermarked-thumbnail",
+      );
       expect(request.params).toEqual({ size: "large" });
-      expect(request.responseType).toBe("blob");
+      expect(request.responseType).toBeUndefined();
       expect(request.timeout).toBe(30000);
     });
 
     it("should use default size 'large' when not provided", async () => {
-      const mockBlob = new Blob(["thumbnail"], { type: "image/jpeg" });
       mockAxios
         .onGet(/\/api\/Files\/.*\/watermarked-thumbnail/)
-        .reply(200, mockBlob);
+        .reply(200, mockThumbnailDto);
 
       await getImageThumbnail("file-456");
 
@@ -244,10 +258,9 @@ describe("files.api", () => {
     });
 
     it("should accept all size values (small, medium, large)", async () => {
-      const mockBlob = new Blob(["thumbnail"], { type: "image/jpeg" });
       mockAxios
         .onGet(/\/api\/Files\/.*\/watermarked-thumbnail/)
-        .reply(200, mockBlob);
+        .reply(200, mockThumbnailDto);
 
       // Test small
       await getImageThumbnail("file-1", "small");
@@ -263,10 +276,66 @@ describe("files.api", () => {
     });
   });
 
+  describe("getImageThumbnailInfo()", () => {
+    const mockThumbnailDto: ThumbnailInfoDto = {
+      fileId: "file-123",
+      fileName: "photo.jpg",
+      imageBase64: btoa("fake-thumbnail-data"),
+      contentType: "image/jpeg",
+      canDownload: true,
+      hasWatermark: true,
+      size: "large",
+      fromCache: false,
+    };
+
+    it("should return full ThumbnailInfoDto with metadata", async () => {
+      mockAxios
+        .onGet(/\/api\/Files\/file-123\/watermarked-thumbnail/)
+        .reply(200, mockThumbnailDto);
+
+      const result = await getImageThumbnailInfo("file-123", "large");
+
+      expect(result).toEqual(mockThumbnailDto);
+      expect(result.canDownload).toBe(true);
+      expect(result.hasWatermark).toBe(true);
+      expect(result.contentType).toBe("image/jpeg");
+    });
+
+    it("should use default size 'large' when not provided", async () => {
+      mockAxios
+        .onGet(/\/api\/Files\/.*\/watermarked-thumbnail/)
+        .reply(200, mockThumbnailDto);
+
+      await getImageThumbnailInfo("file-456");
+
+      const request = mockAxios.history.get[0];
+      expect(request.params).toEqual({ size: "large" });
+    });
+  });
+
   describe("getImagePreview()", () => {
-    it("should fetch preview with correct endpoint", async () => {
-      const mockBlob = new Blob(["fake-preview"], { type: "image/png" });
-      mockAxios.onGet("/api/Files/file-123/preview").reply(200, mockBlob);
+    it("should fetch preview with correct endpoint and parse JSON response", async () => {
+      // Mock JSON response (UPDATED 2026-03-06: API returns JSON with base64 data)
+      const mockBase64 = btoa("fake-preview-image-data");
+      const mockJsonResponse = {
+        fileId: "file-123",
+        fileName: "test.png",
+        dataBase64: mockBase64,
+        contentType: "image/png",
+        canDownload: true,
+        wasWatermarked: true,
+        fromCache: false,
+        isPdf: false,
+        pageNumber: null,
+        totalPages: null,
+        wasRedacted: false,
+        watermark: null,
+      };
+
+      // Note: use regex because fileClient interceptor appends ?t=timestamp
+      mockAxios
+        .onGet(/\/api\/Files\/file-123\/preview/)
+        .reply(200, mockJsonResponse);
 
       const result = await getImagePreview("file-123");
 
@@ -274,8 +343,8 @@ describe("files.api", () => {
       expect(result.type).toBe("image/png");
 
       const request = mockAxios.history.get[0];
-      expect(request.url).toBe("/api/Files/file-123/preview");
-      expect(request.responseType).toBe("blob");
+      expect(request.url).toContain("/api/Files/file-123/preview");
+      expect(request.responseType).toBe("json"); // Changed from "blob"
       expect(request.timeout).toBe(30000);
     });
 
@@ -287,11 +356,53 @@ describe("files.api", () => {
       await expect(getImagePreview("file-missing")).rejects.toThrow();
     });
 
-    it("should have 30s timeout configured", async () => {
-      const mockBlob = new Blob(["preview"], { type: "image/jpeg" });
-      mockAxios.onGet("/api/Files/file-test/preview").reply(200, mockBlob);
+    it("should handle missing dataBase64 in response", async () => {
+      const mockInvalidResponse = {
+        fileId: "file-test",
+        fileName: "test.png",
+        dataBase64: null, // Missing data
+        contentType: "image/png",
+        canDownload: true,
+        wasWatermarked: false,
+        fromCache: false,
+        isPdf: false,
+        pageNumber: null,
+        totalPages: null,
+        wasRedacted: false,
+        watermark: null,
+      };
 
-      await getImagePreview("file-test");
+      mockAxios
+        .onGet(/\/api\/Files\/file-test\/preview/)
+        .reply(200, mockInvalidResponse);
+
+      await expect(getImagePreview("file-test")).rejects.toThrow(
+        "No image data in preview response",
+      );
+    });
+
+    it("should have 30s timeout configured", async () => {
+      const mockBase64 = btoa("preview-jpeg");
+      const mockJsonResponse = {
+        fileId: "file-timeout",
+        fileName: "test.jpg",
+        dataBase64: mockBase64,
+        contentType: "image/jpeg",
+        canDownload: true,
+        wasWatermarked: false,
+        fromCache: false,
+        isPdf: false,
+        pageNumber: null,
+        totalPages: null,
+        wasRedacted: false,
+        watermark: null,
+      };
+
+      mockAxios
+        .onGet(/\/api\/Files\/file-timeout\/preview/)
+        .reply(200, mockJsonResponse);
+
+      await getImagePreview("file-timeout");
 
       const request = mockAxios.history.get[0];
       expect(request.timeout).toBe(30000);

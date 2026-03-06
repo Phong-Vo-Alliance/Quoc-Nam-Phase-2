@@ -300,21 +300,23 @@ export const ManageVariantsDialog: React.FC<ManageVariantsDialogProps> = ({
                       </button>
                     </div>
                   ))}
-
-                  {/* Add new button */}
-                  <button
-                    onClick={handleAddNew}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-all"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="text-sm font-medium">
-                      Thêm dạng checklist
-                    </span>
-                  </button>
                 </>
               )}
             </div>
           </ScrollArea>
+
+          {/* Add new button - Sticky when variants exist */}
+          {variants.length > 0 && (
+            <div className="px-6 py-3 border-t bg-white">
+              <button
+                onClick={handleAddNew}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="text-sm font-medium">Thêm dạng checklist</span>
+              </button>
+            </div>
+          )}
 
           {/* Info */}
           <div className="px-6 py-3 border-t bg-gray-50">

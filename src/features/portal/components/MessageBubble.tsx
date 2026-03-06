@@ -384,13 +384,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
 
           {!isMobileLayout && (
-            <div className={cn("absolute -top-4 right-0 flex items-center gap-2 rounded-lg border border-gray-200 bg-white shadow-sm px-2 py-1 opacity-0 group-hover:opacity-100 transition-all duration-200",
+            <div data-testid="message-hover-actions" className={cn("absolute -top-4 right-0 flex items-center gap-2 rounded-lg border border-gray-200 bg-white shadow-sm px-2 py-1 opacity-0 group-hover:opacity-100 transition-all duration-200",
               data.isMine ? "translate-x-1" : "-translate-x-1")}>
-              <button className="p-1.5 text-gray-500 hover:text-brand-600 transition" onClick={() => onReply?.(data)} title="Trả lời tin nhắn">
+              <button data-testid="reply-button" className="p-1.5 text-gray-500 hover:text-brand-600 transition" onClick={() => onReply?.(data)} title="Trả lời tin nhắn">
                 <Reply size={14} className="text-indigo-600" />
               </button>
               {!disableExtraActions && (
-                <button className={cn("p-1.5 transition", data.isPinned ? "text-brand-600 hover:text-rose-500" : "text-gray-500 hover:text-brand-600")}
+                <button data-testid="pin-button" className={cn("p-1.5 transition", data.isPinned ? "text-brand-600 hover:text-rose-500" : "text-gray-500 hover:text-brand-600")}
                   onClick={() => onPin?.(data)} title={data.isPinned ? "Bỏ đánh dấu tin nhắn" : "Đánh dấu tin nhắn"}>
                   {data.isPinned ? <StarOff size={14} /> : <Star size={14} />}
                 </button>
@@ -407,17 +407,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 </button>
               )}
               {!data.taskId && hasLeaderPermissions() && (
-                <button title="Giao Task" className="p-1 hover:bg-brand-50 rounded" onClick={() => onAssignFromMessage?.(data)}>
+                <button data-testid="assign-task-button" title="Giao Task" className="p-1 hover:bg-brand-50 rounded" onClick={() => onAssignFromMessage?.(data)}>
                   <ClipboardPlus className="w-4 h-4 text-brand-600" />
                 </button>
               )}
               {data.taskId && onOpenTaskLog && (
-                <button title="Trao đổi về công việc" className="p-1 hover:bg-emerald-50 rounded" onClick={() => onOpenTaskLog(data.taskId!)}>
+                <button data-testid="task-log-hover-button" title="Trao đổi về công việc" className="p-1 hover:bg-emerald-50 rounded" onClick={() => onOpenTaskLog(data.taskId!)}>
                   <MessageSquarePlus className="w-4 h-4 text-emerald-600" />
                 </button>
               )}
               {!isReceived && !data.taskId && hasLeaderPermissions() && (
-                <button onClick={() => onReceiveInfo?.(data)} title="Tiếp nhận thông tin" className="p-1 rounded hover:bg-brand-50">
+                <button data-testid="receive-info-button" onClick={() => onReceiveInfo?.(data)} title="Tiếp nhận thông tin" className="p-1 rounded hover:bg-brand-50">
                   <Inbox className="w-4 h-4 text-brand-600" />
                 </button>
               )}

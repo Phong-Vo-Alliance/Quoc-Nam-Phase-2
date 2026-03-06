@@ -23,13 +23,17 @@ import { useFilteredAssignees } from "@/hooks/useFilteredAssignees";
 import { useCreateTask } from "@/hooks/mutations/useCreateTask";
 import { useLinkTaskToMessage } from "@/hooks/mutations/useLinkTaskToMessage";
 import { useAuthStore } from "@/stores/authStore";
+import { hasRole } from "@/utils/roleUtils";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { taskKeys } from "@/hooks/queries/keys/taskKeys";
 import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
 import { toast } from "sonner";
 import type { CreateTaskRequest } from "@/types/tasks_api";
 import { sendMessage } from "@/api/messages.api";
-import type { GetMessagesResponse, SendChatMessageRequest } from "@/types/messages";
+import type {
+  GetMessagesResponse,
+  SendChatMessageRequest,
+} from "@/types/messages";
 import { updateInformationConfirmed } from "@/api/information_confirmed.api";
 import { useMessages } from "@/hooks/queries/useMessages";
 import { messageKeys } from "@/hooks/queries/keys/messageKeys";
@@ -137,7 +141,7 @@ export function AssignTaskSheet({
         });
       }
 
-      toast.success("Công việc đã được giao thành công");      
+      toast.success("Công việc đã được giao thành công");
 
       // Switch to tasks tab
       onTabChange?.("order");
@@ -264,15 +268,29 @@ export function AssignTaskSheet({
     }
   }, [open, messageContent]);
 
-  // Set default assignee when sheet opens and user is available
+  // Set default assignee when sheet opens
+  // - Admin: Auto-select first member in list (excluding self)
+  // - Leader: Auto-select self
   useEffect(() => {
     if (!open || !currentUser?.id || formData.assignTo) return;
 
-    setFormData((prev) => ({
-      ...prev,
-      assignTo: currentUser.id,
-    }));
-  }, [open, currentUser?.id, formData.assignTo]);
+    // For Admin: Auto-select first member in the filtered list
+    if (hasRole("Admin")) {
+      // Wait for displayMembers to be populated
+      if (displayMembers.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          assignTo: displayMembers[0].id,
+        }));
+      }
+    } else {
+      // For Leader/Staff: Auto-select self (existing behavior)
+      setFormData((prev) => ({
+        ...prev,
+        assignTo: currentUser.id,
+      }));
+    }
+  }, [open, currentUser?.id, formData.assignTo, displayMembers]);
 
   // Set default checklist template when sheet opens
   useEffect(() => {

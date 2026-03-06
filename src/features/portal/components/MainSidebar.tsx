@@ -127,11 +127,23 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   };
 
   const initials = React.useMemo(() => {
-    const parts = (currentUserName || "")
-      .trim()
-      .split(/\s+/)
-      .filter((p) => p && p !== "-" && p !== "–"); // Filter out dashes
+    // Remove content in parentheses and brackets first
+    const withoutParentheses = (currentUserName || "")
+      .replace(/\([^)]*\)/g, "") // Remove (...)
+      .replace(/\[[^\]]*\]/g, "") // Remove [...]
+      .trim();
+
+    // Remove special characters and normalize Vietnamese
+    const normalized = withoutParentheses
+      .normalize("NFD") // Normalize Vietnamese accents
+      .replace(/[\u0300-\u036f]/g, "") // Remove diacritics
+      .replace(/[^a-zA-Z0-9\s]/g, "") // Keep only letters, numbers, and spaces
+      .trim();
+
+    const parts = normalized.split(/\s+/).filter((p) => p);
+
     if (parts.length === 0) return "U";
+
     // Take last 2 parts (tên lót + tên) instead of first 2
     const lastTwoParts = parts.slice(-2);
     const chars = lastTwoParts.map((p) => p[0]?.toUpperCase() ?? "");

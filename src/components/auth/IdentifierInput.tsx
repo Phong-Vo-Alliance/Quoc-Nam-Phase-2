@@ -4,14 +4,16 @@
  * Username/Account input component with flexible design for future changes
  */
 
-import * as React from 'react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { IDENTIFIER_LABELS, IDENTIFIER_TYPE } from '@/types/auth';
-import { cn } from '@/lib/utils';
+import * as React from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { IDENTIFIER_LABELS, IDENTIFIER_TYPE } from "@/types/auth";
+import { cn } from "@/lib/utils";
 
-interface IdentifierInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
+interface IdentifierInputProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "type"
+> {
   error?: string;
 }
 
@@ -24,13 +26,10 @@ const labels = IDENTIFIER_LABELS[IDENTIFIER_TYPE];
 export const IdentifierInput = React.forwardRef<
   HTMLInputElement,
   IdentifierInputProps
->(({ className, error, id = 'identifier', ...props }, ref) => {
+>(({ className, error, id = "identifier", ...props }, ref) => {
   return (
     <div className="space-y-2">
-      <Label
-        htmlFor={id}
-        className="text-sm font-medium text-gray-700"
-      >
+      <Label htmlFor={id} className="text-sm font-medium text-gray-700">
         {labels.label}
       </Label>
       <Input
@@ -45,10 +44,10 @@ export const IdentifierInput = React.forwardRef<
         aria-describedby={error ? `${id}-error` : undefined}
         data-testid="login-identifier-input"
         className={cn(
-          'h-12 px-4 text-base',
-          'border-gray-300 focus:border-brand-500 focus:ring-brand-500/20',
-          error && 'border-red-500 focus:border-red-500 focus:ring-red-500/20',
-          className
+          "h-12 px-4 text-base",
+          "border-gray-300 focus:border-brand-500 focus:ring-brand-500/20",
+          error && "border-red-500 focus:border-red-500 focus:ring-red-500/20",
+          className,
         )}
         {...props}
       />
@@ -57,6 +56,7 @@ export const IdentifierInput = React.forwardRef<
           id={`${id}-error`}
           className="text-sm text-red-600"
           role="alert"
+          data-testid="login-identifier-error"
         >
           {error}
         </p>
@@ -65,6 +65,6 @@ export const IdentifierInput = React.forwardRef<
   );
 });
 
-IdentifierInput.displayName = 'IdentifierInput';
+IdentifierInput.displayName = "IdentifierInput";
 
 export default IdentifierInput;

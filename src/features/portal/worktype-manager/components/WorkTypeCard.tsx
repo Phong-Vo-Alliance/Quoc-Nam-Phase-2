@@ -18,20 +18,22 @@ export const WorkTypeCard: React.FC<WorkTypeCardProps> = ({
   const defaultVariant = workType.checklistVariants?.find((v) => v.isDefault);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300 transition-colors">
+    <div
+      className="rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300 transition-colors"
+      data-testid={`work-type-card-${workType.id}`}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <h3 className="text-sm font-semibold text-gray-900 flex-1">
           {workType.name}
         </h3>
-        {/* TODO: Uncomment when rename feature is implemented */}
-        {/* <button
+        <button
           onClick={onEdit}
           className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
           title="Chỉnh sửa tên"
         >
           <Pencil className="h-4 w-4 text-gray-600" />
-        </button> */}
+        </button>
       </div>
 
       {/* Variants Info */}
@@ -40,7 +42,10 @@ export const WorkTypeCard: React.FC<WorkTypeCardProps> = ({
           Dạng checklist ({variantCount}):
         </p>
         {variantCount === 0 ? (
-          <p className="text-xs text-gray-400 italic">
+          <p
+            className="text-xs text-gray-400 italic"
+            data-testid="work-type-variants-empty"
+          >
             Không có dạng checklist
           </p>
         ) : (
@@ -69,6 +74,7 @@ export const WorkTypeCard: React.FC<WorkTypeCardProps> = ({
         size="sm"
         onClick={onManageVariants}
         className="w-full"
+        data-testid={`manage-variants-button-${workType.id}`}
       >
         Quản lý dạng checklist
       </Button>

@@ -3,7 +3,10 @@
 import React, { useEffect, useState } from "react";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
 import { RightAccordion } from "../components";
-import { FileManagerPhase1A, MessageLike } from "../components/FileManagerPhase1A";
+import {
+  FileManagerPhase1A,
+  MessageLike,
+} from "../components/FileManagerPhase1A";
 import { Users, Plus, FileText } from "lucide-react";
 import { ViewAllFilesModal } from "@/components/files";
 import { useViewFiles } from "@/hooks/useViewFiles";
@@ -87,7 +90,7 @@ export const InformationPanel: React.FC<InformationPanelProps> = ({
       </div>
 
       {/* Ảnh / Video (GRID) */}
-      <div className="premium-accordion-wrapper">
+      <div className="premium-accordion-wrapper" data-testid="info-tab-media">
         <div className="premium-light-bar" />
         <RightAccordion title="Ảnh / Video">
           <FileManagerPhase1A
@@ -103,7 +106,10 @@ export const InformationPanel: React.FC<InformationPanelProps> = ({
       </div>
 
       {/* Tất Cả Tệp - NEW (View All Files) */}
-      <div className="premium-accordion-wrapper">
+      <div
+        className="premium-accordion-wrapper"
+        data-testid="info-tab-all-files"
+      >
         <div className="premium-light-bar" />
         <RightAccordion title="Tất Cả Tệp">
           <button
@@ -118,7 +124,10 @@ export const InformationPanel: React.FC<InformationPanelProps> = ({
       </div>
 
       {/* Tài liệu (LIST) - Phase 1A (list file từ chat, không thư mục) */}
-      <div className="premium-accordion-wrapper">
+      <div
+        className="premium-accordion-wrapper"
+        data-testid="info-tab-documents"
+      >
         <div className="premium-light-bar" />
         <RightAccordion title="Tài liệu">
           <FileManagerPhase1A
@@ -135,7 +144,10 @@ export const InformationPanel: React.FC<InformationPanelProps> = ({
 
       {/* Thành viên (Leader only) */}
       {hasLeaderPermissions() && (
-        <div className="premium-accordion-wrapper">
+        <div
+          className="premium-accordion-wrapper"
+          data-testid="info-tab-members"
+        >
           <div className="premium-light-bar" />
           <RightAccordion title="Thành viên">
             <div className="flex items-center justify-between rounded-lg">

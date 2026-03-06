@@ -74,4 +74,18 @@ export const groupsApi = {
     );
     return data;
   },
+
+  /**
+   * Update a group's name
+   * @param groupId - The group/conversation UUID
+   * @param payload - Request with new name
+   * @returns Void (204 No Content expected)
+   * @throws {AxiosError} On API error (403 if forbidden, 404 if not found, etc.)
+   */
+  updateGroup: async (
+    groupId: string,
+    payload: { name: string }
+  ): Promise<void> => {
+    await apiClient.put(`/api/groups/${groupId}`, payload);
+  },
 };

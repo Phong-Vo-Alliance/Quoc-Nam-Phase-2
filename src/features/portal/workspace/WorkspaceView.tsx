@@ -449,8 +449,24 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     if (isMobile) setMobileTab("messages");
   };
 
-  // Use apiConversationName if available
+  // 🆕 NEW: Fetch categories FIRST before messages
+  // This ensures categories are available for ChatMainContainer and maintains proper hook order
+  const categoriesQuery = useCategories();
+
+  // Derive conversation name from fresh categories data (updated via SignalR/query invalidation)
   const chatTitle = React.useMemo(() => {
+    // First, try to get the latest name from categories query (always fresh after SignalR updates)
+    if (selectedConversation?.id && categoriesQuery.data) {
+      for (const category of categoriesQuery.data) {
+        const conv = category.conversations?.find(
+          (c) => c.conversationId === selectedConversation.id,
+        );
+        if (conv) {
+          return conv.conversationName ?? apiConversationName ?? "Nhóm";
+        }
+      }
+    }
+    // Fallback to apiConversationName (set when selecting chat)
     if (apiConversationName) {
       return apiConversationName;
     }
@@ -466,11 +482,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       );
     }
     return "Trò chuyện";
-  }, [apiConversationName, selectedConversation, groups, contacts]);
-
-  // 🆕 NEW: Fetch categories FIRST before messages
-  // This ensures categories are available for ChatMainContainer and maintains proper hook order
-  const categoriesQuery = useCategories();
+  }, [
+    apiConversationName,
+    selectedConversation,
+    groups,
+    contacts,
+    categoriesQuery.data,
+  ]);
 
   // DM conversations for starred message navigation
   const directMessagesQuery = useDirectMessages();
@@ -478,6 +496,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     () => flattenDirectMessages(directMessagesQuery.data),
     [directMessagesQuery.data],
   );
+
+  // 🆕 NEW: Check if conversation list is still loading (to prevent showing ChatMainContainer too early)
+  const activeTabType = selectedConversation?.type === "group" ? "group" : "dm";
+  const isConversationListInitialLoading =
+    (activeTabType === "group" && categoriesQuery.isLoading) ||
+    (activeTabType === "dm" && directMessagesQuery.isLoading);
 
   // 🆕 MOVED: Real-time message updates - moved here from ChatMainContainer to avoid re-renders
   // Only subscribe when a conversation is selected
@@ -823,7 +847,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 </div>
               ) : (
                 <div className="h-full min-h-0">
-                  {selectedConversation ? (
+                  {selectedConversation && !isConversationListInitialLoading ? (
                     // API-based chat using ChatMainContainer (conversation-detail)
                     <ChatMainContainer
                       key={selectedConversation.id}
@@ -1094,7 +1118,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
       {/* Center (Chat Container) — IMPORTANT: allow shrinking by setting min-w-0 */}
       <div className="h-full min-h-0 min-w-0 relative">
-        {selectedConversation ? (
+        {selectedConversation && !isConversationListInitialLoading ? (
           // API-based chat using ChatMainContainer (conversation-detail)
           <ChatMainContainer
             key={selectedConversation.id}

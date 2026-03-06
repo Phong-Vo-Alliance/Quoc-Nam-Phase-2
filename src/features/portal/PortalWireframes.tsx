@@ -7,6 +7,7 @@ import { hasLeaderPermissions, getViewModeFromRoles } from "@/utils/roleUtils";
 import { getCurrentUserIdSync } from "@/utils/getCurrentUser";
 import { ToastContainer, CloseNoteModal } from "./components";
 import FilePreviewModal from "../../components/FilePreviewModal";
+import { toast } from "sonner";
 import type {
   LeadThread,
   Task,
@@ -356,7 +357,7 @@ export default function PortalWireframes({
   const starMessageMutation = useStarMessage({
     conversationId: currentConversationId,
     onSuccess: () => {
-      pushToast("Đã đánh dấu tin nhắn", "success");
+      toast.success("Đã đánh dấu tin nhắn");
     },
     onError: (error) => {
       pushToast(`Lỗi khi đánh dấu: ${error.message}`, "error");
@@ -366,7 +367,7 @@ export default function PortalWireframes({
   const unstarMessageMutation = useUnstarMessage({
     conversationId: currentConversationId,
     onSuccess: () => {
-      pushToast("Đã bỏ đánh dấu tin nhắn", "success");
+      toast.success("Đã bỏ đánh dấu tin nhắn");
     },
     onError: (error) => {
       pushToast(`Lỗi khi bỏ đánh dấu: ${error.message}`, "error");

@@ -8,7 +8,13 @@ import { retryWithBackoff, MESSAGE_RETRY_CONFIG } from "@/utils/retryLogic";
 import { classifyError } from "@/utils/errorHandling";
 import { addFailedMessage, deleteDraft } from "@/utils/storage";
 import { useSendTimeout } from "@/hooks/useSendTimeout";
-import type { SendChatMessageRequest, ChatMessage } from "@/types/messages";
+import type {
+  SendChatMessageRequest,
+  ChatMessage,
+  GetMessagesResponse,
+} from "@/types/messages";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
+import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 
 interface UseSendMessageOptions {
@@ -64,12 +70,14 @@ export function useSendMessage({
   onError,
 }: UseSendMessageOptions) {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((state) => state.user);
 
   // Timeout hook (10s timeout)
   const { startTimeout, cancelTimeout } = useSendTimeout({
     timeoutMs: 10000,
     onTimeout: () => {
-      toast.error("Mất kết nối mạng. Vui lòng kiểm tra kết nối và thử lại.");
+      // No toast here - let onError handle it after all retries are exhausted
+      // This prevents showing "network error" toast prematurely during retry attempts
     },
   });
 
@@ -88,47 +96,66 @@ export function useSendMessage({
         ...MESSAGE_RETRY_CONFIG,
         onRetry: (retryCount) => {
           // Update temp message to 'retrying' state with retry counter
-          const queryKey = ["messages", conversationId];
+          queryClient.setQueryData<{
+            pages: GetMessagesResponse[];
+            pageParams: (string | undefined)[];
+          }>(messageKeys.conversation(conversationId), (old) => {
+            if (!old) return old;
 
-          queryClient.setQueryData<{ pages: Array<{ data: ChatMessage[] }> }>(
-            queryKey,
-            (old) => {
-              if (!old) return old;
-
-              return {
-                ...old,
-                pages: old.pages.map((page) => ({
-                  ...page,
-                  data: page.data.map((msg) =>
-                    msg.sendStatus === "sending" ||
-                    msg.sendStatus === "retrying"
-                      ? {
-                          ...msg,
-                          sendStatus: "retrying" as const,
-                          retryCount,
-                        }
-                      : msg,
-                  ),
-                })),
-              };
-            },
-          );
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                items: page.items.map((msg) =>
+                  msg.sendStatus === "sending" || msg.sendStatus === "retrying"
+                    ? {
+                        ...msg,
+                        sendStatus: "retrying" as const,
+                        retryCount,
+                      }
+                    : msg,
+                ),
+              })),
+            };
+          });
         },
       });
     },
 
     onMutate: async (data) => {
+      // Build quotedMessage preview from cache if quoteMessageId is provided
+      let quotedMessage: ChatMessage["quotedMessage"] = null;
+      if (data.quoteMessageId) {
+        const cached = queryClient.getQueryData<{
+          pages: GetMessagesResponse[];
+          pageParams: (string | undefined)[];
+        }>(messageKeys.conversation(conversationId));
+        const originalMsg = cached?.pages
+          .flatMap((page) => page.items)
+          .find((msg) => msg.id === data.quoteMessageId);
+        if (originalMsg) {
+          quotedMessage = {
+            id: originalMsg.id,
+            content: originalMsg.content || "",
+            senderId: originalMsg.senderId,
+            senderName: originalMsg.senderName,
+            sentAt: originalMsg.sentAt,
+          };
+        }
+      }
+
       // Create optimistic message with temp ID
       const tempMessage: ChatMessage = {
         id: `temp-${crypto.randomUUID()}`,
         conversationId: data.conversationId,
-        senderId: "current-user", // Will be replaced by real message
-        senderName: "You",
-        senderIdentifier: null,
-        senderFullName: null,
-        senderRoles: null,
+        senderId: currentUser?.id || "current-user",
+        senderName: currentUser?.fullName || currentUser?.identifier || "You",
+        senderIdentifier: currentUser?.identifier || null,
+        senderFullName: currentUser?.fullName || null,
+        senderRoles: currentUser?.roles?.join(",") || null,
         parentMessageId: data.parentMessageId || null,
-        quoteMessageId: data.quoteMessageId || null, // Support quote reply
+        quoteMessageId: data.quoteMessageId || null,
+        quotedMessage,
         content: data.content || null,
         contentType: "TXT",
         sentAt: new Date().toISOString(),
@@ -157,29 +184,27 @@ export function useSendMessage({
       };
 
       // Add to cache
-      queryClient.setQueryData<{ pages: Array<{ data: ChatMessage[] }> }>(
-        ["messages", conversationId],
-        (old) => {
-          if (!old) {
-            return {
-              pages: [
-                { data: [tempMessage], hasMore: false, oldestMessageId: null },
-              ],
-              pageParams: [undefined],
-            };
-          }
-
-          // Add to first page
+      queryClient.setQueryData<{
+        pages: GetMessagesResponse[];
+        pageParams: (string | undefined)[];
+      }>(messageKeys.conversation(conversationId), (old) => {
+        if (!old) {
           return {
-            ...old,
-            pages: old.pages.map((page, index) =>
-              index === 0
-                ? { ...page, data: [...page.data, tempMessage] }
-                : page,
-            ),
+            pages: [{ items: [tempMessage], nextCursor: null, hasMore: false }],
+            pageParams: [undefined],
           };
-        },
-      );
+        }
+
+        // Add to first page
+        return {
+          ...old,
+          pages: old.pages.map((page, index) =>
+            index === 0
+              ? { ...page, items: [tempMessage, ...page.items] }
+              : page,
+          ),
+        };
+      });
 
       return { tempMessageId: tempMessage.id };
     },
@@ -191,30 +216,38 @@ export function useSendMessage({
       // Classify error
       const classified = classifyError(error);
 
+      // Log error for debugging
+      console.error("[useSendMessage] Failed to send message:", {
+        error,
+        classified,
+        conversationId,
+        retryCount: MESSAGE_RETRY_CONFIG.maxRetries,
+      });
+
       // Update temp message to 'failed' state
       if (context?.tempMessageId) {
-        queryClient.setQueryData<{ pages: Array<{ data: ChatMessage[] }> }>(
-          ["messages", conversationId],
-          (old) => {
-            if (!old) return old;
+        queryClient.setQueryData<{
+          pages: GetMessagesResponse[];
+          pageParams: (string | undefined)[];
+        }>(messageKeys.conversation(conversationId), (old) => {
+          if (!old) return old;
 
-            return {
-              ...old,
-              pages: old.pages.map((page) => ({
-                ...page,
-                data: page.data.map((msg) =>
-                  msg.id === context.tempMessageId
-                    ? {
-                        ...msg,
-                        sendStatus: "failed" as const,
-                        failReason: classified.message,
-                      }
-                    : msg,
-                ),
-              })),
-            };
-          },
-        );
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.map((msg) =>
+                msg.id === context.tempMessageId
+                  ? {
+                      ...msg,
+                      sendStatus: "failed" as const,
+                      failReason: classified.message,
+                    }
+                  : msg,
+              ),
+            })),
+          };
+        });
       }
 
       // Save to failed message queue
@@ -253,19 +286,39 @@ export function useSendMessage({
 
       if (context?.tempMessageId) {
         queryClient.setQueryData<{
-          pages: Array<{ data: ChatMessage[] }>;
-        }>(["messages", targetConversationId], (old) => {
+          pages: GetMessagesResponse[];
+          pageParams: (string | undefined)[];
+        }>(messageKeys.conversation(targetConversationId), (old) => {
           if (!old) return old;
 
+          // Check if SignalR already added the real message (race condition)
+          const realMessageExists = old.pages.some((page) =>
+            page.items.some((msg) => msg.id === data.id),
+          );
+
+          if (realMessageExists) {
+            // SignalR already added it — just remove the temp message
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                items: page.items.filter(
+                  (msg) => msg.id !== context.tempMessageId,
+                ),
+              })),
+            };
+          }
+
+          // SignalR hasn't arrived yet — replace temp with real message
           return {
             ...old,
             pages: old.pages.map((page) => ({
               ...page,
-              data: page.data.map((msg) =>
+              items: page.items.map((msg) =>
                 msg.id === context.tempMessageId
                   ? {
-                      ...data, // Use real message from server
-                      sendStatus: undefined, // Remove client-only fields
+                      ...data,
+                      sendStatus: undefined,
                       retryCount: undefined,
                     }
                   : msg,
@@ -283,12 +336,13 @@ export function useSendMessage({
       // This handles cases where SignalR is delayed or disconnected
       setTimeout(() => {
         const currentCache = queryClient.getQueryData<{
-          pages: Array<{ data: ChatMessage[] }>;
-        }>(["messages", targetConversationId]);
+          pages: GetMessagesResponse[];
+          pageParams: (string | undefined)[];
+        }>(messageKeys.conversation(targetConversationId));
 
         // Check if message exists in cache (by ID or content+time match)
         const messageExists = currentCache?.pages.some((page) =>
-          page.data.some(
+          page.items.some(
             (msg) =>
               msg.id === data.id ||
               (msg.content === data.content &&
@@ -299,7 +353,7 @@ export function useSendMessage({
 
         if (!messageExists) {
           queryClient.invalidateQueries({
-            queryKey: ["messages", targetConversationId],
+            queryKey: messageKeys.conversation(targetConversationId),
             refetchType: "active",
           });
         } else {
@@ -307,7 +361,7 @@ export function useSendMessage({
             `[useSendMessage] Message ${data.id} confirmed in cache for conversation ${targetConversationId}`,
           );
         }
-      }, 1500); // ✅ FIX: Reduced from 3000ms to 1500ms
+      }, 1500);
 
       // Invalidate attachments query if message has attachments
       // So ConversationDetailPanel right panel updates with new files/images

@@ -23,6 +23,42 @@ export interface FilePreviewRequest {
 }
 
 /**
+ * Watermark information returned by preview API
+ */
+export interface PreviewWatermarkInfo {
+  userIdentifier: string | null;
+  timestamp: string;
+  text: string | null;
+  textColor: string | null;
+  textOutlineColor: string | null;
+  textOutlineWidth: number;
+  textShadow: boolean;
+  fontSize: number;
+  fontFamily: string | null;
+  rotation: number;
+  opacity: number;
+}
+
+/**
+ * JSON response from GET /api/Files/{id}/preview
+ * Updated: 2026-03-06 - Returns JSON object instead of raw bytes
+ */
+export interface FilePreviewDto {
+  fileId: string;
+  fileName: string | null;
+  dataBase64: string | null;
+  contentType: string | null;
+  canDownload: boolean;
+  wasWatermarked: boolean;
+  fromCache: boolean;
+  isPdf: boolean;
+  pageNumber: number | null;
+  totalPages: number | null;
+  wasRedacted: boolean;
+  watermark: PreviewWatermarkInfo | null;
+}
+
+/**
  * Response from file preview API
  * Includes binary image data and pagination headers
  */
@@ -313,4 +349,31 @@ export interface ExcelPreviewDto {
 export interface ExcelPreviewOptions {
   /** Include cell styling (default: true) */
   includeStyles?: boolean;
+}
+
+// ========================================
+// Watermarked Thumbnail Types
+// ========================================
+
+/**
+ * Response DTO for watermarked thumbnail API
+ * GET /api/Files/{id}/watermarked-thumbnail
+ */
+export interface ThumbnailInfoDto {
+  /** File ID (UUID) */
+  fileId: string;
+  /** Original file name */
+  fileName: string;
+  /** Base64-encoded image data */
+  imageBase64: string;
+  /** Image MIME type (e.g., "image/jpeg", "image/png") */
+  contentType: string;
+  /** Whether the file can be downloaded */
+  canDownload: boolean;
+  /** Whether the thumbnail has a watermark applied */
+  hasWatermark: boolean;
+  /** Thumbnail size that was returned */
+  size: string;
+  /** Whether the response was served from cache */
+  fromCache: boolean;
 }

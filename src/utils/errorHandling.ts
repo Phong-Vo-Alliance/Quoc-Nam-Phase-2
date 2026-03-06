@@ -32,7 +32,7 @@ export function classifyError(error: unknown): ClassifiedError {
   if (error instanceof Error && error.name === "AbortError") {
     return {
       type: "NETWORK_TIMEOUT",
-      message: "Mất kết nối mạng. Vui lòng kiểm tra kết nối.",
+      message: "Đã xảy ra lỗi vui lòng thử lại",
       isRetryable: false, // Timeout already exceeded, don't retry automatically
     };
   }

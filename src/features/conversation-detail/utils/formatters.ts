@@ -36,8 +36,10 @@ export const isToday = (dateString: string): boolean => {
  * Abbreviate Vietnamese name to fit within maxWidth
  * Strategy: Keep họ (first part) and tên (last part), abbreviate middle names progressively
  * Only abbreviates names with 4 or more words
- * Example: "Trần Thị Hồng Nhung" -> "Trần T Hồng Nhung" -> "Trần T H Nhung"
- * @param name Full name
+ * Handles text in parentheses (e.g., roles) separately
+ * Example: "Phạm Đình Chí Kiên (leader)" -> "Phạm Đ C Kiên (leader)"
+ * Example: "Trần Thị Hồng Nhung" -> "Trần T H Nhung"
+ * @param name Full name (may include text in parentheses)
  * @param maxChars Approximate max characters (default 20 for ~180px)
  */
 export const abbreviateVietnameseName = (
@@ -46,9 +48,19 @@ export const abbreviateVietnameseName = (
 ): string => {
   if (!name || name.length <= maxChars) return name;
 
-  const parts = name.trim().split(/\s+/);
+  // Extract text in parentheses (e.g., role, title)
+  const parenthesesMatch = name.match(/\s*(\([^)]*\))\s*$/);
+  const suffix = parenthesesMatch ? parenthesesMatch[1] : "";
+  const nameWithoutSuffix = parenthesesMatch
+    ? name.slice(0, parenthesesMatch.index).trim()
+    : name.trim();
+
+  const parts = nameWithoutSuffix.split(/\s+/);
+
   // Only abbreviate if name has 4 or more words
-  if (parts.length < 4) return name;
+  if (parts.length < 4) {
+    return suffix ? `${nameWithoutSuffix} ${suffix}` : nameWithoutSuffix;
+  }
 
   const ho = parts[0]; // Họ - first part
   const ten = parts[parts.length - 1]; // Tên - last part
@@ -58,14 +70,24 @@ export const abbreviateVietnameseName = (
   let abbreviated = [...middleParts];
   for (let i = 0; i < abbreviated.length; i++) {
     const result = [ho, ...abbreviated, ten].join(" ");
-    if (result.length <= maxChars) {
-      return result;
+    const fullResult = suffix ? `${result} ${suffix}` : result;
+
+    if (fullResult.length <= maxChars) {
+      return fullResult;
     }
+
     // Abbreviate this middle name part
+    // 🐛 FIX: Only abbreviate if word starts with letter or number, not special characters
     if (abbreviated[i].length > 1) {
-      abbreviated[i] = abbreviated[i][0].toUpperCase();
+      const firstChar = abbreviated[i][0];
+      // Check if first character is alphanumeric (letter or number)
+      if (/^[a-zA-Z0-9]/.test(firstChar)) {
+        abbreviated[i] = firstChar.toUpperCase();
+      }
+      // If starts with special character (e.g., "(leader)"), keep original word
     }
   }
 
-  return [ho, ...abbreviated, ten].join(" ");
+  const finalResult = [ho, ...abbreviated, ten].join(" ");
+  return suffix ? `${finalResult} ${suffix}` : finalResult;
 };

@@ -24,10 +24,8 @@ global.URL.revokeObjectURL = vi.fn((url: string) => {
 describe("imageCacheStore", () => {
   beforeEach(() => {
     // Reset store
-    useImageCacheStore.setState({
-      cache: new Map(),
-      loading: new Map(),
-    });
+    useImageCacheStore.getState().clearCache();
+    useImageCacheStore.setState({ cache: new Map() });
 
     // Reset mocks
     vi.clearAllMocks();
@@ -49,7 +47,7 @@ describe("imageCacheStore", () => {
       const { getImageUrl } = useImageCacheStore.getState();
       const url = await getImageUrl("file-123");
 
-      // THEN: API called
+      // THEN: API called with default size "large"
       expect(getImageThumbnail).toHaveBeenCalledWith("file-123", "large");
 
       // AND: Blob URL created
@@ -58,9 +56,28 @@ describe("imageCacheStore", () => {
       // AND: URL returned
       expect(url).toBe("blob:mock-url-1");
 
-      // AND: Cached in store
+      // AND: Cached in store with composite key
       const { cache } = useImageCacheStore.getState();
-      expect(cache.get("file-123")).toBe("blob:mock-url-1");
+      expect(cache.get("file-123:large")).toBe("blob:mock-url-1");
+    });
+
+    it("should support different sizes with separate cache keys", async () => {
+      const mockBlob = new Blob(["test"], { type: "image/jpeg" });
+      vi.mocked(getImageThumbnail).mockResolvedValue(mockBlob);
+
+      const { getImageUrl } = useImageCacheStore.getState();
+      await getImageUrl("file-123", "medium");
+      await getImageUrl("file-123", "large");
+
+      // THEN: API called twice (different sizes)
+      expect(getImageThumbnail).toHaveBeenCalledTimes(2);
+      expect(getImageThumbnail).toHaveBeenCalledWith("file-123", "medium");
+      expect(getImageThumbnail).toHaveBeenCalledWith("file-123", "large");
+
+      // AND: Both cached separately
+      const { cache } = useImageCacheStore.getState();
+      expect(cache.has("file-123:medium")).toBe(true);
+      expect(cache.has("file-123:large")).toBe(true);
     });
 
     it("should return cached URL on subsequent requests (no re-fetch)", async () => {
@@ -113,12 +130,12 @@ describe("imageCacheStore", () => {
 
       // AND: Not cached
       const { cache } = useImageCacheStore.getState();
-      expect(cache.has("file-123")).toBe(false);
+      expect(cache.has("file-123:large")).toBe(false);
 
       consoleWarnSpy.mockRestore();
     });
 
-    it("should prevent duplicate fetches for same image", async () => {
+    it("should share in-flight promise for duplicate requests", async () => {
       // GIVEN: Slow API response
       let resolvePromise: (blob: Blob) => void;
       const mockPromise = new Promise<Blob>((resolve) => {
@@ -129,18 +146,38 @@ describe("imageCacheStore", () => {
       // WHEN: Request same image twice simultaneously
       const { getImageUrl } = useImageCacheStore.getState();
       const promise1 = getImageUrl("file-123");
-      const promise2 = getImageUrl("file-123"); // Second request while first is loading
+      const promise2 = getImageUrl("file-123");
 
-      // THEN: Second request returns null (already loading)
-      expect(await promise2).toBeNull();
-
-      // AND: First request completes successfully
+      // Resolve the shared fetch
       const mockBlob = new Blob(["test"], { type: "image/jpeg" });
       resolvePromise!(mockBlob);
-      expect(await promise1).toBe("blob:mock-url-1");
+
+      // THEN: Both requests get the same URL
+      const url1 = await promise1;
+      const url2 = await promise2;
+      expect(url1).toBe("blob:mock-url-1");
+      expect(url2).toBe("blob:mock-url-1");
 
       // AND: API called only once
       expect(getImageThumbnail).toHaveBeenCalledTimes(1);
+    });
+
+    it("should allow retry after failed request", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      // GIVEN: First request fails
+      vi.mocked(getImageThumbnail).mockRejectedValueOnce(new Error("fail"));
+      const { getImageUrl } = useImageCacheStore.getState();
+      const url1 = await getImageUrl("file-123");
+      expect(url1).toBeNull();
+
+      // WHEN: Retry succeeds
+      const mockBlob = new Blob(["test"], { type: "image/jpeg" });
+      vi.mocked(getImageThumbnail).mockResolvedValueOnce(mockBlob);
+      const url2 = await getImageUrl("file-123");
+
+      // THEN: Second attempt works
+      expect(url2).toBe("blob:mock-url-1");
     });
   });
 
@@ -198,10 +235,6 @@ describe("imageCacheStore", () => {
       // AND: Cache cleared
       const cacheAfter = useImageCacheStore.getState().cache;
       expect(cacheAfter.size).toBe(0);
-
-      // AND: Loading state cleared
-      const loadingAfter = useImageCacheStore.getState().loading;
-      expect(loadingAfter.size).toBe(0);
     });
   });
 });

@@ -1,12 +1,15 @@
 /**
  * useFilteredAssignees Hook
  *
- * Filters assignable members for Leader mode based on:
- * 1. Current user (self) - always included
- * 2. Department members who are also in the conversation
+ * Filters assignable members based on user role:
  *
- * For Leader task filtering: Leader can only see tasks assigned to
- * themselves and their department members who are in the conversation.
+ * **Admin:**
+ * - Can assign to ALL conversation members (exclude self)
+ * - No department filtering
+ *
+ * **Leader:**
+ * - Can assign to self + department members in conversation
+ * - Department-based filtering applied
  *
  * @module hooks/useFilteredAssignees
  */
@@ -15,6 +18,7 @@ import { useMemo } from "react";
 import { useDepartmentMembers } from "@/hooks/queries/useDepartmentMembers";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useAuthStore } from "@/stores/authStore";
+import { hasRole } from "@/utils/roleUtils";
 import type { MinimalMember } from "@/utils/memberTransform";
 import type { DepartmentMemberDto } from "@/types/identity";
 import type { ConversationMember } from "@/types/conversations";
@@ -27,7 +31,11 @@ interface UseFilteredAssigneesOptions {
 }
 
 interface UseFilteredAssigneesResult {
-  /** Filtered members: self + department members in conversation */
+  /**
+   * Filtered members based on role:
+   * - Admin: All conversation members (exclude self)
+   * - Leader: Self + department members in conversation
+   */
   filteredMembers: MinimalMember[];
   /** Loading state (true if either API is loading) */
   isLoading: boolean;
@@ -146,6 +154,15 @@ export function useFilteredAssignees({
   // Compute filtered members
   const filteredMembers = useMemo(() => {
     const currentUserId = currentUser?.id;
+
+    // 🎯 ADMIN: Can assign to ALL conversation members (exclude self)
+    if (hasRole("Admin")) {
+      // Wait for conversation members to load
+      if (!conversationMembers.length) return [];
+
+      // Return all members except current user (admin cannot assign to self)
+      return conversationMembers.filter((m) => m.id !== currentUserId);
+    }
 
     // 🚨 INVALID STATE: Leader MUST have department
     // Fallback: Only show leader's own tasks

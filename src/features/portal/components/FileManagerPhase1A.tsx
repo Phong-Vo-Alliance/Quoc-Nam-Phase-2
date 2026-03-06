@@ -12,6 +12,7 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 import { API_ENDPOINTS } from "@/config/env.config";
 import { useAuthStore } from "@/stores/authStore";
+import { useImageCacheStore } from "@/stores/imageCacheStore";
 import { toast } from "sonner"; // Phase 2: For toast notifications
 import FilePreviewModal from "@/components/FilePreviewModal"; // Phase 2.2: Document preview
 
@@ -135,10 +136,10 @@ const BlobImage: React.FC<{
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState(false);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const getImageUrl = useImageCacheStore((state) => state.getImageUrl);
 
   React.useEffect(() => {
     if (!fileId) {
-      // Use fallback URL if no fileId
       if (fallbackUrl) {
         setObjectUrl(fallbackUrl);
       }
@@ -146,46 +147,73 @@ const BlobImage: React.FC<{
     }
 
     let isMounted = true;
-    let url: string | null = null;
+    // Only track local blob URL for preview endpoint (not cached)
+    let localUrl: string | null = null;
 
     const fetchBlob = async () => {
       setIsLoading(true);
       setError(false);
 
       try {
-        // Add timestamp to force fresh request and avoid cache
-        const timestamp = Date.now();
-        const apiEndpoint =
-          endpoint === "thumbnail"
-            ? `${API_ENDPOINTS.file}/api/Files/${fileId}/watermarked-thumbnail?size=medium&t=${timestamp}`
-            : `${API_ENDPOINTS.file}/api/Files/${fileId}/preview?t=${timestamp}`;
+        if (endpoint === "thumbnail") {
+          // Use shared cache store — deduplicates across component instances.
+          // Multiple callers for the same fileId share one in-flight request.
+          const url = await getImageUrl(fileId, "medium");
+          if (isMounted) {
+            if (url) {
+              setObjectUrl(url);
+            } else if (fallbackUrl) {
+              setObjectUrl(fallbackUrl);
+            }
+            setIsLoading(false);
+          }
+        } else {
+          // Preview endpoint — fetch JSON response and convert base64 to blob
+          // Updated 2026-03-06: API now returns JSON with base64 data
+          const timestamp = Date.now();
+          const apiEndpoint = `${API_ENDPOINTS.file}/api/Files/${fileId}/preview?t=${timestamp}`;
 
-        const response = await fetch(apiEndpoint, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        });
+          const response = await fetch(apiEndpoint, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
+          });
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
 
-        const blob = await response.blob();
+          // Parse JSON response
+          const jsonData = await response.json();
 
-        if (isMounted) {
-          url = URL.createObjectURL(blob);
-          setObjectUrl(url);
-          setIsLoading(false);
+          if (!jsonData.dataBase64) {
+            throw new Error("No image data in preview response");
+          }
+
+          // Convert base64 to blob
+          const binaryString = atob(jsonData.dataBase64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          const contentType = jsonData.contentType || "image/png";
+          const blob = new Blob([bytes], { type: contentType });
+
+          if (isMounted) {
+            localUrl = URL.createObjectURL(blob);
+            setObjectUrl(localUrl);
+            setIsLoading(false);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch blob image:", err);
         if (isMounted) {
           setError(true);
           setIsLoading(false);
-          // Fallback to original URL if available
           if (fallbackUrl) {
             setObjectUrl(fallbackUrl);
           }
@@ -195,14 +223,15 @@ const BlobImage: React.FC<{
 
     fetchBlob();
 
-    // Cleanup: revoke object URL to prevent memory leaks
+    // Cleanup: only revoke locally-created blob URLs (preview).
+    // Thumbnail blob URLs are managed by imageCacheStore.
     return () => {
       isMounted = false;
-      if (url) {
-        URL.revokeObjectURL(url);
+      if (localUrl) {
+        URL.revokeObjectURL(localUrl);
       }
     };
-  }, [fileId, fallbackUrl, endpoint, accessToken]);
+  }, [fileId, fallbackUrl, endpoint, accessToken, getImageUrl]);
 
   if (isLoading) {
     return (
@@ -382,27 +411,11 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
           block: "center",
         });
 
-        // Option 2: Background Glow (simple & effective)
-        element.classList.add(
-          "ring-2",
-          "ring-orange-400",
-          "ring-offset-2",
-          "bg-orange-50/80",
-          "transition-all",
-          "duration-300",
-          "message-highlighted", // For CSS text color override
-        );
+        // Highlight message bubble (CHỈ bubble bên trong, KHÔNG tô container)
+        element.classList.add("message-highlighted");
 
         setTimeout(() => {
-          element.classList.remove(
-            "ring-2",
-            "ring-orange-400",
-            "ring-offset-2",
-            "bg-orange-50/80",
-            "transition-all",
-            "duration-300",
-            "message-highlighted",
-          );
+          element.classList.remove("message-highlighted");
         }, 2500);
       };
 
@@ -660,6 +673,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       }`}
       onClick={() => handleOpenPreview(f)}
       onContextMenu={(e) => e.preventDefault()}
+      data-testid={`media-grid-item-${f.id}`}
     >
       {f.kind === "image" ? (
         <BlobImage
@@ -698,6 +712,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
     <div
       key={f.id}
       className="group relative flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-gray-50 cursor-pointer"
+      data-testid={`document-list-item-${f.id}`}
       onClick={() => handleOpenPreview(f)}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -736,7 +751,10 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
   return (
     <div className="space-y-2" onContextMenu={(e) => e.preventDefault()}>
       {mode === "media" ? (
-        <div className="grid grid-cols-3 gap-2">
+        <div
+          className="grid grid-cols-3 gap-2"
+          data-testid="media-grid-container"
+        >
           {visible.length === 0 ? (
             <div className="col-span-3 text-[11px] text-gray-400">
               Chưa có {label.toLowerCase()} nào.
@@ -746,7 +764,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
           )}
         </div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-1" data-testid="document-list-container">
           {visible.length === 0 ? (
             <div className="text-[11px] text-gray-400">
               Chưa có tài liệu nào.

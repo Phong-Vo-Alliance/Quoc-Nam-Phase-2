@@ -41,6 +41,9 @@ interface StaffModeContentProps {
   effectiveUserId: string | undefined;
   conversationId?: string;
   workspaceId?: string;
+  isTasksLoading?: boolean;
+  // Loading state from chat (ChatMainContainer)
+  isLoading?: boolean;
 }
 
 export const StaffModeContent: React.FC<StaffModeContentProps> = ({
@@ -64,9 +67,11 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
   effectiveUserId,
   conversationId,
   workspaceId,
+  isTasksLoading = false,
+  isLoading = false,
 }) => {
   return (
-    <>
+    <div className={isLoading ? "opacity-50 pointer-events-none" : ""}>
       {/* Primary: Chưa xử lý + Đang xử lý */}
       <div
         className="premium-accordion-wrapper"
@@ -177,11 +182,22 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
           </div>
           <div className="mt-2 text-right">
             <button
-              className="text-xs text-brand-700 hover:underline"
-              onClick={() => setShowCompleted(true)}
+              disabled={isTasksLoading || isLoading}
+              onClick={() => {
+                if (!isTasksLoading && !isLoading) {
+                  setShowCompleted(true);
+                }
+              }}
+              className={`text-xs font-medium transition-colors ${
+                isTasksLoading || isLoading
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-brand-600 hover:text-brand-700 cursor-pointer"
+              }`}
               data-testid="staff-view-all-completed-button"
             >
-              Xem tất cả công việc đã hoàn thành
+              {isTasksLoading || isLoading
+                ? "Đang tải..."
+                : "Xem tất cả công việc đã hoàn thành"}
             </button>
           </div>
         </RightAccordion>
@@ -357,6 +373,6 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };

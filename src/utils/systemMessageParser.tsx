@@ -39,6 +39,11 @@
  *
  * 12. "[assignee-name] đã chuyển trạng thái công việc [task-name] sang [status]"
  *    → Highlight: assignee-name, Bold: task-name, Status color: status
+ *
+ * 13. "Loại việc [oldName] thuộc nhóm [categoryName] đã đổi tên thành [newName]"
+ *    → Bold: oldName, categoryName. Highlight (username style): newName
+ * 13b. (Fallback) "Loại việc [oldName] đã đổi tên thành [newName]"
+ *    → Bold: oldName, Bold: newName
  */
 
 import React from "react";
@@ -124,6 +129,14 @@ export function parseSystemMessageContent(
 
   const changeStatusPattern =
     /^(.+?)\s+đã chuyển trạng thái công việc\s+(.+?)\s+sang\s+(.+)$/;
+
+  // Pattern 13: "Loại việc [oldName] thuộc nhóm [categoryName] đã đổi tên thành [newName]"
+  const renameWorkTypeWithCategoryPattern =
+    /^Loại việc\s+(.+?)\s+thuộc nhóm\s+(.+?)\s+đã đổi tên thành\s+(.+)$/;
+
+  // Pattern 13b (fallback): "Loại việc [oldName] đã đổi tên thành [newName]"
+  const renameWorkTypePattern =
+    /^Loại việc\s+(.+?)\s+đã đổi tên thành\s+(.+)$/;
 
   let match: RegExpMatchArray | null;
 
@@ -262,6 +275,28 @@ export function parseSystemMessageContent(
     // Determine status type for color coding
     const statusType = statusMapping[cleanStatus] || "pending";
     parts.push({ type: "status", content: cleanStatus, statusType });
+    return parts;
+  }
+
+  // Try Pattern 13: Rename Work Type (with categoryName)
+  if ((match = content.match(renameWorkTypeWithCategoryPattern))) {
+    const [, oldName, categoryName, newName] = match;
+    parts.push({ type: "text", content: "Loại việc " });
+    parts.push({ type: "task-name", content: oldName.trim() });
+    parts.push({ type: "text", content: " thuộc nhóm " });
+    parts.push({ type: "task-name", content: categoryName.trim() });
+    parts.push({ type: "text", content: " đã đổi tên thành " });
+    parts.push({ type: "highlight", content: newName.trim() });
+    return parts;
+  }
+
+  // Try Pattern 13b: Rename Work Type (fallback - old format without categoryName)
+  if ((match = content.match(renameWorkTypePattern))) {
+    const [, oldName, newName] = match;
+    parts.push({ type: "text", content: "Loại việc " });
+    parts.push({ type: "task-name", content: oldName.trim() });
+    parts.push({ type: "text", content: " đã đổi tên thành " });
+    parts.push({ type: "task-name", content: newName.trim() });
     return parts;
   }
 

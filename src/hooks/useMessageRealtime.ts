@@ -102,6 +102,15 @@ export function useMessageRealtime({
         return;
       }
 
+      // 🐛 DEBUG: Log message mới nhận được
+      console.log("📨 [SignalR] New message received", {
+        messageId: message.id,
+        conversationId: message.conversationId,
+        currentConversationId: conversationIdRef.current,
+        content: message.content?.substring(0, 50),
+        sender: message.senderName,
+      });
+
       processedMessageIdsRef.current.add(message.id);
       if (processedMessageIdsRef.current.size > 500) {
         const trimmed = new Set(
@@ -110,12 +119,32 @@ export function useMessageRealtime({
         processedMessageIdsRef.current = trimmed;
       }
 
-      // Only handle messages for this conversation
       // ✅ FIX: Use ref to get latest conversationId to avoid stale closure
       const currentConversationId = conversationIdRef.current;
+
+      // 🆕 FIX: If message is from a different conversation (not currently active),
+      // remove that conversation's cache completely so it does a fresh fetch when user switches back
+      // Using removeQueries instead of invalidateQueries to avoid stale cache being displayed
       if (message.conversationId !== currentConversationId) {
+        console.log(
+          "🔄 [SignalR] Message for inactive conv → REMOVE cache (force fresh fetch)",
+          {
+            messageConvId: message.conversationId,
+            currentConvId: currentConversationId,
+          },
+        );
+        // Remove cache completely instead of just invalidating
+        // This ensures fresh fetch when user switches back
+        queryClient.removeQueries({
+          queryKey: messageKeys.conversation(message.conversationId),
+          exact: true,
+        });
         return;
       }
+
+      console.log(
+        "✅ [SignalR] Message for active conv → update cache directly",
+      );
 
       // Invalidate attachments query if message has attachments (IMG/FILE)
       // So ConversationDetailPanel right panel updates with new files/images
@@ -181,7 +210,13 @@ export function useMessageRealtime({
         pages: GetMessagesResponse[];
         pageParams: (string | undefined)[];
       }>(messageKeys.conversation(currentConversationId), (old) => {
-        if (!old || !old.pages.length) return old;
+        if (!old || !old.pages.length) {
+          // Cache not loaded yet — trigger refetch instead of silently dropping the message
+          queryClient.invalidateQueries({
+            queryKey: messageKeys.conversation(currentConversationId),
+          });
+          return old;
+        }
 
         // Check if message already exists (prevent duplicates)
         const exists = old.pages.some((page) =>
@@ -272,56 +307,36 @@ export function useMessageRealtime({
   }, []);
 
   // Setup SignalR listeners when connected
-  // ✅ FIX: This effect re-runs when conversationId or handleMessageSent changes,
-  // ensuring fresh conversationId reference in the event handler
+  // ✅ FIX: Use onWithCleanup() to properly track wrapped callbacks for cleanup
+  // This prevents handler leak (Bug 1) where chatHub.on() wraps the callback
+  // but chatHub.off() passes the original — making off() a no-op
   useEffect(() => {
-    // Only subscribe when connected
-    if (!isConnected) {
-      return;
-    }
+    if (!isConnected) return;
 
-    // Subscribe to MESSAGE_SENT event (primary event from backend)
-    // Backend sends data as { message: ChatMessage }
-    chatHub.on<MessageSentEvent>(
+    const cleanupMessageSent = chatHub.onWithCleanup<MessageSentEvent>(
       SIGNALR_EVENTS.MESSAGE_SENT,
       handleMessageSent,
+      false,
     );
-
-    // Also subscribe to legacy event names for backward compatibility
-    // chatHub.on<ChatMessage>(SIGNALR_EVENTS.NEW_MESSAGE, handleMessageSent);
-    // chatHub.on<ChatMessage>(SIGNALR_EVENTS.RECEIVE_MESSAGE, handleMessageSent);
-    chatHub.on<UserTypingEvent>(SIGNALR_EVENTS.USER_TYPING, handleUserTyping);
-    chatHub.on<UserTypingEvent>(
+    const cleanupTyping = chatHub.onWithCleanup<UserTypingEvent>(
+      SIGNALR_EVENTS.USER_TYPING,
+      handleUserTyping,
+      false,
+    );
+    const cleanupStoppedTyping = chatHub.onWithCleanup<UserTypingEvent>(
       SIGNALR_EVENTS.USER_STOPPED_TYPING,
       handleUserStoppedTyping,
+      false,
     );
-    // Cleanup
+
     return () => {
-      chatHub.off(
-        SIGNALR_EVENTS.MESSAGE_SENT,
-        handleMessageSent as (...args: unknown[]) => void,
-      );
-      // chatHub.off(
-      //   SIGNALR_EVENTS.NEW_MESSAGE,
-      //   handleMessageSent as (...args: unknown[]) => void,
-      // );
-      chatHub.off(
-        SIGNALR_EVENTS.RECEIVE_MESSAGE,
-        handleMessageSent as (...args: unknown[]) => void,
-      );
-      chatHub.off(
-        SIGNALR_EVENTS.USER_TYPING,
-        handleUserTyping as (...args: unknown[]) => void,
-      );
-      chatHub.off(
-        SIGNALR_EVENTS.USER_STOPPED_TYPING,
-        handleUserStoppedTyping as (...args: unknown[]) => void,
-      );
-      // ❌ REMOVED: Group leave (never joined in this hook)
+      cleanupMessageSent();
+      cleanupTyping();
+      cleanupStoppedTyping();
     };
   }, [
-    conversationId, // ✅ Re-subscribe when conversation changes
-    handleMessageSent, // ✅ Re-subscribe when handleMessageSent changes (includes conversationId via deps)
+    conversationId,
+    handleMessageSent,
     handleUserTyping,
     handleUserStoppedTyping,
     isConnected,

@@ -1,5 +1,6 @@
 import { fileApiClient } from "./fileClient";
 import type { UploadFileResult, BatchUploadResult } from "@/types/files";
+import type { ThumbnailInfoDto } from "@/types/filePreview";
 
 /**
  * Parameters for uploading a file
@@ -35,7 +36,7 @@ export interface UploadFileParams {
  * ```
  */
 export async function uploadFile(
-  params: UploadFileParams
+  params: UploadFileParams,
 ): Promise<UploadFileResult> {
   const { file, sourceModule, sourceEntityId, onUploadProgress } = params;
 
@@ -60,7 +61,7 @@ export async function uploadFile(
         "Content-Type": "multipart/form-data",
       },
       onUploadProgress: onUploadProgress as any,
-    }
+    },
   );
 
   return response.data;
@@ -93,7 +94,7 @@ export async function uploadFilesBatch(
   params?: {
     sourceModule?: number;
     sourceEntityId?: string;
-  }
+  },
 ): Promise<BatchUploadResult> {
   // Validation
   if (!files || files.length === 0) {
@@ -102,13 +103,13 @@ export async function uploadFilesBatch(
 
   if (files.length === 1) {
     throw new Error(
-      "Use single upload API (uploadFile) for 1 file. Batch upload requires 2-10 files."
+      "Use single upload API (uploadFile) for 1 file. Batch upload requires 2-10 files.",
     );
   }
 
   if (files.length > 10) {
     throw new Error(
-      `Maximum 10 files allowed per batch. Got ${files.length} files.`
+      `Maximum 10 files allowed per batch. Got ${files.length} files.`,
     );
   }
 
@@ -144,10 +145,23 @@ export async function uploadFilesBatch(
 }
 
 /**
+ * Convert base64 string to Blob
+ */
+function base64ToBlob(base64: string, contentType: string): Blob {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: contentType });
+}
+
+/**
  * Get watermarked thumbnail image for a file
  *
  * @param fileId File ID
- * @param size Thumbnail size (small=200px, medium=300px, large=400px)
+ * @param size Thumbnail size (small, medium, large)
  * @returns Blob containing watermarked thumbnail image
  * @throws Error if file not found (404) or network error
  *
@@ -161,15 +175,37 @@ export async function uploadFilesBatch(
  */
 export async function getImageThumbnail(
   fileId: string,
-  size: "small" | "medium" | "large" = "large"
+  size: "small" | "medium" | "large" = "large",
 ): Promise<Blob> {
-  const response = await fileApiClient.get(
+  const response = await fileApiClient.get<ThumbnailInfoDto>(
     `/api/Files/${fileId}/watermarked-thumbnail`,
     {
       params: { size },
-      responseType: "blob",
-      timeout: 30000, // 30s timeout for image loading
-    }
+      timeout: 30000,
+    },
+  );
+
+  const dto = response.data;
+  return base64ToBlob(dto.imageBase64, dto.contentType);
+}
+
+/**
+ * Get watermarked thumbnail info with metadata
+ *
+ * @param fileId File ID
+ * @param size Thumbnail size (small, medium, large)
+ * @returns Full ThumbnailInfoDto with image data and metadata
+ */
+export async function getImageThumbnailInfo(
+  fileId: string,
+  size: "small" | "medium" | "large" = "large",
+): Promise<ThumbnailInfoDto> {
+  const response = await fileApiClient.get<ThumbnailInfoDto>(
+    `/api/Files/${fileId}/watermarked-thumbnail`,
+    {
+      params: { size },
+      timeout: 30000,
+    },
   );
 
   return response.data;
@@ -177,9 +213,12 @@ export async function getImageThumbnail(
 
 /**
  * Get watermarked preview (full-size) image for a file
+ * API: GET /api/Files/{id}/preview
+ *
+ * **UPDATED 2026-03-06:** API now returns JSON with base64 data instead of raw bytes
  *
  * @param fileId File ID
- * @returns Blob containing watermarked full-size image
+ * @returns Blob containing watermarked full-size image (converted from base64)
  * @throws Error if file not found (404) or network error
  *
  * @example
@@ -191,12 +230,40 @@ export async function getImageThumbnail(
  * ```
  */
 export async function getImagePreview(fileId: string): Promise<Blob> {
-  const response = await fileApiClient.get(`/api/Files/${fileId}/preview`, {
-    responseType: "blob",
+  const response = await fileApiClient.get<{
+    fileId: string;
+    fileName: string | null;
+    dataBase64: string | null;
+    contentType: string | null;
+    canDownload: boolean;
+    wasWatermarked: boolean;
+    fromCache: boolean;
+    isPdf: boolean;
+    pageNumber: number | null;
+    totalPages: number | null;
+    wasRedacted: boolean;
+    watermark: any;
+  }>(`/api/Files/${fileId}/preview`, {
+    responseType: "json", // Changed from "blob" to "json"
     timeout: 30000, // 30s timeout for image loading
   });
 
-  return response.data;
+  // Convert base64 to blob
+  const data = response.data;
+  if (!data.dataBase64) {
+    throw new Error("No image data in preview response");
+  }
+
+  // Decode base64 to binary
+  const binaryString = atob(data.dataBase64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // Create blob with correct content type
+  const contentType = data.contentType || "image/png";
+  return new Blob([bytes], { type: contentType });
 }
 
 /**

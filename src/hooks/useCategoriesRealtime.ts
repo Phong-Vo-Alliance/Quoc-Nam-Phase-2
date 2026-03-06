@@ -14,8 +14,12 @@ import { getConversationMembers } from "@/api/conversations.api";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import type {
   CategoryWithUnread,
+  ConversationDto,
   ConversationWithUnread,
 } from "@/types/categories";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
+import type { ChatMessage, GetMessagesResponse } from "@/types/messages";
+import { useClientSystemMessagesStore } from "@/stores/clientSystemMessagesStore";
 
 /**
  * Hook for real-time category updates via SignalR
@@ -388,6 +392,158 @@ export function useCategoriesRealtime(
     const cleanup = chatHub.onWithCleanup(
       SIGNALR_EVENTS.CATEGORY_DEPARTMENT_LINKED,
       handleCategoryDepartmentLinked,
+    );
+
+    return cleanup;
+  }, [queryClient, isConnected]);
+
+  // ────────────────────────────────────────────────────────
+  // EVENT: ConversationUpdated
+  // ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isConnected) {
+      return;
+    }
+
+    const handleConversationUpdated = (raw: any) => {
+      // Backend may send different field names depending on DTO format:
+      // ConversationDto uses { id, name }, ConversationInfoDto uses { conversationId, conversationName }
+      const eventId: string | undefined = raw.id || raw.conversationId;
+      const eventName: string | undefined = raw.name || raw.conversationName;
+
+      console.log("[CategoryRealtime] ConversationUpdated raw event:", raw);
+
+      if (!eventName || !eventId) {
+        console.warn("[CategoryRealtime] ConversationUpdated missing id or name:", { eventId, eventName });
+        return;
+      }
+
+      // Show toast for rename: read old name from cache BEFORE updating it
+      // This works for all users: the renaming user already has the new name in cache
+      // (updated by mutation), so the check `oldName !== eventName` is FALSE → no duplicate toast.
+      // Other users still have the old name in cache → toast fires correctly.
+      const cachedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+        categoriesKeys.list(),
+      );
+      if (cachedCategories) {
+        for (const category of cachedCategories) {
+          const conv = category.conversations.find(
+            (c) => c.conversationId === eventId,
+          );
+          if (conv && conv.conversationName !== eventName) {
+            toast.info(
+              `Loại việc ${conv.conversationName} thuộc nhóm ${category.name} đã đổi tên thành ${eventName}`,
+            );
+
+            // Create system message for the rename event
+            const systemContent = `Loại việc ${conv.conversationName} thuộc nhóm ${category.name} đã đổi tên thành ${eventName}`;
+            const systemMessageId = `sys-rename-${eventId}-${Date.now()}`;
+            const systemMessage: ChatMessage = {
+              id: systemMessageId,
+              conversationId: eventId,
+              senderId: "system",
+              senderName: "System",
+              senderIdentifier: null,
+              senderFullName: null,
+              senderRoles: null,
+              parentMessageId: null,
+              quoteMessageId: null,
+              content: systemContent,
+              contentType: "SYS",
+              sentAt: new Date().toISOString(),
+              editedAt: null,
+              linkedTaskId: null,
+              reactions: [],
+              attachments: [],
+              replyCount: 0,
+              unreadReplyCount: 0,
+              isStarred: false,
+              isPinned: false,
+              threadPreview: null,
+              mentions: [],
+            };
+
+            // Persist in zustand store (survives react-query refetches)
+            useClientSystemMessagesStore
+              .getState()
+              .addMessage(eventId, systemMessage);
+
+            // Also insert into message cache for immediate UI update (if loaded)
+            const msgCacheKey = messageKeys.conversation(eventId);
+            const existingMsgCache = queryClient.getQueryData<{
+              pages: GetMessagesResponse[];
+              pageParams: (string | undefined)[];
+            }>(msgCacheKey);
+
+            if (existingMsgCache) {
+              queryClient.setQueryData<{
+                pages: GetMessagesResponse[];
+                pageParams: (string | undefined)[];
+              }>(msgCacheKey, (old) => {
+                if (!old || !old.pages?.length) return old;
+
+                // Deduplicate: check if a rename system message with same content already exists
+                const alreadyExists = old.pages.some((page) =>
+                  page.items.some(
+                    (item) =>
+                      item.contentType === "SYS" &&
+                      item.content === systemContent,
+                  ),
+                );
+                if (alreadyExists) return old;
+
+                const newPages = [...old.pages];
+                newPages[0] = {
+                  ...newPages[0],
+                  items: [systemMessage, ...newPages[0].items],
+                };
+                return { ...old, pages: newPages };
+              });
+            }
+
+            break;
+          }
+        }
+      }
+
+      // Surgical update of conversationName in categoriesKeys.list() cache
+      queryClient.setQueryData<CategoryWithUnread[]>(
+        categoriesKeys.list(),
+        (oldData) => {
+          if (!oldData) return oldData;
+
+          return oldData.map((category) => ({
+            ...category,
+            conversations: category.conversations.map((conv) =>
+              conv.conversationId === eventId
+                ? { ...conv, conversationName: eventName }
+                : conv,
+            ),
+          }));
+        },
+      );
+
+      // Surgical update of name in all category conversation caches (WorkTypeCard)
+      queryClient.setQueriesData<ConversationDto[]>(
+        { queryKey: categoriesKeys.conversations() },
+        (oldData) => {
+          if (!oldData) return oldData;
+          return oldData.map((conv) =>
+            conv.id === eventId ? { ...conv, name: eventName } : conv,
+          );
+        },
+      );
+
+      // Background invalidation to ensure data freshness from server
+      // This runs AFTER toast check + surgical update, so no race condition
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    };
+
+    const cleanup = chatHub.onWithCleanup(
+      SIGNALR_EVENTS.CONVERSATION_UPDATED,
+      handleConversationUpdated,
+      false,
     );
 
     return cleanup;

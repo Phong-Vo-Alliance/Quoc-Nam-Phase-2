@@ -413,9 +413,10 @@ class ChatHubConnection {
         this.reconnectAttempts = 0;
 
         // AUTO REFETCH: Invalidate messages to sync after reconnection
+        // ✅ FIX (Bug 6): Use correct 3-element key to match messageKeys.conversation()
         if (this.queryClient && this.currentConversationId) {
           this.queryClient.invalidateQueries({
-            queryKey: ["messages", this.currentConversationId],
+            queryKey: ["messages", "conversation", this.currentConversationId],
             refetchType: "active", // Only refetch if query is active
           });
         }

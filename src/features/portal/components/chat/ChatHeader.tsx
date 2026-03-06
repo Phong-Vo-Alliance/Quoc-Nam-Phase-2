@@ -196,12 +196,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           {categoryConversations &&
             categoryConversations.length > 0 &&
             onChangeConversation && (
-              <div className="mt-2" data-testid="conversation-tabs">
+              <div className="mt-2" data-testid="category-tabs">
                 <LinearTabs
                   tabs={categoryConversations.map((conv) => ({
                     key: conv.conversationId,
                     label: (
-                      <div className="relative inline-flex items-center gap-1">
+                      <div
+                        className="relative inline-flex items-center gap-1"
+                        data-testid={`category-tab-${conv.conversationId}`}
+                      >
                         <span className="truncate max-w-[150px]">
                           {conv.conversationName}
                         </span>

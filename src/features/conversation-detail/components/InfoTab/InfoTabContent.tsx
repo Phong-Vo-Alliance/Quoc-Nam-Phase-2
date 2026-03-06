@@ -75,7 +75,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
                   </>
                 ) : (
                   <span className="text-gray-500">
-                    Chọn loại việc để xem thông tin chi tiết
+                    Chọn loại việc để xem thông tin
                   </span>
                 )}
               </div>

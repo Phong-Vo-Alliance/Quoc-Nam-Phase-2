@@ -97,7 +97,10 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
       open={open}
       onOpenChange={(open) => !isSubmitting && onOpenChange(open)}
     >
-      <DialogContent className="max-w-[450px]">
+      <DialogContent
+        className="max-w-[450px]"
+        data-testid="add-edit-work-type-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {workType ? "Chỉnh sửa loại việc" : "Thêm loại việc"}
@@ -121,15 +124,19 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
               autoFocus
               maxLength={51} // Allow 51 to show error
               disabled={isSubmitting}
+              data-testid="work-type-name-input"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p
+              className="text-xs text-gray-500 mt-1"
+              data-testid="work-type-name-char-count"
+            >
               {name.trim().length}/50 ký tự
             </p>
           </div>
 
           {/* Error */}
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" data-testid="work-type-name-error">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
@@ -137,7 +144,7 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
 
           {/* Info */}
           {workType ? (
-            <Alert>
+            <Alert data-testid="work-type-info-alert">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs">
                 Cập nhật tên loại việc sẽ ảnh hưởng đến tất cả task và tin nhắn
@@ -145,7 +152,7 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
               </AlertDescription>
             </Alert>
           ) : (
-            <Alert>
+            <Alert data-testid="work-type-info-alert">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs">
                 <strong>Lưu ý:</strong>
@@ -164,10 +171,15 @@ export const AddEditWorkTypeDialog: React.FC<AddEditWorkTypeDialogProps> = ({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
+            data-testid="work-type-cancel-button"
           >
             Hủy
           </Button>
-          <Button onClick={handleSave} disabled={!name.trim() || isSubmitting}>
+          <Button
+            onClick={handleSave}
+            disabled={!name.trim() || isSubmitting}
+            data-testid="work-type-save-button"
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

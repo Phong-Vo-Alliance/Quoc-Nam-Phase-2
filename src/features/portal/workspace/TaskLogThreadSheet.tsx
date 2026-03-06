@@ -215,22 +215,12 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
       ) as HTMLElement | null;
       if (!el) return;
 
-      // Apply highlight only (scroll already done by useLayoutEffect above)
-      const originalBg = el.style.backgroundColor;
-      const originalBorder = el.style.border;
-      const originalTransition = el.style.transition;
-
-      el.style.transition = "background-color 0.3s ease, border 0.3s ease";
-      el.style.backgroundColor = "#fef3c7";
-      el.style.border = "2px solid #fbbf24";
+      // Apply highlight class (CSS animation in MessageBubbleSimple.tsx)
+      el.classList.add("message-highlighted");
 
       setTimeout(() => {
-        el.style.backgroundColor = originalBg;
-        el.style.border = originalBorder;
-        setTimeout(() => {
-          el.style.transition = originalTransition;
-        }, 500);
-      }, 2000);
+        el.classList.remove("message-highlighted");
+      }, 2500);
 
       onConsumeTargetMessage?.();
     }, 100);
@@ -350,24 +340,36 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
           // Parallel fetch: latest 50 + around target
           const [latestData, aroundData] = await Promise.all([
             getMessageThread({ messageId: parentMessageId }),
-            getMessageThread({ messageId: parentMessageId, aroundMessageId: capturedTarget }),
+            getMessageThread({
+              messageId: parentMessageId,
+              aroundMessageId: capturedTarget,
+            }),
           ]);
 
           if (!isMounted) return;
 
           // Reverse both (API returns DESC → we need ASC)
-          const latestReplies = latestData.replies ? [...latestData.replies].reverse() : [];
-          const aroundReplies = aroundData.replies ? [...aroundData.replies].reverse() : [];
+          const latestReplies = latestData.replies
+            ? [...latestData.replies].reverse()
+            : [];
+          const aroundReplies = aroundData.replies
+            ? [...aroundData.replies].reverse()
+            : [];
 
           // Check if target is already in the latest block
-          const targetInLatest = latestReplies.some((r) => r.id === capturedTarget);
+          const targetInLatest = latestReplies.some(
+            (r) => r.id === capturedTarget,
+          );
 
           if (targetInLatest) {
             // Target is within latest 50 → use existing behavior, no gap
             setThreadData({ ...latestData, replies: latestReplies });
           } else {
             // Merge both blocks (inputs are already ASC)
-            const { messages: merged, hasGap } = mergeThreadBlocks(aroundReplies, latestReplies);
+            const { messages: merged, hasGap } = mergeThreadBlocks(
+              aroundReplies,
+              latestReplies,
+            );
 
             if (hasGap) {
               setHasGapBelow(true);
@@ -392,7 +394,9 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
           const data = await getMessageThread({ messageId: parentMessageId });
           if (!isMounted) return;
 
-          const reversedReplies = data.replies ? [...data.replies].reverse() : [];
+          const reversedReplies = data.replies
+            ? [...data.replies].reverse()
+            : [];
           setThreadData({ ...data, replies: reversedReplies });
         }
       } catch (err) {
@@ -477,7 +481,8 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   // ✅ FIX: Use flushSync + scroll preservation (same pattern as handleLoadMore)
   // ✅ FIX: Stop when loaded messages overlap with initial latest-block
   const handleLoadMoreDownward = useCallback(async () => {
-    if (!parentMessageId || !gapAfterCursor || isLoadingGapFill || !hasGapBelow) return;
+    if (!parentMessageId || !gapAfterCursor || isLoadingGapFill || !hasGapBelow)
+      return;
 
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -508,7 +513,8 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
             const existingIds = new Set((prev.replies ?? []).map((m) => m.id));
             const uniqueNew = newReplies.filter((m) => !existingIds.has(m.id));
             const all = [...(prev.replies ?? []), ...uniqueNew].sort(
-              (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+              (a, b) =>
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
             );
             return { ...prev, replies: all };
           });
@@ -665,7 +671,13 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
 
     // Only scroll smoothly when new messages arrive (count increases)
     // Skip if we're loading older messages, filling a gap, or navigating to a target message
-    if (previousCount > 0 && currentCount > previousCount && !isLoadingMore && !isLoadingGapFill && !initialTargetRef.current) {
+    if (
+      previousCount > 0 &&
+      currentCount > previousCount &&
+      !isLoadingMore &&
+      !isLoadingGapFill &&
+      !initialTargetRef.current
+    ) {
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);

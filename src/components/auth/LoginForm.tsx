@@ -4,16 +4,17 @@
  * Main login form with validation and API integration
  */
 
-import * as React from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { IdentifierInput } from './IdentifierInput';
-import { PasswordInput } from './PasswordInput';
-import { loginSchema, type LoginFormData } from '@/lib/validation/auth';
-import { useLogin, getLoginErrorMessage } from '@/hooks/mutations/useLogin';
-import { cn } from '@/lib/utils';
+import * as React from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { IdentifierInput } from "./IdentifierInput";
+import { PasswordInput } from "./PasswordInput";
+import { loginSchema, type LoginFormData } from "@/lib/validation/auth";
+import { useLogin, getLoginErrorMessage } from "@/hooks/mutations/useLogin";
+import { cn } from "@/lib/utils";
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -32,7 +33,12 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    mode: 'onBlur',
+    mode: "onBlur",
+    defaultValues: import.meta.env.DEV
+      ? {
+          password: "Admin@123",
+        }
+      : undefined,
   });
 
   const { mutate: login, isPending } = useLogin({
@@ -41,7 +47,9 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
       onSuccess?.();
     },
     onError: (error) => {
-      setApiError(getLoginErrorMessage(error));
+      const errorMessage = getLoginErrorMessage(error);
+      setApiError(errorMessage);
+      toast.error(errorMessage);
     },
   });
 
@@ -58,20 +66,20 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className={cn('space-y-6', className)}
+      className={cn("space-y-6", className)}
       data-testid="login-form"
       noValidate
     >
       {/* Identifier (Email) Input */}
       <IdentifierInput
-        {...register('identifier')}
+        {...register("identifier")}
         error={errors.identifier?.message}
         disabled={isLoading}
       />
 
       {/* Password Input */}
       <PasswordInput
-        {...register('password')}
+        {...register("password")}
         error={errors.password?.message}
         disabled={isLoading}
       />
@@ -80,8 +88,8 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
       {apiError && (
         <div
           className={cn(
-            'flex items-center gap-2 rounded-md p-3',
-            'bg-red-50 border border-red-200 text-red-700'
+            "flex items-center gap-2 rounded-md p-3",
+            "bg-red-50 border border-red-200 text-red-700",
           )}
           role="alert"
           data-testid="login-error-message"
@@ -96,9 +104,9 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
         type="submit"
         disabled={isLoading}
         className={cn(
-          'w-full h-12 text-base font-semibold',
-          'bg-brand-600 hover:bg-brand-700',
-          'disabled:bg-brand-300 disabled:cursor-not-allowed'
+          "w-full h-12 text-base font-semibold",
+          "bg-brand-600 hover:bg-brand-700",
+          "disabled:bg-brand-300 disabled:cursor-not-allowed",
         )}
         data-testid="login-submit-button"
       >
@@ -108,7 +116,7 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
             Đang đăng nhập...
           </>
         ) : (
-          'Đăng nhập'
+          "Đăng nhập"
         )}
       </Button>
 
@@ -123,7 +131,7 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
           Quên mật khẩu?
         </button>
         <p className="text-gray-400">
-          Chưa có tài khoản?{' '}
+          Chưa có tài khoản?{" "}
           <button
             type="button"
             disabled

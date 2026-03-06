@@ -147,12 +147,16 @@ export const WorkTypeManagerDialog: React.FC<WorkTypeManagerDialogProps> = ({
           "overflow-hidden p-0 transition-all duration-200",
           step === "categories" ? "max-w-[500px]" : "max-w-[700px]",
         )}
+        data-testid="work-type-manager-main-dialog"
       >
         {/* Step 1: Show Categories */}
         {step === "categories" && (
           <>
             {loadingCategories ? (
-              <div className="flex flex-col items-center justify-center py-12 px-6">
+              <div
+                className="flex flex-col items-center justify-center py-12 px-6"
+                data-testid="work-type-manager-loading"
+              >
                 <Loader2 className="h-8 w-8 animate-spin text-brand-500 mb-3" />
                 <p className="text-sm text-gray-500">Đang tải danh mục...</p>
               </div>

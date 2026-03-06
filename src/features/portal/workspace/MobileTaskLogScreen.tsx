@@ -23,6 +23,8 @@ import {
   SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useQuickMessages } from "@/hooks/queries/useQuickMessages";
+import { useQuickMessageReplacement } from "@/hooks/useQuickMessageReplacement";
 
 /**
  * Helper: lấy title hiển thị cho Nhật ký công việc
@@ -104,6 +106,10 @@ export const MobileTaskLogScreen: React.FC<MobileTaskLogScreenProps> = ({
   const [inputValue, setInputValue] = useState("");
   const [openActions, setOpenActions] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  // Quick Messages integration
+  useQuickMessages(); // Populate store
+  const replaceQuickMessage = useQuickMessageReplacement();
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const selectedChat: { type: "group" | "dm"; id: string } = {
@@ -172,12 +178,6 @@ export const MobileTaskLogScreen: React.FC<MobileTaskLogScreenProps> = ({
     imageInputRef.current?.click();
   };
   const handlePickFile = () => fileInputRef.current?.click();
-  const handleQuickMessage = () =>
-    setInputValue(
-      (prev) =>
-        (prev ? prev + "\n" : "") +
-        "Em sẽ xử lý yêu cầu này ngay bây giờ.\nCảm ơn anh/chị đã thông tin!"
-    );
   const handleFormat = () =>
     setInputValue((prev) => (prev ? prev + "\n" : "") + "> Trích dẫn\n");
 
@@ -190,13 +190,13 @@ export const MobileTaskLogScreen: React.FC<MobileTaskLogScreenProps> = ({
         sendMessage(`Vị trí hiện tại: ${link}`);
       },
       () => {},
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   };
 
   // Get assignee name
   const assigneeName = task?.assigneeId
-    ? members.find((m) => m.id === task.assigneeId)?.name ?? "Không rõ"
+    ? (members.find((m) => m.id === task.assigneeId)?.name ?? "Không rõ")
     : "Chưa giao";
 
   // Get status badge type and label
@@ -251,11 +251,13 @@ export const MobileTaskLogScreen: React.FC<MobileTaskLogScreenProps> = ({
 
               <div className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 text-xs font-medium">
                 <User className="w-3 h-3" />
-                <span>{members.find((m) => m.id === task.assignTo)?.name ?? "Không rõ"}</span>
+                <span>
+                  {members.find((m) => m.id === task.assignTo)?.name ??
+                    "Không rõ"}
+                </span>
               </div>
             </>
           )}
-          
         </div>
 
         {/* Line 2: Task title */}
@@ -365,16 +367,6 @@ export const MobileTaskLogScreen: React.FC<MobileTaskLogScreenProps> = ({
                   className="w-full flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-brand-50 transition"
                   onClick={() => {
                     setOpenActions(false);
-                    handleQuickMessage();
-                  }}
-                >
-                  <MessageSquareText className="h-5 w-5 text-lime-600" />
-                  <span className="text-sm text-gray-800">Tin nhắn mẫu</span>
-                </button>
-                <button
-                  className="w-full flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-brand-50 transition"
-                  onClick={() => {
-                    setOpenActions(false);
                     handleFormat();
                   }}
                 >
@@ -391,7 +383,11 @@ export const MobileTaskLogScreen: React.FC<MobileTaskLogScreenProps> = ({
               className="w-full h-11 rounded-full border border-gray-300 px-4 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300"
               placeholder="Nhập nội dung…"
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                const replaced = replaceQuickMessage(newValue);
+                setInputValue(replaced);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

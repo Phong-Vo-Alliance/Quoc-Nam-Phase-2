@@ -104,6 +104,13 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
     });
   }, [conversations, templateQueries]);
 
+  // Derive fresh name from query data (selectedConversation local state may be stale after rename)
+  const selectedConversationFreshName = useMemo(() => {
+    if (!selectedConversation) return null;
+    const fresh = conversations?.find((c) => c.id === selectedConversation.id);
+    return fresh?.name ?? selectedConversation.name;
+  }, [selectedConversation, conversations]);
+
   // Mutations
   const createMutation = useCreateChecklistTemplate();
   const updateMutation = useUpdateChecklistTemplate();
@@ -251,7 +258,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
     return (
       <GroupUserManagement
         groupId={selectedConversation.id}
-        groupName={selectedConversation.name}
+        groupName={selectedConversationFreshName ?? selectedConversation.name}
         currentUserRole={currentUserRole}
         onBack={() => setShowMemberManagement(false)}
         onManageTemplates={() => {
@@ -287,7 +294,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
             <p className="text-sm text-gray-600">
               Conversation:{" "}
               <span className="font-medium text-gray-900">
-                {selectedConversation.name}
+                {selectedConversationFreshName}
               </span>
             </p>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -305,6 +312,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Tìm mẫu checklist..."
                   className="pl-9 pr-9"
+                  data-testid="template-search-input"
                 />
                 {searchQuery && (
                   <button
@@ -401,18 +409,22 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
   // Default view: Show all conversations in the category
   return (
     <>
-      <div className="flex flex-col h-[80vh]">
+      <div
+        className="flex flex-col h-[80vh]"
+        data-testid="work-type-editor-container"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
               className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+              data-testid="work-type-editor-back-button"
             >
               <ChevronLeft className="h-5 w-5 text-gray-600" />
             </button>
             <h2 className="text-lg font-semibold text-gray-900">
-              Quản lý loại công việc
+              Quản lý loại việc
             </h2>
           </div>
         </div>
@@ -465,15 +477,24 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
 
         {/* Conversation List */}
         <ScrollArea className="flex-1 min-h-0">
-          <div className="px-6 py-4 space-y-3">
+          <div
+            className="px-6 py-4 space-y-3"
+            data-testid="conversation-list-container"
+          >
             {isLoadingConversations ? (
-              <div className="text-center py-12">
+              <div
+                className="text-center py-12"
+                data-testid="conversation-list-loading"
+              >
                 <p className="text-sm text-gray-400">
                   Đang tải conversations...
                 </p>
               </div>
             ) : filteredConversations.length === 0 ? (
-              <div className="text-center py-12">
+              <div
+                className="text-center py-12"
+                data-testid="conversation-list-empty-state"
+              >
                 <p className="text-sm text-gray-400">
                   {searchQuery
                     ? "Không tìm thấy loại việc phù hợp"
@@ -553,9 +574,13 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
           onOpenChange={setShowEditName}
           conversationId={editNameConversation.id}
           conversationName={editNameConversation.name}
+          categoryName={categoryName}
           existingNames={(conversationsWithTemplates || [])
             .filter((c) => c.id !== editNameConversation.id)
             .map((c) => c.name)}
+          onSuccess={() => {
+            setEditNameConversation(null);
+          }}
         />
       )}
 

@@ -41,6 +41,7 @@ interface LeaderModeContentProps {
   // Team mode props
   categoryName: string;
   groupName: string;
+  selectedWorkTypeId?: string;
   assigneeFilter: string;
   setAssigneeFilter: (filter: string) => void;
   isFilteringMembers: boolean;
@@ -99,6 +100,11 @@ interface LeaderModeContentProps {
   // Conversation context for system messages
   conversationId?: string;
   workspaceId?: string;
+
+  // Loading state for tasks
+  isTasksLoading?: boolean;
+  // Loading state from chat (ChatMainContainer)
+  isLoading?: boolean;
 }
 
 export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
@@ -107,6 +113,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
   leaderOwnTasks,
   categoryName,
   groupName,
+  selectedWorkTypeId,
   assigneeFilter,
   setAssigneeFilter,
   isFilteringMembers,
@@ -155,6 +162,8 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
   handleConfirmedInfoTransfer,
   conversationId,
   workspaceId,
+  isTasksLoading = false,
+  isLoading = false,
 }) => {
   return (
     <>
@@ -189,16 +198,24 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
       )}
 
       {/* Toggle between Team and Mine */}
-      <div className="mb-4 px-2">
+      <div
+        className={`mb-4 px-2 ${isLoading ? "opacity-50 pointer-events-none" : ""}`}
+      >
         <ToggleGroup
           type="single"
           value={leaderMode}
-          onValueChange={(v) => v && setLeaderMode(v as "team" | "mine")}
+          onValueChange={(v) => {
+            if (!isLoading && v) {
+              setLeaderMode(v as "team" | "mine");
+            }
+          }}
           className="grid w-full grid-cols-2 gap-2"
+          disabled={isLoading}
         >
           <ToggleGroupItem
             value="team"
             data-testid="team-filter-button"
+            disabled={isLoading}
             className="
               flex items-center justify-center gap-2
               data-[state=on]:bg-brand-600 data-[state=on]:text-white
@@ -206,6 +223,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
               border border-brand-200
               rounded-lg px-3 py-2 text-sm font-medium
               transition-all
+              disabled:cursor-not-allowed
             "
           >
             <Users className="h-4 w-4" />
@@ -214,6 +232,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
           <ToggleGroupItem
             value="mine"
             data-testid="personal-filter-button"
+            disabled={isLoading}
             className="
               flex items-center justify-center gap-2
               data-[state=on]:bg-brand-600 data-[state=on]:text-white
@@ -221,6 +240,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
               border border-brand-200
               rounded-lg px-3 py-2 text-sm font-medium
               transition-all
+              disabled:cursor-not-allowed
             "
           >
             <UserIcon className="h-4 w-4" />
@@ -260,224 +280,97 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                   Công Việc Của Nhóm{" "}
                   <span className="text-brand-500"> {categoryName}</span>
                 </span>
-                <span className="text-xs text-gray-500">
-                  • Loại việc:{" "}
-                  <span className="font-medium text-gray-700">{groupName}</span>
-                </span>
+                {selectedWorkTypeId && (
+                  <span className="text-xs text-gray-500">
+                    • Loại việc:{" "}
+                    <span className="font-medium text-gray-700">
+                      {groupName}
+                    </span>
+                  </span>
+                )}
               </div>
 
               {/* Filter - Select nhân viên */}
-              <div className="flex items-center justify-between gap-2 mt-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs whitespace-nowrap">Nhân viên:</span>
-                  <select
-                    className="rounded-lg border border-brand-200 px-2 py-1 bg-white text-xs max-w-[180px] truncate outline-none focus:border-brand-500 transition-colors [&>option:checked]:bg-brand-100 [&>option:checked]:text-brand-900"
-                    value={assigneeFilter}
-                    onChange={(e) => setAssigneeFilter(e.target.value)}
-                    disabled={isFilteringMembers}
-                    data-testid="assignee-filter-select"
-                  >
-                    <option value="all">Tất cả</option>
-                    {assigneeOptions.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {abbreviateVietnameseName(m.name, 20)}
-                      </option>
-                    ))}
-                  </select>
+              {selectedWorkTypeId && (
+                <div className="flex items-center justify-between gap-2 mt-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs whitespace-nowrap">
+                      Nhân viên:
+                    </span>
+                    <select
+                      className="rounded-lg border border-brand-200 px-2 py-1 bg-white text-xs max-w-[180px] truncate outline-none focus:border-brand-500 transition-colors [&>option:checked]:bg-brand-100 [&>option:checked]:text-brand-900"
+                      value={assigneeFilter}
+                      onChange={(e) => setAssigneeFilter(e.target.value)}
+                      disabled={isFilteringMembers}
+                      data-testid="assignee-filter-select"
+                    >
+                      <option value="all">Tất cả</option>
+                      {assigneeOptions.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {abbreviateVietnameseName(m.name, 20)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
+              )}
+            </div>
 
-                <button
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors group flex-shrink-0"
-                  onClick={() => setTemplateOpen(true)}
-                  data-testid="default-checklist-link"
-                  title="Xem và chỉnh sửa checklist mặc định"
-                >
-                  <FileText className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
-                </button>
+            {selectedWorkTypeId ? (
+              <div className="mt-2 text-[11px] text-gray-400">
+                Đang xem{" "}
+                <span className="font-semibold text-gray-600">
+                  {leadBuckets.todo.length +
+                    leadBuckets.inProgress.length +
+                    leadBuckets.awaiting.length}
+                </span>{" "}
+                công việc • <span>{leadBuckets.todo.length} chưa xử lý</span> •{" "}
+                <span>{leadBuckets.inProgress.length} đang xử lý</span> •{" "}
+                <span className="text-amber-600 font-semibold">
+                  {leadBuckets.awaiting.length} chờ duyệt
+                </span>
               </div>
-            </div>
-
-            <div className="mt-2 text-[11px] text-gray-400">
-              Đang xem{" "}
-              <span className="font-semibold text-gray-600">
-                {leadBuckets.todo.length +
-                  leadBuckets.inProgress.length +
-                  leadBuckets.awaiting.length}
-              </span>{" "}
-              công việc • <span>{leadBuckets.todo.length} chưa xử lý</span> •{" "}
-              <span>{leadBuckets.inProgress.length} đang xử lý</span> •{" "}
-              <span className="text-amber-600 font-semibold">
-                {leadBuckets.awaiting.length} chờ duyệt
-              </span>
-            </div>
+            ) : (
+              <div className="mt-2 text-center text-xs text-gray-500">
+                Chọn loại việc để xem thông tin
+              </div>
+            )}
           </div>
 
-          {/* Task Sections */}
-          <div className="space-y-6">
-            {/* AWAITING REVIEW */}
-            <section data-testid="leader-awaiting-section">
-              <div
-                className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                onClick={() => {
-                  setShowLeadAwaiting((prev) => {
-                    const next = !prev;
-                    if (next && !awaitingOpenedRef.current) {
-                      awaitingOpenedRef.current = true;
-                      setHighlightAwaiting(true);
-                      setTimeout(() => setHighlightAwaiting(false), 700);
-                    }
-                    return next;
-                  });
-                }}
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
-                <span>
-                  Chờ duyệt ({leadBuckets.awaiting.length}){" "}
-                  {showLeadAwaiting ? " ▲" : " ▼"}
-                </span>
-              </div>
-              {showLeadAwaiting && (
+          {/* Task Sections - Only show when workType is selected */}
+          {selectedWorkTypeId && (
+            <div className="space-y-6">
+              {/* AWAITING REVIEW */}
+              <section data-testid="leader-awaiting-section">
                 <div
-                  className={`space-y-3 transition-colors duration-300 ${
-                    highlightAwaiting
-                      ? "bg-amber-50/80 rounded-lg -mx-2 px-2 py-1"
-                      : ""
-                  }`}
+                  className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                  onClick={() => {
+                    setShowLeadAwaiting((prev) => {
+                      const next = !prev;
+                      if (next && !awaitingOpenedRef.current) {
+                        awaitingOpenedRef.current = true;
+                        setHighlightAwaiting(true);
+                        setTimeout(() => setHighlightAwaiting(false), 700);
+                      }
+                      return next;
+                    });
+                  }}
                 >
-                  {leadBuckets.awaiting.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      t={t}
-                      members={members}
-                      viewMode="lead"
-                      isLeaderOwnTask={false}
-                      groupName={groupName}
-                      checklistVariants={checklistVariants}
-                      assigneeOptions={assigneeOptions}
-                      conversationId={conversationId}
-                      workspaceId={workspaceId}
-                      onChangeStatus={onChangeTaskStatus}
-                      onReassign={onReassignTask}
-                      onToggleChecklist={onToggleChecklist}
-                      taskLogs={taskLogs}
-                      onClickTitle={(messageDto) => {
-                        onOpenSourceMessage?.(messageDto);
-                      }}
-                      onOpenTaskLog={onOpenTaskLog}
-                      messages={messages}
-                    />
-                  ))}
+                  <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                  <span>
+                    Chờ duyệt ({leadBuckets.awaiting.length}){" "}
+                    {showLeadAwaiting ? " ▲" : " ▼"}
+                  </span>
                 </div>
-              )}
-            </section>
-
-            {/* TODO */}
-            <section data-testid="leader-todo-section">
-              <div
-                className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                onClick={() => setShowLeadTodo((v) => !v)}
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                <span>
-                  Chưa xử lý ({leadBuckets.todo.length}){" "}
-                  {showLeadTodo ? " ▲" : " ▼"}
-                </span>
-              </div>
-              {showLeadTodo && (
-                <div className="space-y-3">
-                  {leadBuckets.todo.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      t={t}
-                      members={members}
-                      viewMode="lead"
-                      isLeaderOwnTask={false}
-                      groupName={groupName}
-                      checklistVariants={checklistVariants}
-                      assigneeOptions={assigneeOptions}
-                      conversationId={conversationId}
-                      workspaceId={workspaceId}
-                      onChangeStatus={onChangeTaskStatus}
-                      onReassign={onReassignTask}
-                      onToggleChecklist={onToggleChecklist}
-                      onUpdateTaskChecklist={onUpdateTaskChecklist}
-                      taskLogs={taskLogs}
-                      onClickTitle={(messageDto) => {
-                        onOpenSourceMessage?.(messageDto);
-                      }}
-                      onOpenTaskLog={onOpenTaskLog}
-                      messages={messages}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* IN PROGRESS */}
-            <section data-testid="leader-inprogress-section">
-              <div
-                className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                onClick={() => setShowLeadInProgress((v) => !v)}
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
-                <span>
-                  Đang xử lý ({leadBuckets.inProgress.length})
-                  {showLeadInProgress ? " ▲" : " ▼"}
-                </span>
-              </div>
-
-              {showLeadInProgress && (
-                <div className="space-y-3">
-                  {leadBuckets.inProgress.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      t={t}
-                      members={members}
-                      viewMode="lead"
-                      isLeaderOwnTask={false}
-                      groupName={groupName}
-                      checklistVariants={checklistVariants}
-                      assigneeOptions={assigneeOptions}
-                      conversationId={conversationId}
-                      workspaceId={workspaceId}
-                      onChangeStatus={onChangeTaskStatus}
-                      onReassign={onReassignTask}
-                      onToggleChecklist={onToggleChecklist}
-                      taskLogs={taskLogs}
-                      onClickTitle={(messageDto) => {
-                        onOpenSourceMessage?.(messageDto);
-                      }}
-                      onOpenTaskLog={onOpenTaskLog}
-                      messages={messages}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* DONE TODAY */}
-            <section data-testid="leader-done-section">
-              <div
-                className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
-                onClick={() => setShowLeadDone((v) => !v)}
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                <span>
-                  Hoàn thành (
-                  {
-                    leadBuckets.done.filter((t) =>
-                      isToday(t.updatedAt || t.createdAt),
-                    ).length
-                  }
-                  ) {showLeadDone ? " ▲" : " ▼"}
-                </span>
-              </div>
-
-              {showLeadDone && (
-                <div className="space-y-3">
-                  {leadBuckets.done
-                    .filter((t) => isToday(t.updatedAt || t.createdAt))
-                    .map((t) => (
+                {showLeadAwaiting && (
+                  <div
+                    className={`space-y-3 transition-colors duration-300 ${
+                      highlightAwaiting
+                        ? "bg-amber-50/80 rounded-lg -mx-2 px-2 py-1"
+                        : ""
+                    }`}
+                  >
+                    {leadBuckets.awaiting.map((t) => (
                       <TaskCard
                         key={t.id}
                         t={t}
@@ -500,20 +393,163 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                         messages={messages}
                       />
                     ))}
-                </div>
-              )}
+                  </div>
+                )}
+              </section>
 
-              <div className="mt-2 text-right">
-                <button
-                  className="text-xs text-brand-700 hover:underline"
-                  onClick={() => setShowLeadCompletedAll(true)}
-                  data-testid="leader-view-all-completed-button"
+              {/* TODO */}
+              <section data-testid="leader-todo-section">
+                <div
+                  className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                  onClick={() => setShowLeadTodo((v) => !v)}
                 >
-                  Xem tất cả công việc đã hoàn thành
-                </button>
-              </div>
-            </section>
-          </div>
+                  <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                  <span>
+                    Chưa xử lý ({leadBuckets.todo.length}){" "}
+                    {showLeadTodo ? " ▲" : " ▼"}
+                  </span>
+                </div>
+                {showLeadTodo && (
+                  <div className="space-y-3">
+                    {leadBuckets.todo.map((t) => (
+                      <TaskCard
+                        key={t.id}
+                        t={t}
+                        members={members}
+                        viewMode="lead"
+                        isLeaderOwnTask={false}
+                        groupName={groupName}
+                        checklistVariants={checklistVariants}
+                        assigneeOptions={assigneeOptions}
+                        conversationId={conversationId}
+                        workspaceId={workspaceId}
+                        onChangeStatus={onChangeTaskStatus}
+                        onReassign={onReassignTask}
+                        onToggleChecklist={onToggleChecklist}
+                        onUpdateTaskChecklist={onUpdateTaskChecklist}
+                        taskLogs={taskLogs}
+                        onClickTitle={(messageDto) => {
+                          onOpenSourceMessage?.(messageDto);
+                        }}
+                        onOpenTaskLog={onOpenTaskLog}
+                        messages={messages}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* IN PROGRESS */}
+              <section data-testid="leader-inprogress-section">
+                <div
+                  className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                  onClick={() => setShowLeadInProgress((v) => !v)}
+                >
+                  <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
+                  <span>
+                    Đang xử lý ({leadBuckets.inProgress.length})
+                    {showLeadInProgress ? " ▲" : " ▼"}
+                  </span>
+                </div>
+
+                {showLeadInProgress && (
+                  <div className="space-y-3">
+                    {leadBuckets.inProgress.map((t) => (
+                      <TaskCard
+                        key={t.id}
+                        t={t}
+                        members={members}
+                        viewMode="lead"
+                        isLeaderOwnTask={false}
+                        groupName={groupName}
+                        checklistVariants={checklistVariants}
+                        assigneeOptions={assigneeOptions}
+                        conversationId={conversationId}
+                        workspaceId={workspaceId}
+                        onChangeStatus={onChangeTaskStatus}
+                        onReassign={onReassignTask}
+                        onToggleChecklist={onToggleChecklist}
+                        taskLogs={taskLogs}
+                        onClickTitle={(messageDto) => {
+                          onOpenSourceMessage?.(messageDto);
+                        }}
+                        onOpenTaskLog={onOpenTaskLog}
+                        messages={messages}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* DONE TODAY */}
+              <section data-testid="leader-done-section">
+                <div
+                  className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer select-none"
+                  onClick={() => setShowLeadDone((v) => !v)}
+                >
+                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                  <span>
+                    Hoàn thành (
+                    {
+                      leadBuckets.done.filter((t) =>
+                        isToday(t.updatedAt || t.createdAt),
+                      ).length
+                    }
+                    ) {showLeadDone ? " ▲" : " ▼"}
+                  </span>
+                </div>
+
+                {showLeadDone && (
+                  <div className="space-y-3">
+                    {leadBuckets.done
+                      .filter((t) => isToday(t.updatedAt || t.createdAt))
+                      .map((t) => (
+                        <TaskCard
+                          key={t.id}
+                          t={t}
+                          members={members}
+                          viewMode="lead"
+                          isLeaderOwnTask={false}
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
+                          assigneeOptions={assigneeOptions}
+                          conversationId={conversationId}
+                          workspaceId={workspaceId}
+                          onChangeStatus={onChangeTaskStatus}
+                          onReassign={onReassignTask}
+                          onToggleChecklist={onToggleChecklist}
+                          taskLogs={taskLogs}
+                          onClickTitle={(messageDto) => {
+                            onOpenSourceMessage?.(messageDto);
+                          }}
+                          onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
+                        />
+                      ))}
+                  </div>
+                )}
+
+                <div className="mt-2 text-right">
+                  <button
+                    disabled={isTasksLoading}
+                    onClick={() =>
+                      !isTasksLoading && setShowLeadCompletedAll(true)
+                    }
+                    className={`text-xs font-medium transition-colors ${
+                      isTasksLoading
+                        ? "text-gray-400 cursor-not-allowed"
+                        : "text-brand-600 hover:text-brand-700 cursor-pointer"
+                    }`}
+                    data-testid="leader-view-all-completed-button"
+                  >
+                    {isTasksLoading
+                      ? "Đang tải..."
+                      : "Xem tất cả công việc đã hoàn thành"}
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
 
           {/* Team Completed Modal */}
           {showLeadCompletedAll && (
@@ -688,81 +724,90 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
               </span>
             </div>
 
-            <div className="text-center text-xs text-gray-600">
+            {selectedWorkTypeId ? (
+              <div className="text-center text-xs text-gray-600">
+                {leaderOwnTasks.filter(
+                  (t) =>
+                    t.status.code !== "need_to_verified" &&
+                    t.status.code !== "finished",
+                ).length > 0 ? (
+                  <>
+                    <span className="font-semibold text-brand-700">
+                      {
+                        leaderOwnTasks.filter(
+                          (t) =>
+                            t.status.code !== "need_to_verified" &&
+                            t.status.code !== "finished",
+                        ).length
+                      }
+                    </span>{" "}
+                    công việc đang thực hiện •{" "}
+                    <span>{leaderOwnBuckets.todo.length} chưa xử lý</span> •{" "}
+                    <span>{leaderOwnBuckets.inProgress.length} đang xử lý</span>
+                    {leaderOwnBuckets.doneToday.length > 0 && (
+                      <>
+                        {" "}
+                        •{" "}
+                        <span className="text-emerald-600">
+                          {leaderOwnBuckets.doneToday.length} hoàn thành hôm nay
+                        </span>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-emerald-600">
+                    ✓ Đã hoàn thành hết công việc hôm nay
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-center text-xs text-gray-500">
+                Chọn loại việc để xem thông tin
+              </div>
+            )}
+          </div>
+
+          {/* Show tasks only when workType is selected */}
+          {selectedWorkTypeId && (
+            <>
+              {/* Empty state */}
               {leaderOwnTasks.filter(
                 (t) =>
                   t.status.code !== "need_to_verified" &&
                   t.status.code !== "finished",
-              ).length > 0 ? (
-                <>
-                  <span className="font-semibold text-brand-700">
-                    {
-                      leaderOwnTasks.filter(
-                        (t) =>
-                          t.status.code !== "need_to_verified" &&
-                          t.status.code !== "finished",
-                      ).length
-                    }
-                  </span>{" "}
-                  công việc đang thực hiện •{" "}
-                  <span>{leaderOwnBuckets.todo.length} chưa xử lý</span> •{" "}
-                  <span>{leaderOwnBuckets.inProgress.length} đang xử lý</span>
-                  {leaderOwnBuckets.doneToday.length > 0 && (
-                    <>
-                      {" "}
-                      •{" "}
-                      <span className="text-emerald-600">
-                        {leaderOwnBuckets.doneToday.length} hoàn thành hôm nay
-                      </span>
-                    </>
-                  )}
-                </>
-              ) : (
-                <span className="text-emerald-600">
-                  ✓ Đã hoàn thành hết công việc hôm nay
-                </span>
-              )}
-            </div>
-          </div>
+              ).length === 0 &&
+                leaderOwnBuckets.doneToday.length === 0 && (
+                  <div
+                    className="rounded-xl border border-dashed bg-white/60 p-8 text-center"
+                    data-testid="leader-mine-empty-state"
+                  >
+                    <UserIcon className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                    <p className="text-sm text-gray-500 font-medium mb-1">
+                      Bạn chưa có công việc nào cần làm
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Các công việc được giao sẽ xuất hiện ở đây
+                    </p>
+                  </div>
+                )}
 
-          {/* Empty state */}
-          {leaderOwnTasks.filter(
-            (t) =>
-              t.status.code !== "need_to_verified" &&
-              t.status.code !== "finished",
-          ).length === 0 &&
-            leaderOwnBuckets.doneToday.length === 0 && (
-              <div
-                className="rounded-xl border border-dashed bg-white/60 p-8 text-center"
-                data-testid="leader-mine-empty-state"
-              >
-                <UserIcon className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                <p className="text-sm text-gray-500 font-medium mb-1">
-                  Bạn chưa có công việc nào cần làm
-                </p>
-                <p className="text-xs text-gray-400">
-                  Các công việc được giao sẽ xuất hiện ở đây
-                </p>
-              </div>
-            )}
+              {/* TODO SECTION */}
+              {leaderOwnBuckets.todo.length > 0 && (
+                <section data-testid="leader-mine-todo-section">
+                  <div
+                    className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
+                    onClick={() => setShowLeaderOwnTodo((v) => !v)}
+                  >
+                    <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                    <span>Chưa xử lý ({leaderOwnBuckets.todo.length})</span>
+                    <span className="ml-1 text-gray-400">
+                      {showLeaderOwnTodo ? "▲" : "▼"}
+                    </span>
+                  </div>
 
-          {/* TODO SECTION */}
-          {leaderOwnBuckets.todo.length > 0 && (
-            <section data-testid="leader-mine-todo-section">
-              <div
-                className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
-                onClick={() => setShowLeaderOwnTodo((v) => !v)}
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                <span>Chưa xử lý ({leaderOwnBuckets.todo.length})</span>
-                <span className="ml-1 text-gray-400">
-                  {showLeaderOwnTodo ? "▲" : "▼"}
-                </span>
-              </div>
-
-              {showLeaderOwnTodo && (
-                <div
-                  className={`
+                  {showLeaderOwnTodo && (
+                    <div
+                      className={`
                     space-y-3
                     transition-all duration-300 ease-out
                     overflow-hidden
@@ -772,140 +817,152 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                         : "max-h-0 opacity-0"
                     }
                   `}
-                >
-                  {leaderOwnBuckets.todo.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      t={t}
-                      members={members}
-                      viewMode="lead"
-                      isLeaderOwnTask={true}
-                      groupName={groupName}
-                      checklistVariants={checklistVariants}
-                      assigneeOptions={assigneeOptions}
-                      conversationId={conversationId}
-                      workspaceId={workspaceId}
-                      onChangeStatus={onChangeTaskStatus}
-                      onReassign={onReassignTask}
-                      onToggleChecklist={onToggleChecklist}
-                      onUpdateTaskChecklist={onUpdateTaskChecklist}
-                      taskLogs={taskLogs}
-                      onClickTitle={(messageDto) => {
-                        onOpenSourceMessage?.(messageDto);
-                      }}
-                      onOpenTaskLog={onOpenTaskLog}
-                      messages={messages}
-                    />
-                  ))}
+                    >
+                      {leaderOwnBuckets.todo.map((t) => (
+                        <TaskCard
+                          key={t.id}
+                          t={t}
+                          members={members}
+                          viewMode="lead"
+                          isLeaderOwnTask={true}
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
+                          assigneeOptions={assigneeOptions}
+                          conversationId={conversationId}
+                          workspaceId={workspaceId}
+                          onChangeStatus={onChangeTaskStatus}
+                          onReassign={onReassignTask}
+                          onToggleChecklist={onToggleChecklist}
+                          onUpdateTaskChecklist={onUpdateTaskChecklist}
+                          taskLogs={taskLogs}
+                          onClickTitle={(messageDto) => {
+                            onOpenSourceMessage?.(messageDto);
+                          }}
+                          onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* IN_PROGRESS SECTION */}
+              {leaderOwnBuckets.inProgress.length > 0 && (
+                <section data-testid="leader-mine-inprogress-section">
+                  <div
+                    className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
+                    onClick={() => setShowLeaderOwnInProgress((v) => !v)}
+                  >
+                    <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
+                    <span>
+                      Đang xử lý ({leaderOwnBuckets.inProgress.length})
+                    </span>
+                    <span className="ml-1 text-gray-400">
+                      {showLeaderOwnInProgress ? "▲" : "▼"}
+                    </span>
+                  </div>
+
+                  {showLeaderOwnInProgress && (
+                    <div className="space-y-3">
+                      {leaderOwnBuckets.inProgress.map((t) => (
+                        <TaskCard
+                          key={t.id}
+                          t={t}
+                          members={members}
+                          viewMode="lead"
+                          isLeaderOwnTask={true}
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
+                          assigneeOptions={assigneeOptions}
+                          conversationId={conversationId}
+                          workspaceId={workspaceId}
+                          onChangeStatus={onChangeTaskStatus}
+                          onReassign={onReassignTask}
+                          onToggleChecklist={onToggleChecklist}
+                          onUpdateTaskChecklist={onUpdateTaskChecklist}
+                          taskLogs={taskLogs}
+                          onClickTitle={(messageDto) => {
+                            onOpenSourceMessage?.(messageDto);
+                          }}
+                          onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* DONE TODAY SECTION */}
+              {leaderOwnBuckets.doneToday.length > 0 && (
+                <section data-testid="leader-mine-done-section">
+                  <div
+                    className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
+                    onClick={() => setShowLeaderOwnDone((v) => !v)}
+                  >
+                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                    <span>
+                      Hoàn thành hôm nay ({leaderOwnBuckets.doneToday.length})
+                    </span>
+                    <span className="ml-1 text-gray-400">
+                      {showLeaderOwnDone ? "▲" : "▼"}
+                    </span>
+                  </div>
+
+                  {showLeaderOwnDone && (
+                    <div className="space-y-3">
+                      {leaderOwnBuckets.doneToday.map((t) => (
+                        <TaskCard
+                          key={t.id}
+                          t={t}
+                          members={members}
+                          viewMode="lead"
+                          isLeaderOwnTask={true}
+                          groupName={groupName}
+                          checklistVariants={checklistVariants}
+                          assigneeOptions={assigneeOptions}
+                          conversationId={conversationId}
+                          workspaceId={workspaceId}
+                          onChangeStatus={onChangeTaskStatus}
+                          onReassign={onReassignTask}
+                          onToggleChecklist={onToggleChecklist}
+                          onUpdateTaskChecklist={onUpdateTaskChecklist}
+                          taskLogs={taskLogs}
+                          onClickTitle={(messageDto) => {
+                            onOpenSourceMessage?.(messageDto);
+                          }}
+                          onOpenTaskLog={onOpenTaskLog}
+                          messages={messages}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* LINK TO ALL COMPLETED TASKS */}
+              {leaderOwnAllCompleted.length > 0 && (
+                <div className="text-center pt-2">
+                  <button
+                    disabled={isTasksLoading}
+                    onClick={() =>
+                      !isTasksLoading && setShowLeaderOwnCompletedAll(true)
+                    }
+                    className={`text-xs font-medium transition-colors ${
+                      isTasksLoading
+                        ? "text-gray-400 cursor-not-allowed"
+                        : "text-brand-600 hover:text-brand-700 cursor-pointer"
+                    }`}
+                    data-testid="leader-mine-view-all-completed-button"
+                  >
+                    {isTasksLoading
+                      ? "Đang tải..."
+                      : `Xem tất cả công việc đã hoàn thành (${leaderOwnAllCompleted.length}) →`}
+                  </button>
                 </div>
               )}
-            </section>
-          )}
-
-          {/* IN_PROGRESS SECTION */}
-          {leaderOwnBuckets.inProgress.length > 0 && (
-            <section data-testid="leader-mine-inprogress-section">
-              <div
-                className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
-                onClick={() => setShowLeaderOwnInProgress((v) => !v)}
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
-                <span>Đang xử lý ({leaderOwnBuckets.inProgress.length})</span>
-                <span className="ml-1 text-gray-400">
-                  {showLeaderOwnInProgress ? "▲" : "▼"}
-                </span>
-              </div>
-
-              {showLeaderOwnInProgress && (
-                <div className="space-y-3">
-                  {leaderOwnBuckets.inProgress.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      t={t}
-                      members={members}
-                      viewMode="lead"
-                      isLeaderOwnTask={true}
-                      groupName={groupName}
-                      checklistVariants={checklistVariants}
-                      assigneeOptions={assigneeOptions}
-                      conversationId={conversationId}
-                      workspaceId={workspaceId}
-                      onChangeStatus={onChangeTaskStatus}
-                      onReassign={onReassignTask}
-                      onToggleChecklist={onToggleChecklist}
-                      onUpdateTaskChecklist={onUpdateTaskChecklist}
-                      taskLogs={taskLogs}
-                      onClickTitle={(messageDto) => {
-                        onOpenSourceMessage?.(messageDto);
-                      }}
-                      onOpenTaskLog={onOpenTaskLog}
-                      messages={messages}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* DONE TODAY SECTION */}
-          {leaderOwnBuckets.doneToday.length > 0 && (
-            <section data-testid="leader-mine-done-section">
-              <div
-                className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-brand-700 transition-colors"
-                onClick={() => setShowLeaderOwnDone((v) => !v)}
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                <span>
-                  Hoàn thành hôm nay ({leaderOwnBuckets.doneToday.length})
-                </span>
-                <span className="ml-1 text-gray-400">
-                  {showLeaderOwnDone ? "▲" : "▼"}
-                </span>
-              </div>
-
-              {showLeaderOwnDone && (
-                <div className="space-y-3">
-                  {leaderOwnBuckets.doneToday.map((t) => (
-                    <TaskCard
-                      key={t.id}
-                      t={t}
-                      members={members}
-                      viewMode="lead"
-                      isLeaderOwnTask={true}
-                      groupName={groupName}
-                      checklistVariants={checklistVariants}
-                      assigneeOptions={assigneeOptions}
-                      conversationId={conversationId}
-                      workspaceId={workspaceId}
-                      onChangeStatus={onChangeTaskStatus}
-                      onReassign={onReassignTask}
-                      onToggleChecklist={onToggleChecklist}
-                      onUpdateTaskChecklist={onUpdateTaskChecklist}
-                      taskLogs={taskLogs}
-                      onClickTitle={(messageDto) => {
-                        onOpenSourceMessage?.(messageDto);
-                      }}
-                      onOpenTaskLog={onOpenTaskLog}
-                      messages={messages}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* LINK TO ALL COMPLETED TASKS */}
-          {leaderOwnAllCompleted.length > 0 && (
-            <div className="text-center pt-2">
-              <button
-                className="text-xs text-brand-700 hover:text-brand-800 hover:underline font-medium"
-                onClick={() => setShowLeaderOwnCompletedAll(true)}
-                data-testid="leader-mine-view-all-completed-button"
-              >
-                Xem tất cả công việc đã hoàn thành (
-                {leaderOwnAllCompleted.length}) →
-              </button>
-            </div>
+            </>
           )}
         </div>
       )}

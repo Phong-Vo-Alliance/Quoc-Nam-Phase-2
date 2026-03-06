@@ -68,13 +68,27 @@ export function useLogin(options?: UseLoginOptions) {
 
 /**
  * Get user-friendly error message from login error
+ * Priority: error.message from API → errorCode mapping → generic message
  */
 export function getLoginErrorMessage(
   error: Error & { errorCode?: string },
 ): string {
+  // 1. Priority: Use error.message from API if it's specific and not a generic error
+  if (
+    error.message &&
+    error.message !== "Network error" &&
+    error.message !== "UNKNOWN_ERROR" &&
+    error.message.trim() !== ""
+  ) {
+    return error.message;
+  }
+
+  // 2. Fallback: Map errorCode to Vietnamese message
   if (error.errorCode) {
     return getAuthErrorMessage(error.errorCode);
   }
+
+  // 3. Last resort: Generic error message
   return getAuthErrorMessage("UNKNOWN_ERROR");
 }
 

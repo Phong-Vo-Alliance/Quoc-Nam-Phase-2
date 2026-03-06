@@ -15,6 +15,7 @@ import {
   Inbox,
   Loader2,
   Paperclip,
+  MessageSquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
@@ -199,28 +200,28 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           pointer-events: auto;
         }
 
-        /* Highlight effect for parent message scroll */
-        .message-highlighted .message-bubble {
-          animation: highlight-pulse 2.5s ease-in-out;
+        /* Highlight effect for parent message scroll - CHỈ BUBBLE */
+        .message-highlighted {
+          background: transparent !important; /* Đảm bảo container không có nền */
         }
-
-        /* Override text colors when highlighted for visibility */
-        .message-highlighted,
-        .message-highlighted p,
-        .message-highlighted span,
-        .message-highlighted .message-bubble,
-        .message-highlighted .message-bubble p,
-        .message-highlighted .message-bubble span {
-          color: rgb(17 24 39) !important; /* gray-900 */
+        
+        .message-highlighted .message-bubble {
+          animation: highlight-pulse 2.5s ease-in-out !important;
+          transition: none !important; /* Kill Tailwind transition-colors */
+          border-width: 2px !important; /* Force 2px border */
+          border-style: solid !important;
+          border-color: rgb(251 146 60) !important; /* orange-400 - cam */
         }
 
         @keyframes highlight-pulse {
-          0%, 100% {
-            background-color: inherit;
+          0% {
+            background-color: transparent;
           }
           10%, 90% {
             background-color: rgb(254 240 138); /* yellow-200 */
-            box-shadow: 0 0 0 4px rgb(254 240 138 / 0.5);
+          }
+          100% {
+            background-color: transparent;
           }
         }
       `}</style>
@@ -239,6 +240,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             isOwn ? "items-end" : "items-start",
           )}
           data-message-id={message.id}
+          data-testid={`message-bubble-${message.id}`}
         >
           <div>
             {/* Sender name and pin indicator (only for received and first in group) */}
@@ -251,7 +253,10 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                   {message.senderName}
                 </span>
                 <span className="text-[11px] text-gray-400">•</span>
-                <span className="text-[11px] text-gray-500">
+                <span
+                  className="text-[11px] text-gray-500"
+                  data-testid={`message-timestamp-${message.id}`}
+                >
                   {formatTime(message.sentAt)}
                 </span>
                 {message.isPinned && (
@@ -282,7 +287,10 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             {/* Timestamp for own messages (only first in group) */}
             {isOwn && isFirstInGroup && (
               <div className="flex justify-end mb-1">
-                <span className="text-[11px] text-gray-500">
+                <span
+                  className="text-[11px] text-gray-500"
+                  data-testid={`message-timestamp-${message.id}`}
+                >
                   {formatTime(message.sentAt)}
                 </span>
               </div>
@@ -378,6 +386,17 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       )}
                     </button>
                   )}
+                  {/* NEW: Task Discussion button - shown when message has linked task */}
+                  {message.linkedTaskId && onTaskLogClick && (
+                    <button
+                      className="p-1.5 rounded transition text-gray-500 hover:text-emerald-600"
+                      onClick={() => onTaskLogClick(message.linkedTaskId!)}
+                      title="Trao đổi về công việc"
+                      data-testid="task-discussion-menu-button"
+                    >
+                      <MessageSquarePlus size={14} />
+                    </button>
+                  )}
                   {hasLeaderPermissions() &&
                     onCreateTask &&
                     !message.linkedTaskId && (
@@ -446,8 +465,6 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                 (message.sendStatus === "sending" ||
                   message.sendStatus === "retrying") &&
                   "opacity-90",
-                // Override text color when highlighted (for own messages)
-                "[&.message-highlighted]:!text-gray-900",
               )}
               data-testid={`message-bubble-${message.id}`}
             >
@@ -497,6 +514,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         className={
                           hasImages || hasFiles ? "px-4 pt-2 pb-2" : "px-4 py-2"
                         }
+                        data-testid={`message-content-${message.id}`}
                       >
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">
                           {renderMessageWithMentions(
@@ -978,7 +996,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                   "bg-blue-500 text-white hover:bg-blue-600",
                   "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
                 )}
-                data-testid="retry-button"
+                data-testid={`retry-message-button-${message.id}`}
               >
                 <RefreshCw className="h-3 w-3" />
                 Thử lại

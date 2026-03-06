@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,14 +10,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { usePatchChecklistTemplate } from "@/hooks/mutations/useTaskMutations";
+import { useUpdateGroupName } from "@/hooks/mutations/useGroupMutations";
+import { sendMessage } from "@/api/messages.api";
+
 
 interface EditConversationNameDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   conversationId: string;
   conversationName: string;
+  categoryName: string;
   existingNames: string[];
+  onSuccess?: () => void | Promise<void>;
 }
 
 export const EditConversationNameDialog: React.FC<EditConversationNameDialogProps> = ({
@@ -25,17 +29,21 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
   onOpenChange,
   conversationId,
   conversationName,
+  categoryName,
   existingNames,
+  onSuccess,
 }) => {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const isSavingRef = useRef(false);
 
-  const patchMutation = usePatchChecklistTemplate();
+  const updateGroupMutation = useUpdateGroupName();
 
   useEffect(() => {
     if (open) {
       setName(conversationName);
       setError("");
+      isSavingRef.current = false;
     }
   }, [open, conversationName]);
 
@@ -63,6 +71,8 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
   };
 
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+
     const validationError = validate(name);
     if (validationError) {
       setError(validationError);
@@ -70,18 +80,32 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
     }
 
     const trimmedName = name.trim();
+    isSavingRef.current = true;
 
     try {
-      await patchMutation.mutateAsync({
-        templateId: conversationId,
-        payload: {
-          name: trimmedName,
-        },
+      await updateGroupMutation.mutateAsync({
+        groupId: conversationId,
+        name: trimmedName,
       });
 
+      // Send system message about the rename
+      try {
+        await sendMessage({
+          conversationId,
+          content: `Loại việc ${conversationName} thuộc nhóm ${categoryName} đã đổi tên thành ${trimmedName}`,
+          messageType: "SYS",
+        });
+      } catch (msgErr) {
+        // System message failure should not block the rename
+        console.warn("Failed to send system message for work type rename", msgErr);
+      }
+
+      await onSuccess?.();
       onOpenChange(false);
     } catch (err: any) {
       setError(err?.response?.data?.message || "Đã xảy ra lỗi khi đổi tên");
+    } finally {
+      isSavingRef.current = false;
     }
   };
 
@@ -132,15 +156,15 @@ export const EditConversationNameDialog: React.FC<EditConversationNameDialogProp
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={patchMutation.isPending}
+            disabled={updateGroupMutation.isPending}
           >
             Hủy
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!name.trim() || patchMutation.isPending}
+            disabled={!name.trim() || updateGroupMutation.isPending}
           >
-            {patchMutation.isPending && (
+            {updateGroupMutation.isPending && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
             Lưu

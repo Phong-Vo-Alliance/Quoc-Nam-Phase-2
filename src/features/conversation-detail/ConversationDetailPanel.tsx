@@ -639,6 +639,8 @@ export const ConversationDetailPanel: React.FC<
                 effectiveUserId={effectiveUserId}
                 conversationId={selectedConversation?.id}
                 workspaceId={selectedConversation?.id}
+                isTasksLoading={linkedTasksLoading}
+                isLoading={isLoading}
               />
             )}
 
@@ -650,6 +652,7 @@ export const ConversationDetailPanel: React.FC<
                 leaderOwnTasks={leaderOwnTasks}
                 categoryName={categoryName || ""}
                 groupName={groupName}
+                selectedWorkTypeId={selectedWorkTypeId}
                 assigneeFilter={assigneeFilter}
                 setAssigneeFilter={setAssigneeFilter}
                 isFilteringMembers={isFilteringMembers}
@@ -698,6 +701,8 @@ export const ConversationDetailPanel: React.FC<
                 messages={messages}
                 conversationId={selectedConversation?.id}
                 workspaceId={selectedConversation?.id}
+                isTasksLoading={linkedTasksLoading}
+                isLoading={isLoading}
               />
             )}
           </>

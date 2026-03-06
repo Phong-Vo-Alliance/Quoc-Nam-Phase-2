@@ -411,7 +411,8 @@ export const ConversationListSidebar: React.FC<
   const isLoading =
     useApiData &&
     ((tab === "group" && categoriesQuery.isLoading) ||
-      (tab === "dm" && directsQuery.isLoading));
+      (tab === "dm" &&
+        (directsQuery.isLoading || departmentMembersQuery.isLoading)));
 
   const isAnyTabLoading =
     useApiData &&
@@ -422,13 +423,15 @@ export const ConversationListSidebar: React.FC<
   const isError =
     useApiData &&
     ((tab === "group" && categoriesQuery.isError) ||
-      (tab === "dm" && directsQuery.isError));
+      (tab === "dm" &&
+        (directsQuery.isError || departmentMembersQuery.isError)));
 
   const handleRetry = () => {
     if (tab === "group") {
       categoriesQuery.refetch();
     } else if (tab === "dm") {
       directsQuery.refetch();
+      departmentMembersQuery.refetch();
     }
   };
 
@@ -896,7 +899,7 @@ export const ConversationListSidebar: React.FC<
           </div>
 
           {/* Segmented control */}
-          <div className="relative w-full">
+          <div className="relative w-full" data-testid="conversation-tabs">
             <div
               className={`flex rounded-full bg-gradient-to-r from-brand-200 via-emerald-200 to-teal-200 p-1 shadow-sm ${
                 isAnyTabLoading ? "opacity-50 pointer-events-none" : ""
@@ -922,6 +925,7 @@ export const ConversationListSidebar: React.FC<
                   ${isAnyTabLoading ? "cursor-not-allowed" : ""}
                 `}
                   disabled={isAnyTabLoading}
+                  data-testid="conversation-tab-group"
                 >
                   <span className="relative inline-flex items-center gap-1">
                     Nhóm
@@ -943,6 +947,7 @@ export const ConversationListSidebar: React.FC<
                   ${isAnyTabLoading ? "cursor-not-allowed" : ""}
                 `}
                   disabled={isAnyTabLoading}
+                  data-testid="conversation-tab-dm"
                 >
                   <span className="relative inline-flex items-center gap-1">
                     Cá nhân
@@ -1021,6 +1026,7 @@ export const ConversationListSidebar: React.FC<
                     : ""
                 }`}
                 disabled={isAnyTabLoading}
+                data-testid="conversation-search-input"
               />
               {q && (
                 <button
@@ -1070,7 +1076,7 @@ export const ConversationListSidebar: React.FC<
           !isError &&
           tab === "group" &&
           (useApiData ? (
-            <div data-testid="categories-list">
+            <div data-testid="group-list-container">
               {filteredApiCategories.length === 0 ? (
                 <div className="p-3 text-xs text-gray-500">
                   {q ? "Không tìm thấy kết quả." : "Chưa có nhóm nào."}
@@ -1172,7 +1178,7 @@ export const ConversationListSidebar: React.FC<
             <ul
               ref={contactsListRef}
               className="divide-y"
-              data-testid="directs-list"
+              data-testid="dm-list-container"
             >
               {filteredApiDirects.length === 0 && (
                 <div className="p-3 text-xs text-gray-500">

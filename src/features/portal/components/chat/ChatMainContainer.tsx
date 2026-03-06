@@ -3,6 +3,7 @@
 import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { flattenMessages, useMessages } from "@/hooks/queries/useMessages";
+import { useClientSystemMessagesStore } from "@/stores/clientSystemMessagesStore";
 import { useQueryClient } from "@tanstack/react-query";
 import React, {
   useCallback,
@@ -89,7 +90,8 @@ import {
 } from "./MentionInputInline";
 // import MessageImage from "@/features/portal/workspace/MessageImage";
 import FilePreviewModal from "@/components/FilePreviewModal";
-// import type { ChatMessage } from "@/types/messages";
+import { useQuickMessages } from "@/hooks/queries/useQuickMessages";
+import type { ChatMessage } from "@/types/messages";
 import ImagePreviewModal from "@/components/ImagePreviewModal";
 import type { ConversationInfoDto } from "@/types/categories"; // 🆕 NEW (CBN-002)
 import type { FileUploadProgressState, SelectedFile } from "@/types/files";
@@ -209,6 +211,8 @@ interface ChatMainContainerProps {
  * 5. Handles realtime updates
  * 6. Handles typing indicators
  */
+const EMPTY_CLIENT_SYS_MSGS: ChatMessage[] = [];
+
 export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   workspaceId = "default-workspace", // Default value
   conversationId,
@@ -335,6 +339,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const [currentMentions, setCurrentMentions] = useState<
     import("@/types/messages").MentionInputDto[]
   >([]);
+
+  // Quick Messages integration - populate store for use in MentionInputInline
+  useQuickMessages();
+
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<
     Map<string, FileUploadProgressState>
@@ -518,7 +526,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // Fetch messages
   const messagesQuery = useMessages({
     conversationId, // Use conversation ID from props
-    enabled: !!conversationId && categoriesQuery.isSuccess, // 🆕 Wait for categories first
+    enabled: !!conversationId, // 🐛 FIX: Remove categoriesQuery dependency - messages can be fetched independently
   });
 
   // [PHASE2-REMOVED] Desktop pin feature removed
@@ -667,6 +675,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // 🐛 FIX: Safeguard against stale cached messages during categories loading
   // When categories are loading or messages query is not successful, return empty array
   // This prevents React Query cached data from previous conversation being displayed
+  const clientSystemMessages = useClientSystemMessagesStore(
+    useCallback(
+      (state: { messages: Record<string, ChatMessage[]> }) =>
+        state.messages[conversationId] ?? EMPTY_CLIENT_SYS_MSGS,
+      [conversationId],
+    ),
+  );
+
   const messages = useMemo(() => {
     // Don't use cached data if categories are loading
     if (categoriesQuery.isLoading) return [];
@@ -674,8 +690,31 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     // Don't use cached data if messages query hasn't successfully fetched yet
     if (!messagesQuery.isSuccess) return [];
 
-    return flattenMessages(messagesQuery.data);
-  }, [messagesQuery.data, messagesQuery.isSuccess, categoriesQuery.isLoading]);
+    const serverMessages = flattenMessages(messagesQuery.data);
+
+    // Merge client-only system messages (survive react-query refetches)
+    if (clientSystemMessages.length === 0) return serverMessages;
+
+    const existingContents = new Set(
+      serverMessages
+        .filter((m) => m.contentType === "SYS")
+        .map((m) => m.content),
+    );
+    const newClientMsgs = clientSystemMessages.filter(
+      (m) => !existingContents.has(m.content),
+    );
+    if (newClientMsgs.length === 0) return serverMessages;
+
+    return [...serverMessages, ...newClientMsgs].sort(
+      (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+    );
+  }, [
+    conversationId, // 🐛 FIX: Force recompute when conversation changes to avoid stale cached messages
+    messagesQuery.data,
+    messagesQuery.isSuccess,
+    categoriesQuery.isLoading,
+    clientSystemMessages,
+  ]);
   // setMessages(_messages); // Update messages in parent state
   // Scroll detection for go-to-bottom button + bidirectional loading
   useEffect(() => {
@@ -809,25 +848,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     setUnreadCount(0);
   }, []);
 
-  // 🆕 AUTO mark-read when conversation becomes active
-  const { mutate: markAsRead } = useMarkConversationAsRead();
-  const prevActiveConversationRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    // Only mark-read when conversation changes (not on first mount)
-    const isConversationChanged =
-      conversationId &&
-      prevActiveConversationRef.current !== undefined &&
-      prevActiveConversationRef.current !== conversationId;
-
-    if (isConversationChanged) {
-      // Mark current conversation as read
-      markAsRead({ conversationId });
-    }
-
-    prevActiveConversationRef.current = conversationId;
-  }, [conversationId, markAsRead]);
-
   // 🆕 NEW: Helper function to scroll to and highlight a message
   const scrollToAndHighlight = useCallback((element: Element) => {
     // For system messages, highlight the inner pill element instead of the full-width wrapper
@@ -842,25 +862,15 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
     element.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // Save original styles to restore later
-    const originalBg = highlightTarget.style.backgroundColor;
-    const originalBorder = highlightTarget.style.border;
-    const originalTransition = highlightTarget.style.transition;
-
-    // Apply highlight: amber background fill + border
-    highlightTarget.style.transition =
-      "background-color 0.3s ease, border 0.3s ease";
-    highlightTarget.style.backgroundColor = "#fef3c7"; // amber-100
-    highlightTarget.style.border = "2px solid #fbbf24"; // amber-400
+    // Add highlight class - different class for system vs regular messages
+    const highlightClass = isSystemMessage
+      ? "system-message-highlighted"
+      : "message-highlighted";
+    highlightTarget.classList.add(highlightClass);
 
     setTimeout(() => {
-      // Fade out then restore
-      highlightTarget.style.backgroundColor = originalBg;
-      highlightTarget.style.border = originalBorder;
-      setTimeout(() => {
-        highlightTarget.style.transition = originalTransition;
-      }, 300);
-    }, 2000);
+      highlightTarget.classList.remove(highlightClass);
+    }, 2500);
   }, []);
 
   // Helper to find a message element in DOM (supports both regular and system messages)
@@ -1165,9 +1175,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const lastMarkedConversationRef = useRef<string | undefined>(undefined);
   const lastMarkedMessageIdRef = useRef<string | undefined>(undefined);
 
-  // Get last message ID from current messages
-  const lastMessageId =
-    messages.length > 0 ? messages[messages.length - 1]?.id : undefined;
+  // Get last real server message ID (skip client-only: "sys-*" and optimistic "temp-*")
+  const lastMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const id = messages[i].id;
+      if (!id.startsWith("sys-") && !id.startsWith("temp-")) return id;
+    }
+    return undefined;
+  }, [messages]);
 
   useEffect(() => {
     // Skip if no conversation or no messages
@@ -1534,7 +1549,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // Handle input change with typing indicator
   const handleInputChange = (value: string) => {
+    // Note: Quick message replacement is now handled internally in MentionInputInline
     setInputValue(value);
+
     if (value) {
       handleTyping();
     }
@@ -1980,9 +1997,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           conversationId={conversationId}
           conversationName={displayName}
           conversationType={conversationType}
-          conversationCategory={
-            categoriesQuery.isLoading ? undefined : conversationCategory
-          }
+          conversationCategory={undefined} // 🐛 FIX: Always show skeleton when loading (messages OR categories)
           onlineCount={onlineCount}
           status={status}
           avatarUrl={avatarUrl}
@@ -1990,16 +2005,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           onBack={onBack}
           showRightPanel={showRightPanel}
           onToggleRightPanel={onToggleRightPanel}
-          categoryConversations={
-            selectedCategoryId && !categoriesQuery.isLoading
-              ? categoryConversations
-              : undefined
-          }
-          onChangeConversation={
-            selectedCategoryId && !categoriesQuery.isLoading
-              ? handleConversationChange
-              : undefined
-          }
+          categoryConversations={undefined} // 🐛 FIX: Hide category tabs when loading
+          onChangeConversation={undefined} // 🐛 FIX: Disable conversation change when loading
         />
 
         {/* Skeleton */}
@@ -2177,7 +2184,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
         {/* Messages */}
         {groupedMessages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
+          <div
+            className="flex items-center justify-center h-full"
+            data-testid="empty-messages-state"
+          >
             <p className="text-sm text-gray-500">
               Chưa có tin nhắn nào. Hãy bắt đầu trò chuyện!
             </p>

@@ -12,6 +12,7 @@ import React, {
 import { MentionDropdown } from "./MentionDropdown";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useAuthStore } from "@/stores/authStore";
+import { useQuickMessageReplacement } from "@/hooks/useQuickMessageReplacement";
 import type { ConversationMember } from "@/types/conversations";
 import type { MentionInputDto } from "@/types/messages";
 import { cn } from "@/lib/utils";
@@ -89,6 +90,9 @@ export const MentionInputInline = forwardRef<
     const [mentionStartIndex, setMentionStartIndex] = useState(-1);
     const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
     const [mentions, setMentionsState] = useState<MentionData[]>([]);
+
+    // Quick message replacement hook
+    const replaceQuickMessage = useQuickMessageReplacement();
 
     // Wrapper to sync ref with state - avoids stale closure in handleKeyDown
     // We update the ref IMMEDIATELY (synchronously) before calling setState
@@ -296,20 +300,102 @@ export const MentionInputInline = forwardRef<
       if (isComposingRef.current) return;
 
       const text = getTextContent();
+
+      // Apply quick message replacement before onChange
+      const replacedText = replaceQuickMessage(text);
+
+      // If replacement happened, update DOM smartly to preserve mentions
+      if (replacedText !== text && editorRef.current) {
+        const hasMentions = mentionsRef.current.length > 0;
+
+        if (!hasMentions) {
+          // Simple case: no mentions, direct replace
+          editorRef.current.textContent = replacedText;
+
+          // Move cursor to end
+          const range = document.createRange();
+          const selection = window.getSelection();
+          if (selection && editorRef.current.childNodes.length > 0) {
+            const lastNode =
+              editorRef.current.childNodes[
+                editorRef.current.childNodes.length - 1
+              ];
+            range.setStartAfter(lastNode);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        } else {
+          // Complex case: has mentions, smart replace in text nodes only
+          // Find and replace in text nodes while preserving mention spans
+          const pattern = /\/(\w+)\s/;
+
+          const walkTextNodes = (node: Node): void => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              const textContent = node.textContent || "";
+              const match = textContent.match(pattern);
+
+              if (match) {
+                const keyword = match[1];
+                const quickMessage = replaceQuickMessage(`/${keyword} `);
+
+                if (quickMessage !== `/${keyword} `) {
+                  // Replacement found, update this text node
+                  node.textContent = textContent.replace(
+                    `/${keyword} `,
+                    quickMessage,
+                  );
+                }
+              }
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+              // Skip mention spans, traverse other elements
+              const element = node as HTMLElement;
+              if (!element.hasAttribute("data-mention")) {
+                node.childNodes.forEach(walkTextNodes);
+              }
+            }
+          };
+
+          // Walk through all nodes and replace in text nodes only
+          editorRef.current.childNodes.forEach(walkTextNodes);
+
+          // Move cursor to end
+          const range = document.createRange();
+          const selection = window.getSelection();
+          if (selection && editorRef.current.childNodes.length > 0) {
+            const lastNode =
+              editorRef.current.childNodes[
+                editorRef.current.childNodes.length - 1
+              ];
+
+            // If last node is text node, set cursor at end of it
+            if (lastNode.nodeType === Node.TEXT_NODE) {
+              range.setStart(lastNode, lastNode.textContent?.length || 0);
+            } else {
+              range.setStartAfter(lastNode);
+            }
+
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+      }
+
       const cursorPos = getCursorPosition();
 
       // 🔧 FIX: Check for @ at different positions to handle cursor lag
-      let textBeforeCursor = text.slice(0, cursorPos);
+      let textBeforeCursor = replacedText.slice(0, cursorPos);
       let lastAtIndex = textBeforeCursor.lastIndexOf("@");
 
       // If @ not found before cursor, check if text ends with @ (cursor lag case)
       if (
         lastAtIndex === -1 &&
-        text.endsWith("@") &&
-        cursorPos >= text.length - 1
+        replacedText.endsWith("@") &&
+        cursorPos >= replacedText.length - 1
       ) {
-        textBeforeCursor = text;
-        lastAtIndex = text.lastIndexOf("@");
+        textBeforeCursor = replacedText;
+        lastAtIndex = replacedText.lastIndexOf("@");
       }
 
       if (lastAtIndex !== -1) {
@@ -354,15 +440,21 @@ export const MentionInputInline = forwardRef<
             setMentionSearchQuery(searchQuery);
             setMentionStartIndex(lastAtIndex);
             setSelectedMentionIndex(0);
-            onChange(text);
+            onChange(replacedText);
             return;
           }
         }
       }
 
       setShowMentionDropdown(false);
-      onChange(text);
-    }, [getTextContent, getCursorPosition, onChange, getCaretCoordinates]);
+      onChange(replacedText);
+    }, [
+      getTextContent,
+      getCursorPosition,
+      onChange,
+      getCaretCoordinates,
+      replaceQuickMessage,
+    ]);
 
     // Handle mention selection
     const handleMentionSelect = useCallback(
@@ -731,14 +823,13 @@ export const MentionInputInline = forwardRef<
         const currentText = editorRef.current.innerText || "";
         if (currentText !== "") {
           editorRef.current.innerHTML = "";
-          // 🔧 FIX: Also clear mentions state when parent clears value
           setMentions([]);
           if (onMentionsChange) {
             onMentionsChange([]);
           }
         }
       }
-    }, [value, onMentionsChange]);
+    }, [value, onMentionsChange, setMentions]);
 
     return (
       <div className={cn("relative", className)}>

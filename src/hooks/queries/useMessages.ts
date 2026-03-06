@@ -38,11 +38,10 @@ export function useMessages({
       return lastPage.hasMore ? lastPage.nextCursor : undefined;
     },
     initialPageParam: undefined as string | undefined,
-    staleTime: 1000 * 30, // 30 seconds - data is fresh for 30s
+    staleTime: 0, // 🐛 FIX: Always treat as stale to allow refetchOnMount to work
     gcTime: 1000 * 60 * 5, // 5 minutes - cache garbage collection time
     refetchOnMount: "always", // ✅ Always refetch when component mounts with this conversation
     enabled: enabled && !!conversationId,
-    
   });
 }
 

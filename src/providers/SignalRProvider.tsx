@@ -14,6 +14,7 @@ import {
 } from "@/lib/signalr";
 import { useAuthStore } from "@/stores/authStore";
 import { useQueryClient } from "@tanstack/react-query";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 
 interface SignalRContextValue {
   connectionState: SignalRConnectionState;
@@ -38,65 +39,74 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   const shouldConnectRef = useRef(false);
   const mountedRef = useRef(true);
   const handlersRegisteredRef = useRef(false);
+  const cleanupFnsRef = useRef<(() => void)[]>([]);
   const queryClient = useQueryClient();
 
   // Register global event handlers immediately after connection
+  // ✅ FIX (Bug 4): Use onWithCleanup() so unregister only removes OUR handlers,
+  // not handlers from useMessageRealtime/useCategoriesRealtime
   const registerGlobalHandlers = useCallback(() => {
     if (handlersRegisteredRef.current) {
       return;
     }
 
     // ConversationCreated - Most important for the broadcast issue
-    chatHub.on(SIGNALR_EVENTS.CONVERSATION_CREATED, (event: any) => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    });
+    cleanupFnsRef.current.push(
+      chatHub.onWithCleanup(SIGNALR_EVENTS.CONVERSATION_CREATED, (event: any) => {
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }, false),
+    );
 
     // MessageSent
     // NOTE: Do NOT invalidate categories/conversations here!
     // useCategoriesRealtime and useMessageRealtime handle updates via setQueryData
     // invalidateQueries would cause refetch → reset unreadCount → flash bug
-    chatHub.on(SIGNALR_EVENTS.MESSAGE_SENT, (event: any) => {
-      const message = event?.message || event;
-      const conversationId = message?.conversationId;
+    cleanupFnsRef.current.push(
+      chatHub.onWithCleanup(SIGNALR_EVENTS.MESSAGE_SENT, (event: any) => {
+        const message = event?.message || event;
+        const conversationId = message?.conversationId;
 
-      // ✅ FIX: Don't invalidate for thread messages (parentMessageId exists)
-      // Thread messages are handled by TaskLogThreadSheet's local state
-      // Invalidating would refetch messages and overwrite optimistic unreadReplyCount
-      if (conversationId && !message?.parentMessageId) {
-        queryClient.invalidateQueries({
-          queryKey: ["messages", conversationId],
-        });
-        // Removed: invalidateQueries for categories/conversations (causes unread count flash)
-      }
-    });
+        // Don't invalidate for thread messages (parentMessageId exists)
+        // Thread messages are handled by TaskLogThreadSheet's local state
+        if (conversationId && !message?.parentMessageId) {
+          // ✅ FIX (Bug 3): Use correct 3-element query key to match messageKeys.conversation()
+          queryClient.invalidateQueries({
+            queryKey: messageKeys.conversation(conversationId),
+          });
+        }
+      }, false),
+    );
 
     // MessageRead
     // NOTE: Do NOT invalidate categories/conversations here!
     // useCategoriesRealtime handles unread reset via setQueryData
-    chatHub.on(SIGNALR_EVENTS.MESSAGE_READ, (event: any) => {
-      // Removed: invalidateQueries for categories/conversations (causes unread count flash)
-    });
+    cleanupFnsRef.current.push(
+      chatHub.onWithCleanup(SIGNALR_EVENTS.MESSAGE_READ, (_event: any) => {
+        // Removed: invalidateQueries for categories/conversations (causes unread count flash)
+      }, false),
+    );
 
     // ConversationUpdated
-    chatHub.on(SIGNALR_EVENTS.CONVERSATION_UPDATED, (event: any) => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    });
+    cleanupFnsRef.current.push(
+      chatHub.onWithCleanup(SIGNALR_EVENTS.CONVERSATION_UPDATED, (event: any) => {
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }, false),
+    );
 
     handlersRegisteredRef.current = true;
   }, [queryClient]);
 
   // Unregister global event handlers
+  // ✅ FIX (Bug 4): Only remove OUR handlers via stored cleanup functions
   const unregisterGlobalHandlers = useCallback(() => {
     if (!handlersRegisteredRef.current) {
       return;
     }
 
-    chatHub.off(SIGNALR_EVENTS.CONVERSATION_CREATED);
-    chatHub.off(SIGNALR_EVENTS.MESSAGE_SENT);
-    chatHub.off(SIGNALR_EVENTS.MESSAGE_READ);
-    chatHub.off(SIGNALR_EVENTS.CONVERSATION_UPDATED);
+    cleanupFnsRef.current.forEach((fn) => fn());
+    cleanupFnsRef.current = [];
 
     handlersRegisteredRef.current = false;
   }, []);
