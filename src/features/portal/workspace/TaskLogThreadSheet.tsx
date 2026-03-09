@@ -624,10 +624,10 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
         });
     };
 
-    chatHub.onThreadUpdated(handleThreadUpdated);
+    const cleanup = chatHub.onWithCleanup('ThreadUpdated', handleThreadUpdated, false);
 
     return () => {
-      chatHub.offThreadUpdated();
+      cleanup();
     };
   }, [open, parentMessageId, markAsRead]);
 

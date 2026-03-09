@@ -15,32 +15,54 @@ function extractArray<T>(data: unknown): T[] {
   return [];
 }
 
+// Map API response (isDone) to TodoItem type (isCompleted)
+function mapTodoItem(apiItem: any): TodoItem {
+  return {
+    id: apiItem.id,
+    title: apiItem.title,
+    description: apiItem.description,
+    isCompleted: apiItem.isDone ?? apiItem.isCompleted ?? false,
+    completedAt: apiItem.completedAt,
+    createdAt: apiItem.createdAt,
+    updatedAt: apiItem.updatedAt,
+  };
+}
+
 export const getTodoItems = async (): Promise<TodoItem[]> => {
-  const response = await taskApiClient.get("/api/todo-items");
-  return extractArray<TodoItem>(response.data);
+  const response = await taskApiClient.get("/api/todo-items", {
+    params: { isDone: false },
+  });
+  const rawItems = extractArray<any>(response.data);
+  const items = rawItems.map(mapTodoItem);
+  return items;
 };
 
 export const getDoneTodayItems = async (): Promise<TodoItem[]> => {
   const response = await taskApiClient.get("/api/todo-items/done-today");
-  return extractArray<TodoItem>(response.data);
+  const rawItems = extractArray<any>(response.data);
+  const items = rawItems.map(mapTodoItem);
+  return items;
 };
 
 export const createTodoItem = async (
   data: CreateTodoItemRequest,
 ): Promise<TodoItem> => {
-  const response = await taskApiClient.post<TodoItem>("/api/todo-items", data);
-  return response.data;
+  const response = await taskApiClient.post<any>("/api/todo-items", data);
+  return mapTodoItem(response.data);
 };
 
 export const updateTodoItem = async (
   id: string,
   data: UpdateTodoItemRequest,
 ): Promise<void> => {
-  await taskApiClient.patch(`/api/todo-items/${id}`, data);
+  await taskApiClient.put(`/api/todo-items/${id}`, data);
 };
 
-export const toggleTodoItem = async (id: string): Promise<void> => {
-  await taskApiClient.patch(`/api/todo-items/${id}/toggle`);
+export const toggleTodoItem = async (
+  id: string,
+  isDone: boolean,
+): Promise<void> => {
+  await taskApiClient.put(`/api/todo-items/${id}`, { isDone });
 };
 
 export const deleteTodoItem = async (id: string): Promise<void> => {

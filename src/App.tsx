@@ -5,12 +5,20 @@ import { SignalRProvider } from "./providers/SignalRProvider";
 import { useSecurity } from "./hooks/useSecurity";
 import { useEffect } from "react";
 import { useAuthStore } from "./stores/authStore";
+import { initializeViewMode } from "./stores/uiStore";
 import { getCurrentUser } from "./utils/getCurrentUser";
 
 export default function App() {
   // Initialize client-side security protections
   const { isWhitelisted } = useSecurity();
   const { user, isAuthenticated, setUser } = useAuthStore();
+
+  // Set viewMode from roles after all stores are initialized (avoids circular dependency)
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      initializeViewMode();
+    }
+  }, [isAuthenticated, user?.id]);
 
   // Check and update user info on app initialization/refresh
   useEffect(() => {

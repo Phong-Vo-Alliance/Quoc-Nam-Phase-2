@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { getViewModeFromRoles } from '@/utils/roleUtils';
 
 export type ViewMode = 'lead' | 'staff';
 export type CurrentView = 'workspace' | 'lead';
@@ -21,6 +20,10 @@ interface UIState {
   // Mobile states
   isMobileView: boolean;
   mobileMenuOpen: boolean;
+
+  // Thread panel state (used by signalr-event-dispatcher outside React)
+  openThreadMessageId: string | null;
+  setOpenThreadMessageId: (id: string | null) => void;
 
   // Modal states
   activeModal: string | null;
@@ -52,7 +55,7 @@ interface UIState {
 }
 
 const initialState = {
-  viewMode: getViewModeFromRoles(),
+  viewMode: 'staff' as ViewMode, // Safe default; computed lazily via initializeViewMode()
   currentView: 'workspace' as CurrentView,
   showRightPanel: true,
   rightPanelTab: 'info' as RightPanelTab,
@@ -62,6 +65,7 @@ const initialState = {
   selectedTaskId: null,
   isMobileView: false,
   mobileMenuOpen: false,
+  openThreadMessageId: null,
   activeModal: null,
 };
 
@@ -102,8 +106,23 @@ export const useUIStore = create<UIState>()((set) => ({
 
   closeModal: () => set({ activeModal: null }),
 
+  // Thread panel
+  setOpenThreadMessageId: (id) => set({ openThreadMessageId: id }),
+
   // Reset
   resetUI: () => set(initialState),
 }));
+
+/**
+ * Initialize viewMode from user roles.
+ * Must be called AFTER all stores are created (e.g., in App component mount)
+ * to avoid circular dependency: uiStore -> roleUtils -> authStore -> signalr-event-dispatcher -> uiStore
+ */
+export async function initializeViewMode(): Promise<void> {
+  // Dynamic import to break the circular dependency at module load time
+  const { getViewModeFromRoles } = await import('@/utils/roleUtils');
+  const viewMode = getViewModeFromRoles();
+  useUIStore.setState({ viewMode });
+}
 
 export default useUIStore;

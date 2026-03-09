@@ -27,7 +27,7 @@ import {
   useDirectMessages,
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages";
-import { useConversationRealtime } from "@/hooks/useConversationRealtime";
+import { useTypingIndicators } from "@/hooks/useTypingIndicators";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useSendTypingIndicator } from "@/hooks/useSendTypingIndicator";
 import { useAuthStore } from "@/stores/authStore";
@@ -642,20 +642,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     },
   });
 
-  // ✅ Realtime updates for conversation list unread counts
-  // This is the ONLY place that handles MessageSent for unread count updates
-  useConversationRealtime({
-    activeConversationId: conversationId,
-  });
-
-  // ❌ REMOVED: useMessageRealtime - Moved to parent (WorkspaceView) to avoid re-renders
-  // ❌ REMOVED: useCategoriesRealtime - Moved to parent (WorkspaceView) to avoid re-renders
-  // Parent component handles real-time message and category updates for better performance
-  const typingUsers: Array<{
-    userId: string;
-    userName: string;
-    timestamp: number;
-  }> = []; // Empty array since moved to parent
+  // Typing indicators (replaces old useMessageRealtime typing logic)
+  const { typingUsers } = useTypingIndicators(conversationId);
 
   // Typing indicator
   const { handleTyping, stopTyping } = useSendTypingIndicator({
@@ -692,20 +680,25 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
     const serverMessages = flattenMessages(messagesQuery.data);
 
+    // 🆕 FILTER: Only show main messages (exclude thread replies)
+    // Thread replies (parentMessageId !== null) should only appear in TaskLogThreadSheet
+    const mainMessages = serverMessages.filter(
+      (msg) => msg.parentMessageId === null,
+    );
+
     // Merge client-only system messages (survive react-query refetches)
-    if (clientSystemMessages.length === 0) return serverMessages;
+    if (clientSystemMessages.length === 0) return mainMessages;
 
     const existingContents = new Set(
-      serverMessages
-        .filter((m) => m.contentType === "SYS")
-        .map((m) => m.content),
+      mainMessages.filter((m) => m.contentType === "SYS").map((m) => m.content),
     );
+    // 🆕 FILTER: Also exclude thread replies from client system messages
     const newClientMsgs = clientSystemMessages.filter(
-      (m) => !existingContents.has(m.content),
+      (m) => !existingContents.has(m.content) && m.parentMessageId === null,
     );
-    if (newClientMsgs.length === 0) return serverMessages;
+    if (newClientMsgs.length === 0) return mainMessages;
 
-    return [...serverMessages, ...newClientMsgs].sort(
+    return [...mainMessages, ...newClientMsgs].sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
     );
   }, [

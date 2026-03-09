@@ -45,7 +45,8 @@ export function useTasks(params?: {
     select: (data) =>
       data.map((task) => normalizeTaskFromAPI(task as unknown as Task)),
     enabled,
-    staleTime: 1000 * 30, // 30 seconds - tasks change frequently
+    staleTime: 0, // Always refetch on invalidation (realtime updates via socket)
+    structuralSharing: false, // Disable structural sharing to ensure new references on every refetch (realtime updates)
   });
 }
 

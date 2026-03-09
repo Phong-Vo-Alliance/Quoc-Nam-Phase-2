@@ -1,5 +1,15 @@
 import React, { useState, useRef } from "react";
-import { ChevronLeft, Plus, Pencil, Trash2, Circle, CheckCircle2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import {
+  ChevronLeft,
+  Plus,
+  Pencil,
+  Trash2,
+  Circle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -27,8 +37,11 @@ export const TodoListManagerMobile: React.FC<{
   open: boolean;
   onClose: () => void;
 }> = ({ open, onClose }) => {
-  const { data: activeTodos = [], isLoading: isLoadingActive } = useTodoItems({ enabled: open });
-  const { data: completedToday = [], isLoading: isLoadingDoneToday } = useDoneTodayItems({ enabled: open });
+  const { data: activeTodos = [], isLoading: isLoadingActive } = useTodoItems({
+    enabled: open,
+  });
+  const { data: completedToday = [], isLoading: isLoadingDoneToday } =
+    useDoneTodayItems({ enabled: open });
 
   const createMutation = useCreateTodoItem();
   const updateMutation = useUpdateTodoItem();
@@ -45,9 +58,9 @@ export const TodoListManagerMobile: React.FC<{
 
   // Form states
   const [newTitle, setNewTitle] = useState("");
-  const [newDetail, setNewDetail] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [editTitle, setEditTitle] = useState("");
-  const [editDetail, setEditDetail] = useState("");
+  const [editDescription, setEditDescription] = useState("");
 
   // Active item states
   const [contextMenuTodo, setContextMenuTodo] = useState<TodoItem | null>(null);
@@ -75,7 +88,7 @@ export const TodoListManagerMobile: React.FC<{
 
   const handleAddNew = () => {
     setNewTitle("");
-    setNewDetail("");
+    setNewDescription("");
     setShowAddSheet(true);
   };
 
@@ -83,12 +96,15 @@ export const TodoListManagerMobile: React.FC<{
     if (!newTitle.trim()) return;
 
     createMutation.mutate(
-      { title: newTitle.trim(), detail: newDetail.trim() || undefined },
+      {
+        title: newTitle.trim(),
+        description: newDescription.trim() || undefined,
+      },
       {
         onSuccess: () => {
           setShowAddSheet(false);
           setNewTitle("");
-          setNewDetail("");
+          setNewDescription("");
         },
         onError: () => {
           toast.error("Không thể thêm công việc. Vui lòng thử lại.");
@@ -97,19 +113,22 @@ export const TodoListManagerMobile: React.FC<{
     );
   };
 
-  const handleToggleDone = (id: string) => {
-    toggleMutation.mutate(id, {
-      onError: () => {
-        toast.error("Không thể cập nhật trạng thái. Vui lòng thử lại.");
+  const handleToggleDone = (todo: TodoItem) => {
+    toggleMutation.mutate(
+      { id: todo.id, isDone: !todo.isCompleted },
+      {
+        onError: () => {
+          toast.error("Không thể cập nhật trạng thái. Vui lòng thử lại.");
+        },
       },
-    });
+    );
   };
 
   const handleStartEdit = (todo: TodoItem) => {
     if (todo.isCompleted) return;
     setEditingTodo(todo);
     setEditTitle(todo.title);
-    setEditDetail(todo.detail || "");
+    setEditDescription(todo.description || "");
     setShowEditSheet(true);
     setShowContextMenu(false);
   };
@@ -118,13 +137,19 @@ export const TodoListManagerMobile: React.FC<{
     if (!editingTodo || !editTitle.trim()) return;
 
     updateMutation.mutate(
-      { id: editingTodo.id, data: { title: editTitle.trim(), detail: editDetail.trim() || undefined } },
+      {
+        id: editingTodo.id,
+        data: {
+          title: editTitle.trim(),
+          description: editDescription.trim() || undefined,
+        },
+      },
       {
         onSuccess: () => {
           setShowEditSheet(false);
           setEditingTodo(null);
           setEditTitle("");
-          setEditDetail("");
+          setEditDescription("");
         },
         onError: () => {
           toast.error("Không thể cập nhật công việc. Vui lòng thử lại.");
@@ -285,7 +310,9 @@ export const TodoListManagerMobile: React.FC<{
           </button>
 
           <div className="flex-1 text-center">
-            <h1 className="text-sm font-semibold text-gray-900">Việc cần làm</h1>
+            <h1 className="text-sm font-semibold text-gray-900">
+              Việc cần làm
+            </h1>
           </div>
 
           <button
@@ -299,7 +326,9 @@ export const TodoListManagerMobile: React.FC<{
       </div>
 
       {/* Content */}
-      <div className={`flex-1 overflow-y-auto px-3 py-4 space-y-3 bg-gray-50 ${isToggling ? "pointer-events-none" : ""}`}>
+      <div
+        className={`flex-1 overflow-y-auto px-3 py-4 space-y-3 bg-gray-50 ${isToggling ? "pointer-events-none" : ""}`}
+      >
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-brand-600" />
@@ -362,14 +391,17 @@ export const TodoListManagerMobile: React.FC<{
                     transition-transform duration-200
                   "
                   style={{
-                    transform: swipedId === todo.id ? "translateX(-80px)" : "translateX(0)",
+                    transform:
+                      swipedId === todo.id
+                        ? "translateX(-80px)"
+                        : "translateX(0)",
                   }}
                 >
                   <div className="flex items-start gap-3">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleToggleDone(todo.id);
+                        handleToggleDone(todo);
                       }}
                       className="shrink-0 mt-0.5 px-0.5"
                     >
@@ -380,9 +412,9 @@ export const TodoListManagerMobile: React.FC<{
                       <div className="text-sm font-medium text-gray-800 break-words">
                         {todo.title}
                       </div>
-                      {todo.detail && (
+                      {todo.description && (
                         <div className="text-sm text-gray-600 mt-1 break-words">
-                          {todo.detail}
+                          {todo.description}
                         </div>
                       )}
                     </div>
@@ -425,7 +457,7 @@ export const TodoListManagerMobile: React.FC<{
                       >
                         <div className="flex items-start gap-3">
                           <button
-                            onClick={() => handleToggleDone(todo.id)}
+                            onClick={() => handleToggleDone(todo)}
                             className="shrink-0 mt-0.5"
                           >
                             <CheckCircle2 className="h-5 w-5 text-brand-600 hover:text-brand-700 transition-colors" />
@@ -435,9 +467,9 @@ export const TodoListManagerMobile: React.FC<{
                             <div className="text-sm font-medium text-gray-500 line-through break-words">
                               {todo.title}
                             </div>
-                            {todo.detail && (
+                            {todo.description && (
                               <div className="text-sm text-gray-400 line-through mt-1 break-words">
-                                {todo.detail}
+                                {todo.description}
                               </div>
                             )}
                           </div>
@@ -499,8 +531,8 @@ export const TodoListManagerMobile: React.FC<{
                 Chi tiết
               </label>
               <textarea
-                value={newDetail}
-                onChange={(e) => setNewDetail(e.target.value)}
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
                 placeholder="Nhập chi tiết..."
                 rows={4}
                 disabled={createMutation.isPending}
@@ -584,8 +616,8 @@ export const TodoListManagerMobile: React.FC<{
                 Chi tiết
               </label>
               <textarea
-                value={editDetail}
-                onChange={(e) => setEditDetail(e.target.value)}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
                 placeholder="Nhập chi tiết..."
                 rows={4}
                 disabled={updateMutation.isPending}
@@ -647,7 +679,9 @@ export const TodoListManagerMobile: React.FC<{
           <div className="px-3 py-3 space-y-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]">
             {!contextMenuTodo?.isCompleted && (
               <button
-                onClick={() => contextMenuTodo && handleStartEdit(contextMenuTodo)}
+                onClick={() =>
+                  contextMenuTodo && handleStartEdit(contextMenuTodo)
+                }
                 className="
                   w-full flex items-center gap-3 px-3 py-3 rounded-lg
                   bg-white border border-gray-200

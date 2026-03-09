@@ -1,7 +1,7 @@
 export interface TodoItem {
   id: string;
   title: string;
-  detail?: string;
+  description?: string;
   isCompleted: boolean;
   completedAt?: string;
   createdAt: string;
@@ -10,10 +10,11 @@ export interface TodoItem {
 
 export interface CreateTodoItemRequest {
   title: string;
-  detail?: string;
+  description?: string;
 }
 
 export interface UpdateTodoItemRequest {
   title?: string;
-  detail?: string;
+  description?: string;
+  isDone?: boolean;
 }

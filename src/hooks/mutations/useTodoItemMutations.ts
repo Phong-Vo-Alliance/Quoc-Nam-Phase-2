@@ -5,7 +5,10 @@ import {
   toggleTodoItem,
   deleteTodoItem,
 } from "@/api/todo.api";
-import type { CreateTodoItemRequest, UpdateTodoItemRequest } from "@/types/todo";
+import type {
+  CreateTodoItemRequest,
+  UpdateTodoItemRequest,
+} from "@/types/todo";
 import { todoItemsKeys } from "../queries/useTodoItems";
 
 export function useCreateTodoItem() {
@@ -35,7 +38,8 @@ export function useToggleTodoItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => toggleTodoItem(id),
+    mutationFn: ({ id, isDone }: { id: string; isDone: boolean }) =>
+      toggleTodoItem(id, isDone),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: todoItemsKeys.all });
     },

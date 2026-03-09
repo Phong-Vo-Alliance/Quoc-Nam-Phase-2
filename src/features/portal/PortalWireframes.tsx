@@ -32,7 +32,7 @@ import { ViewModeSwitcher } from "@/features/portal/components/ViewModeSwitcher"
 import { DepartmentTransferSheet } from "@/components/sheet/DepartmentTransferSheet";
 import { AssignTaskSheet } from "@/components/sheet/AssignTaskSheet";
 import { taskKeys } from "@/hooks/queries/keys/taskKeys";
-import { useTasks } from "@/hooks/queries/useTasks";
+import { useTasks, tasksKeys } from "@/hooks/queries/useTasks";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { checklistTemplateKeys } from "@/hooks/queries/useChecklistTemplates";
 import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
@@ -47,6 +47,8 @@ import {
   useUpdateTaskStatus,
   useToggleCheckItem,
   useUpdateCheckItem,
+  useAddCheckItem,
+  useDeleteCheckItem,
 } from "@/hooks/mutations/useTaskMutations";
 import { useCreateTask } from "@/hooks/mutations/useCreateTask";
 // TODO: Migrate wireframe to use categories API instead of mock data
@@ -294,12 +296,14 @@ export default function PortalWireframes({
     taskLogSheetRef.current = taskLogSheet;
   }, [taskLogSheet]);
 
-  const [_Tasks, _setTasks] = React.useState<Task[]>([]);
+  // _Tasks local state removed (RC-4 fix) — use enrichedTasks directly
 
   // Task mutation hooks
   const updateTaskStatusMutation = useUpdateTaskStatus();
   const toggleCheckItemMutation = useToggleCheckItem();
   const updateCheckItemMutation = useUpdateCheckItem();
+  const addCheckItemMutation = useAddCheckItem();
+  const deleteCheckItemMutation = useDeleteCheckItem();
   const createTaskMutation = useCreateTask();
 
   // Subscribe to auth store for reactive updates (fullName may update after login)
@@ -486,11 +490,7 @@ export default function PortalWireframes({
     });
   }, [rawTasks, selectedGroup]);
 
-  React.useEffect(() => {
-    _setTasks(enrichedTasks);
-  }, [enrichedTasks]);
-
-  const tasks = _Tasks;
+  const tasks = enrichedTasks;
 
   // Fetch conversation members from API
   const { data: conversationMembersData } = useConversationMembers({
@@ -558,31 +558,38 @@ export default function PortalWireframes({
   };
 
   const handleUpdateTaskChecklist = (taskId: string, next: ChecklistItem[]) => {
-    _setTasks((prev) => {
-      return prev.map((t) => {
-        if (t.id !== taskId) return t;
+    // Find the current task to diff checklist changes
+    const currentTask = tasks.find((t) => t.id === taskId);
+    const currentChecklist = currentTask?.checklist ?? [];
 
-        const updated = {
-          ...t,
-          checklist: [...next],
-          updatedAt: new Date().toISOString(),
-        };
+    // Detect added items (items with temp IDs starting with "chk_")
+    const addedItems = next.filter(
+      (item) => item.id.startsWith("chk_") && !currentChecklist.some((c) => c.id === item.id),
+    );
 
-        // enrich progressText ngay lap tuc
-        const wt = selectedGroup?.workTypes?.find(
-          (w) => w.id === updated.workTypeId,
-        );
-        return {
-          ...updated,
-          workTypeName: wt?.name ?? updated.workTypeId,
-          progressText: updated.checklist.length
-            ? `${updated.checklist.filter((c) => c.done).length}/${
-                updated.checklist.length
-              } mục`
-            : "Không có checklist",
-        };
-      });
+    // Detect deleted items (items in current but not in next)
+    const deletedItems = currentChecklist.filter(
+      (item) => !next.some((n) => n.id === item.id),
+    );
+
+    // Detect edited items (same id, different label)
+    const editedItems = next.filter((item) => {
+      const old = currentChecklist.find((c) => c.id === item.id);
+      return old && old.label !== item.label;
     });
+
+    // Call API for each change
+    for (const item of addedItems) {
+      addCheckItemMutation.mutate({ taskId, content: item.label });
+    }
+
+    for (const item of deletedItems) {
+      deleteCheckItemMutation.mutate({ taskId, itemId: item.id });
+    }
+
+    for (const item of editedItems) {
+      updateCheckItemMutation.mutate({ taskId, itemId: item.id, content: item.label });
+    }
   };
 
   // Áp dụng template mới cho tất cả Task.todo thuộc workType
@@ -590,19 +597,23 @@ export default function PortalWireframes({
     workTypeId: string,
     tpl: ChecklistTemplateItem[],
   ) => {
-    _setTasks((prev) =>
-      prev.map((t) =>
-        t.workTypeId === workTypeId && t.status.code === "todo"
-          ? {
-              ...t,
-              checklist: tpl.map((it) => ({
-                id: "chk_" + Math.random().toString(36).slice(2),
-                label: it.label,
-                done: false,
-              })),
-            }
-          : t,
-      ),
+    queryClient.setQueriesData<Task[]>(
+      { queryKey: tasksKeys.lists() },
+      (old) => {
+        if (!old) return old;
+        return old.map((t: Task) =>
+          t.workTypeId === workTypeId && (t.status?.code === "todo" || (t.status as unknown as string) === "todo")
+            ? {
+                ...t,
+                checklist: tpl.map((it) => ({
+                  id: "chk_" + Math.random().toString(36).slice(2),
+                  label: it.label,
+                  done: false,
+                })),
+              }
+            : t,
+        );
+      },
     );
   };
 

@@ -14,6 +14,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { useConversationStore } from "./conversationStore";
 import { useImageCacheStore } from "./imageCacheStore";
 import { chatHub, taskHub } from "@/lib/signalr";
+import { resetDispatcherState } from "@/lib/signalr-event-dispatcher";
 
 // Auth user type (from login API)
 // Updated: 2026-02-11 - Added fullName field
@@ -126,6 +127,9 @@ export const useAuthStore = create<AuthState>()(
             error,
           );
         }
+
+        // ✅ Clear dispatcher dedup state to prevent stale IDs blocking messages in new sessions
+        resetDispatcherState();
 
         // ✅ Clear TanStack Query cache to prevent data leakage between users
         queryClient.clear();

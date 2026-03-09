@@ -35,8 +35,7 @@ export function useAddCheckItem() {
     }) => addCheckItem(taskId, content, order),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
     },
   });
 }
@@ -53,8 +52,7 @@ export function useToggleCheckItem() {
       toggleCheckItem(taskId, itemId),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
     },
   });
 }
@@ -78,8 +76,7 @@ export function useUpdateCheckItem() {
     }) => updateCheckItem(taskId, itemId, content),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
     },
   });
 }
@@ -96,8 +93,7 @@ export function useDeleteCheckItem() {
       deleteCheckItem(taskId, itemId),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
     },
   });
 }
@@ -119,8 +115,7 @@ export function useUpdateTaskStatus() {
     }) => updateTaskStatus(taskId, status),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
     },
   });
 }
@@ -150,8 +145,7 @@ export function useUpdateTask() {
     }) => updateTask(taskId, data),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["linkedTasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
     },
   });
 }

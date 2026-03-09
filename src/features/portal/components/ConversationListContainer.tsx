@@ -6,7 +6,6 @@ import {
   useDirectMessages,
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages";
-import { useConversationRealtime } from "@/hooks/useConversationRealtime";
 import { ConversationSkeleton } from "./ConversationSkeleton";
 import type {
   GroupConversation,

@@ -26,7 +26,6 @@ import {
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages";
 import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
-import { useDirectsRealtime } from "@/hooks/useDirectsRealtime";
 import { ConversationSkeleton } from "@/features/portal/components/ConversationSkeleton";
 import type {
   GroupConversation,
@@ -312,9 +311,6 @@ export const ConversationListSidebar: React.FC<
       setHasShownDmBadge(true);
     }
   }, [tab, totalDmUnread, hasShownDmBadge]);
-
-  // Real-time updates for DMs
-  useDirectsRealtime(apiDirects, selectedConversationId);
 
   // Merged contacts list
   const mergedContacts = React.useMemo((): ContactItem[] => {

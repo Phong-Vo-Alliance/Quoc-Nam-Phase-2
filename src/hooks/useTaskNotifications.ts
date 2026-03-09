@@ -11,7 +11,7 @@
 
 import { useEffect, useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { taskHub, type TaskUpdatePayload, SIGNALR_EVENTS } from "@/lib/signalr";
+import { taskHub, type TaskUpdatePayload } from "@/lib/signalr";
 import { tasksKeys } from "@/hooks/queries/useTasks";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
@@ -71,17 +71,26 @@ export function useTaskNotifications() {
         );
       }
 
-      // 1. Invalidate all task queries to refetch fresh data
-      queryClient.invalidateQueries({ queryKey: tasksKeys.all });
+      // Debug: log all active task queries to verify key matching
+      const activeQueries = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: tasksKeys.all });
+      console.log(
+        "[TaskNotifications] handler called:",
+        payload.changeType,
+        "taskId:",
+        payload.taskId,
+        "active task queries:",
+        activeQueries.length,
+        "keys:",
+        activeQueries.map((q) => JSON.stringify(q.queryKey)),
+      );
 
-      // 2. If the task is linked to a conversation, also invalidate that specific conversation's tasks
-      if (payload.task.conversationId) {
-        queryClient.invalidateQueries({
-          queryKey: tasksKeys.list({
-            conversationId: payload.task.conversationId,
-          }),
-        });
-      }
+      // Force refetch all task queries (refetchQueries forces a fetch, unlike invalidateQueries which may skip disabled queries)
+      // Note: tasksKeys.all refetches ALL task queries including conversation-specific ones (partial key matching)
+      queryClient.refetchQueries({
+        queryKey: tasksKeys.all,
+      });
 
       if (payload.changeType === "created") {
         queryClient.setQueryData<{
@@ -116,8 +125,8 @@ export function useTaskNotifications() {
           }
         });
       }
-      // 3. Invalidate the specific task detail if it's being viewed
-      queryClient.invalidateQueries({
+      // 3. Refetch the specific task detail if it's being viewed
+      queryClient.refetchQueries({
         queryKey: tasksKeys.detail(payload.taskId),
       });
 
@@ -185,6 +194,13 @@ export function useTaskNotifications() {
           break;
         }
 
+        case "checklist_item_added": {
+          if (!isMyAction) {
+            toast.info(`Công việc "${taskTitle}" có mục checklist mới`);
+          }
+          break;
+        }
+
         case "reassigned": {
           const assigneeName = getUserName(payload.task.assignToUserId);
           if (isAssignedToMe) {
@@ -226,20 +242,14 @@ export function useTaskNotifications() {
     [queryClient],
   );
 
-  // Monitor TaskHub connection state
+  // Monitor TaskHub connection state (no polling)
   useEffect(() => {
-    const checkConnection = () => {
-      const connected = taskHub.isConnected();
-      setIsTaskHubConnected(connected);
-    };
+    setIsTaskHubConnected(taskHub.isConnected());
 
-    // Check immediately
-    checkConnection();
-
-    // Poll connection state every second
-    const interval = setInterval(checkConnection, 1000);
-
-    return () => clearInterval(interval);
+    const cleanup = taskHub.onStateChange((state) => {
+      setIsTaskHubConnected(state === "Connected");
+    });
+    return cleanup;
   }, []);
 
   // Subscribe to TasksUpdated event only when TaskHub is connected
@@ -248,22 +258,20 @@ export function useTaskNotifications() {
       return;
     }
 
-    // Subscribe to TasksUpdated event
-    taskHub.onTasksUpdated(handleTaskUpdate);
-
-    // Subscribe to InformationConfirmedCreated event (for realtime confirmed info updates)
-    taskHub.on(
+    const cleanup1 = taskHub.onWithCleanup(
+      "TasksUpdated",
+      handleTaskUpdate,
+      false,
+    );
+    const cleanup2 = taskHub.onWithCleanup(
       "InformationConfirmedCreated",
       handleInformationConfirmedCreated,
+      false,
     );
 
-    // Cleanup: Unsubscribe on unmount or disconnection
     return () => {
-      taskHub.offTasksUpdated();
-      taskHub.off(
-        "InformationConfirmedCreated",
-        handleInformationConfirmedCreated,
-      );
+      cleanup1();
+      cleanup2();
     };
   }, [isTaskHubConnected, handleTaskUpdate, handleInformationConfirmedCreated]);
 }

@@ -10,11 +10,11 @@ import {
   chatHub,
   taskHub,
   type SignalRConnectionState,
-  SIGNALR_EVENTS,
 } from "@/lib/signalr";
 import { useAuthStore } from "@/stores/authStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { messageKeys } from "@/hooks/queries/keys/messageKeys";
+import { registerAllEventHandlers, resetDispatcherState } from "@/lib/signalr-event-dispatcher";
+import { groupManager } from "@/lib/signalr-group-manager";
 
 interface SignalRContextValue {
   connectionState: SignalRConnectionState;
@@ -38,78 +38,8 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   const connectionAttemptRef = useRef(false);
   const shouldConnectRef = useRef(false);
   const mountedRef = useRef(true);
-  const handlersRegisteredRef = useRef(false);
-  const cleanupFnsRef = useRef<(() => void)[]>([]);
+  const dispatcherCleanupRef = useRef<(() => void)[] | null>(null);
   const queryClient = useQueryClient();
-
-  // Register global event handlers immediately after connection
-  // ✅ FIX (Bug 4): Use onWithCleanup() so unregister only removes OUR handlers,
-  // not handlers from useMessageRealtime/useCategoriesRealtime
-  const registerGlobalHandlers = useCallback(() => {
-    if (handlersRegisteredRef.current) {
-      return;
-    }
-
-    // ConversationCreated - Most important for the broadcast issue
-    cleanupFnsRef.current.push(
-      chatHub.onWithCleanup(SIGNALR_EVENTS.CONVERSATION_CREATED, (event: any) => {
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
-        queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      }, false),
-    );
-
-    // MessageSent
-    // NOTE: Do NOT invalidate categories/conversations here!
-    // useCategoriesRealtime and useMessageRealtime handle updates via setQueryData
-    // invalidateQueries would cause refetch → reset unreadCount → flash bug
-    cleanupFnsRef.current.push(
-      chatHub.onWithCleanup(SIGNALR_EVENTS.MESSAGE_SENT, (event: any) => {
-        const message = event?.message || event;
-        const conversationId = message?.conversationId;
-
-        // Don't invalidate for thread messages (parentMessageId exists)
-        // Thread messages are handled by TaskLogThreadSheet's local state
-        if (conversationId && !message?.parentMessageId) {
-          // ✅ FIX (Bug 3): Use correct 3-element query key to match messageKeys.conversation()
-          queryClient.invalidateQueries({
-            queryKey: messageKeys.conversation(conversationId),
-          });
-        }
-      }, false),
-    );
-
-    // MessageRead
-    // NOTE: Do NOT invalidate categories/conversations here!
-    // useCategoriesRealtime handles unread reset via setQueryData
-    cleanupFnsRef.current.push(
-      chatHub.onWithCleanup(SIGNALR_EVENTS.MESSAGE_READ, (_event: any) => {
-        // Removed: invalidateQueries for categories/conversations (causes unread count flash)
-      }, false),
-    );
-
-    // ConversationUpdated
-    cleanupFnsRef.current.push(
-      chatHub.onWithCleanup(SIGNALR_EVENTS.CONVERSATION_UPDATED, (event: any) => {
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
-        queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      }, false),
-    );
-
-    handlersRegisteredRef.current = true;
-  }, [queryClient]);
-
-  // Unregister global event handlers
-  // ✅ FIX (Bug 4): Only remove OUR handlers via stored cleanup functions
-  const unregisterGlobalHandlers = useCallback(() => {
-    if (!handlersRegisteredRef.current) {
-      return;
-    }
-
-    cleanupFnsRef.current.forEach((fn) => fn());
-    cleanupFnsRef.current = [];
-
-    handlersRegisteredRef.current = false;
-  }, []);
 
   // Connect to SignalR
   const connect = useCallback(async () => {
@@ -143,8 +73,8 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
       if (mountedRef.current && shouldConnectRef.current) {
         setConnectionState("Connected");
 
-        // Register event handlers IMMEDIATELY after connection succeeds
-        registerGlobalHandlers();
+        // Register centralized event handlers
+        dispatcherCleanupRef.current = registerAllEventHandlers(queryClient);
       }
     } catch (error) {
       if (mountedRef.current) {
@@ -154,13 +84,18 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     } finally {
       connectionAttemptRef.current = false;
     }
-  }, [accessToken, taskAccessToken, registerGlobalHandlers]);
+  }, [accessToken, taskAccessToken, queryClient]);
 
   // Disconnect from SignalR
   const disconnect = useCallback(async () => {
     try {
-      // Unregister handlers before disconnecting
-      unregisterGlobalHandlers();
+      // Cleanup dispatcher handlers
+      dispatcherCleanupRef.current?.forEach((fn) => fn());
+      dispatcherCleanupRef.current = null;
+      resetDispatcherState();
+
+      // Leave all SignalR groups
+      groupManager.leaveAll();
 
       // Disconnect both hubs
       await Promise.all([
@@ -174,7 +109,7 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     } catch (error) {
       // Silent fail on disconnect
     }
-  }, [unregisterGlobalHandlers]);
+  }, []);
 
   // Track mount state
   useEffect(() => {
@@ -205,8 +140,9 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
   useEffect(() => {
     return () => {
       shouldConnectRef.current = false;
-      // Unregister handlers on unmount
-      unregisterGlobalHandlers();
+      // Cleanup dispatcher handlers on unmount
+      dispatcherCleanupRef.current?.forEach((fn) => fn());
+      dispatcherCleanupRef.current = null;
       // Don't call stop() during unmount if connection is in progress
       // The connection will be stopped when component re-mounts with new state
       if (!connectionAttemptRef.current) {
@@ -214,19 +150,22 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
         // taskHub.stop(); // Also stop Task Hub
       }
     };
-  }, [unregisterGlobalHandlers]);
+  }, []);
 
-  // Poll connection state
+  // Subscribe to connection state changes (no polling)
   useEffect(() => {
-    const interval = setInterval(() => {
-      const state = chatHub.state;
-      if (state !== connectionState) {
-        setConnectionState(state);
-      }
-    }, 1000);
+    setConnectionState(chatHub.state);
 
-    return () => clearInterval(interval);
-  }, [connectionState]);
+    const cleanup = chatHub.onStateChange((state) => {
+      setConnectionState(state);
+      // Reset group tracking on reconnect — server drops memberships,
+      // useGroupSync will re-join from fresh data
+      if (state === "Reconnecting") {
+        groupManager.reset();
+      }
+    });
+    return cleanup;
+  }, []);
 
   const value: SignalRContextValue = {
     connectionState,

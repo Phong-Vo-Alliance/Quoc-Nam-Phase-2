@@ -58,7 +58,12 @@ export interface SystemMessagePart {
     | "status"
     | "content-name"; // For content in receive info messages
   content: string;
-  statusType?: "pending" | "in-progress" | "completed" | "cancelled"; // For status highlighting
+  statusType?:
+    | "todo"
+    | "need-to-verified"
+    | "in-progress"
+    | "completed"
+    | "cancelled"; // For status highlighting
 }
 
 /**
@@ -117,13 +122,16 @@ export function parseSystemMessageContent(
   // Status mapping for color highlighting
   const statusMapping: Record<
     string,
-    "pending" | "in-progress" | "completed" | "cancelled"
+    "todo" | "need-to-verified" | "in-progress" | "completed" | "cancelled"
   > = {
-    "Chờ xử lý": "pending",
+    "Chưa xử lý": "todo",
+    "Chờ duyệt": "need-to-verified",
     "Đang xử lý": "in-progress",
     "Hoàn thành": "completed",
     "Đã hủy": "cancelled",
-    "Chưa bắt đầu": "pending",
+    // Legacy status names (for backward compatibility)
+    "Chờ xử lý": "todo",
+    "Chưa bắt đầu": "todo",
     "Đã xong": "completed",
   };
 
@@ -135,8 +143,7 @@ export function parseSystemMessageContent(
     /^Loại việc\s+(.+?)\s+thuộc nhóm\s+(.+?)\s+đã đổi tên thành\s+(.+)$/;
 
   // Pattern 13b (fallback): "Loại việc [oldName] đã đổi tên thành [newName]"
-  const renameWorkTypePattern =
-    /^Loại việc\s+(.+?)\s+đã đổi tên thành\s+(.+)$/;
+  const renameWorkTypePattern = /^Loại việc\s+(.+?)\s+đã đổi tên thành\s+(.+)$/;
 
   let match: RegExpMatchArray | null;
 
@@ -266,14 +273,21 @@ export function parseSystemMessageContent(
     const [, assigneeName, taskName, status] = match;
     // Remove surrounding quotes if present
     const cleanTaskName = taskName.trim().replace(/^["']|["']$/g, "");
-    const cleanStatus = status.trim().replace(/^["']|["']$/g, "");
+    // Clean status: remove quotes, trailing dots, and extra spaces
+    const cleanStatus = status
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .replace(/\.$/g, "")
+      .trim();
+
     parts.push({ type: "highlight", content: assigneeName });
     parts.push({ type: "text", content: " đã chuyển trạng thái công việc " });
     parts.push({ type: "task-name", content: cleanTaskName });
     parts.push({ type: "text", content: " sang " });
 
     // Determine status type for color coding
-    const statusType = statusMapping[cleanStatus] || "pending";
+    const statusType = statusMapping[cleanStatus] || "todo";
+
     parts.push({ type: "status", content: cleanStatus, statusType });
     return parts;
   }
@@ -338,14 +352,16 @@ export interface RenderSystemMessageOptions {
   /**
    * Classes for status by type
    * @default {
-   *   pending: "font-semibold text-amber-600 bg-amber-100 px-1 rounded",
-   *   "in-progress": "font-semibold text-blue-600 bg-blue-100 px-1 rounded",
-   *   completed: "font-semibold text-green-600 bg-green-100 px-1 rounded",
+   *   todo: "font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded",
+   *   "need-to-verified": "font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded",
+   *   "in-progress": "font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded",
+   *   completed: "font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded",
    *   cancelled: "font-semibold text-gray-600 bg-gray-100 px-1 rounded"
    * }
    */
   statusClassNames?: {
-    pending?: string;
+    todo?: string;
+    "need-to-verified"?: string;
     "in-progress"?: string;
     completed?: string;
     cancelled?: string;
@@ -374,9 +390,13 @@ export function renderSystemMessageWithHighlights(
     itemNameClassName = "font-medium text-gray-800",
     contentNameClassName = "font-medium text-gray-800",
     statusClassNames = {
-      pending: "font-semibold text-amber-600 bg-amber-100 px-1 rounded",
-      "in-progress": "font-semibold text-blue-600 bg-blue-100 px-1 rounded",
-      completed: "font-semibold text-green-600 bg-green-100 px-1 rounded",
+      todo: "font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded",
+      "need-to-verified":
+        "font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded",
+      "in-progress":
+        "font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded",
+      completed:
+        "font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded",
       cancelled: "font-semibold text-gray-600 bg-gray-100 px-1 rounded",
     },
   } = options;
@@ -430,7 +450,7 @@ export function renderSystemMessageWithHighlights(
             const statusClass =
               part.statusType && statusClassNames[part.statusType]
                 ? statusClassNames[part.statusType]
-                : statusClassNames.pending;
+                : statusClassNames.todo;
             return (
               <span key={index} className={statusClass}>
                 {part.content}

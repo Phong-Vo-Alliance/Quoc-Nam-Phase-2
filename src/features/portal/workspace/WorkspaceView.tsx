@@ -37,9 +37,8 @@ import {
 } from "@/hooks/queries/useDirectMessages";
 import { useUpdateTask } from "@/hooks/mutations";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
-import { useMessageRealtime } from "@/hooks/useMessageRealtime"; // 🆕 MOVED from ChatMainContainer
+import { useGroupSync } from "@/hooks/useGroupSync";
 import { useTaskNotifications } from "@/hooks/useTaskNotifications"; // 🆕 Task SignalR notifications
-import { useCategoriesRealtime } from "@/hooks/useCategoriesRealtime"; // 🆕 MOVED from ChatMainContainer
 import { useQuery } from "@tanstack/react-query";
 import { getConversationAttachments } from "@/api/attachments.api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -503,22 +502,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     (activeTabType === "group" && categoriesQuery.isLoading) ||
     (activeTabType === "dm" && directMessagesQuery.isLoading);
 
-  // 🆕 MOVED: Real-time message updates - moved here from ChatMainContainer to avoid re-renders
-  // Only subscribe when a conversation is selected
-  useMessageRealtime({
-    conversationId: selectedConversation?.id || "",
-    onNewMessage: undefined,
-    onUserTyping: undefined,
-    onThreadMessage,
-    openThreadMessageId, // ✅ NEW: Pass currently open thread ID to prevent unread badge flicker
-  });
+  // Centralized group management (replaces join/leave in old hooks)
+  useGroupSync();
 
-  // 🆕 MOVED: Real-time category updates - moved here from ChatMainContainer to avoid re-renders
-  // Handles MemberAdded, CategoryDepartmentLinked events
-  useCategoriesRealtime(categoriesQuery.data, selectedConversation?.id || "");
-
-  // 🆕 Task SignalR notifications - automatically refetch tasks when TasksUpdated event received
-  // Similar to SYS message handling in useMessageRealtime
+  // Task SignalR notifications - automatically refetch tasks when TasksUpdated event received
   useTaskNotifications();
 
   // Fetch conversation members from Chat API
@@ -625,7 +612,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     return sortedTransformed;
   }, [membersFromAPI, groupMembers]);
 
-  // Transform API tasks to local format and use as tasks
+  // Use normalized tasks from useTasks (select already applied normalizeTaskFromAPI)
+  // Then apply transformTasksToLocal for status/permissions normalization + workTypeId
   const apiTasks = React.useMemo(() => {
     // If no conversation is selected, return empty array (remove tasks list)
     if (!selectedConversation?.id) {
@@ -636,7 +624,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       return tasks; // Fallback to prop tasks if no API data
     }
 
-    // Transform API tasks to local format (cast to TaskDetailResponse[])
+    // tasksFromAPI is already normalized by useTasks select (normalizeTaskFromAPI).
+    // Apply transformTasksToLocal for status code normalization, permissions, and workTypeId.
     const transformedTasks = transformTasksToLocal(
       tasksFromAPI as unknown as TaskDetailResponse[],
       selectedConversation?.id || "",

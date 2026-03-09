@@ -23,7 +23,7 @@ export function useLinkedTasks({
   return useQuery({
     queryKey: taskKeys.linkedTasks(conversationId),
     queryFn: () => getLinkedTasks(conversationId),
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 0, // Always refetch on invalidation (realtime updates via socket)
     enabled: enabled && !!conversationId,
   });
 }
