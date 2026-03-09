@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { X, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, X, Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +7,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
-import { getImagePreview, createBlobUrl, revokeBlobUrl } from "@/api/files.api";
+import {
+  getImagePreview,
+  createBlobUrl,
+  revokeBlobUrl,
+  downloadFile,
+} from "@/api/files.api";
+import { fileApiClient } from "@/api/fileClient";
 
 interface ImageItem {
   fileId: string;
@@ -75,6 +81,8 @@ export default function ImagePreviewModal({
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [canDownload, setCanDownload] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // ✅ Local Gallery Cache - Cache blob URLs for this modal session
   const [imageCache, setImageCache] = useState<Map<string, string>>(new Map());
@@ -105,6 +113,42 @@ export default function ImagePreviewModal({
     setCurrentIndex((prev) => (prev < images!.length - 1 ? prev + 1 : prev));
   };
 
+  // Download handler
+  const handleDownload = async () => {
+    if (!currentFileId || !currentFileName) return;
+
+    setIsDownloading(true);
+    try {
+      const blob = await downloadFile(currentFileId);
+
+      // Trigger browser download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = currentFileName;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast.success("Tải ảnh thành công");
+    } catch (error: any) {
+      console.error("Lỗi khi tải file:", error);
+
+      // Error handling with specific messages
+      const errorMessage = error?.response?.status;
+      if (errorMessage === 404) {
+        toast.error("File không tồn tại");
+      } else if (errorMessage === 403) {
+        toast.error("Không có quyền tải file này");
+      } else if (errorMessage === 401) {
+        toast.error("Chưa đăng nhập");
+      } else {
+        toast.error("Không thể tải ảnh");
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   // Load image when fileId changes - with local cache
   useEffect(() => {
     if (!open || !currentFileId) {
@@ -130,15 +174,50 @@ export default function ImagePreviewModal({
         setIsLoading(true);
         setHasError(false);
 
-        const blob = await getImagePreview(currentFileId);
+        // Get preview with canDownload flag from API response
+        const response = await fileApiClient.get<{
+          fileId: string;
+          fileName: string | null;
+          dataBase64: string | null;
+          contentType: string | null;
+          canDownload: boolean;
+          wasWatermarked: boolean;
+          fromCache: boolean;
+          isPdf: boolean;
+          pageNumber: number | null;
+          totalPages: number | null;
+          wasRedacted: boolean;
+          watermark: any;
+        }>(`/api/Files/${currentFileId}/preview`, {
+          responseType: "json",
+          timeout: 30000,
+        });
+
+        // Set canDownload flag
+        setCanDownload(response.data.canDownload);
+
+        // Convert base64 to blob
+        if (!response.data.dataBase64) {
+          throw new Error("Không có dữ liệu ảnh trong phản hồi");
+        }
+
+        const binaryString = atob(response.data.dataBase64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const contentType = response.data.contentType || "image/png";
+        const blob = new Blob([bytes], { type: contentType });
         const blobUrl = createBlobUrl(blob);
 
         // ✅ Cache the blob URL for this modal session
         setImageCache((prev) => new Map(prev).set(currentFileId, blobUrl));
         setImageUrl(blobUrl);
       } catch (error) {
-        console.error("Failed to load image preview:", error);
+        console.error("Lỗi khi tải ảnh xem trước:", error);
         setHasError(true);
+        setCanDownload(false);
       } finally {
         setIsLoading(false);
       }
@@ -152,6 +231,9 @@ export default function ImagePreviewModal({
     if (!open || !hasMultipleImages) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent navigation while downloading
+      if (isDownloading) return;
+
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         handlePrev();
@@ -163,7 +245,7 @@ export default function ImagePreviewModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, currentIndex, hasMultipleImages, images]);
+  }, [open, currentIndex, hasMultipleImages, images, isDownloading]);
 
   // ✅ Cleanup all cached blob URLs when modal closes
   useEffect(() => {
@@ -186,6 +268,9 @@ export default function ImagePreviewModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Prevent closing while downloading
+    if (isDownloading) return;
+
     if (e.target === backdropRef.current) {
       onOpenChange(false);
     }
@@ -216,15 +301,41 @@ export default function ImagePreviewModal({
           >
             {currentFileName || "Xem ảnh"}
           </h2>
-          <button
-            ref={closeButtonRef}
-            onClick={() => onOpenChange(false)}
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-800 transition-colors hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            aria-label="Đóng"
-            data-testid="image-preview-close-button"
-          >
-            <span className="text-lg font-medium">✕</span>
-          </button>
+
+          {/* Button Container */}
+          <div className="flex items-center gap-2">
+            {/* Download Button - Conditional */}
+            {canDownload && (
+              <button
+                onClick={handleDownload}
+                disabled={isDownloading || isLoading}
+                aria-label="Tải xuống ảnh"
+                data-testid="image-download-button"
+                className="p-0 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDownloading ? (
+                  <Loader2
+                    className="h-5 w-5 animate-spin"
+                    data-testid="download-spinner"
+                  />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+              </button>
+            )}
+
+            {/* Close Button */}
+            <button
+              ref={closeButtonRef}
+              onClick={() => onOpenChange(false)}
+              disabled={isDownloading}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-800 transition-colors hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Đóng"
+              data-testid="image-preview-close-button"
+            >
+              <span className="text-lg font-medium">✕</span>
+            </button>
+          </div>
         </div>
 
         {/* Content Area */}
@@ -278,7 +389,7 @@ export default function ImagePreviewModal({
           >
             <button
               onClick={handlePrev}
-              disabled={currentIndex <= 0 || isLoading}
+              disabled={currentIndex <= 0 || isLoading || isDownloading}
               className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-gray-100"
               data-testid="image-preview-prev-button"
             >
@@ -294,7 +405,9 @@ export default function ImagePreviewModal({
 
             <button
               onClick={handleNext}
-              disabled={currentIndex >= images.length - 1 || isLoading}
+              disabled={
+                currentIndex >= images.length - 1 || isLoading || isDownloading
+              }
               className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-gray-100"
               data-testid="image-preview-next-button"
             >

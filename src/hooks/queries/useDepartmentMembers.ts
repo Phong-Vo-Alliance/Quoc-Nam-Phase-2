@@ -4,7 +4,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { getDepartmentMembers } from "@/api/departments.api";
+import { getDepartmentMembers, getDepartmentColleagues } from "@/api/departments.api";
 
 export const departmentMembersKeys = {
   all: ["department-members"] as const,
@@ -23,5 +23,18 @@ export function useDepartmentMembers({ departmentId, enabled = true }: UseDepart
     queryFn: () => getDepartmentMembers(departmentId!),
     staleTime: 1000 * 60 * 5, // 5 minutes
     enabled: enabled && !!departmentId,
+  });
+}
+
+export const departmentColleaguesKeys = {
+  all: ["department-colleagues"] as const,
+};
+
+export function useDepartmentColleagues({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: departmentColleaguesKeys.all,
+    queryFn: () => getDepartmentColleagues(),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled,
   });
 }

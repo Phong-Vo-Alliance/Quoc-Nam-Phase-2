@@ -41,6 +41,20 @@ export interface DepartmentMemberDto {
   joinedAt: string; // date-time
 }
 
+export interface SharedDepartmentDto {
+  departmentId: string; // uuid
+  departmentName: string | null;
+  isLeader: boolean;
+}
+
+export interface DepartmentColleagueDto {
+  userId: string; // uuid
+  fullName: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  sharedDepartments: SharedDepartmentDto[] | null;
+}
+
 export interface PagedUserProfileResponse {
   items: UserProfileResponse[];
   totalCount: number;

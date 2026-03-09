@@ -41,10 +41,7 @@ import {
 } from "@/utils/storage";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getDepartmentMembers } from "@/api/departments.api";
-import { getCurrentUser } from "@/utils/getCurrentUser";
-import { getSelectedCategory as getStoredCategory } from "@/utils/storage";
-import type { DepartmentMemberDto } from "@/types/identity";
+import { getDepartmentColleagues } from "@/api/departments.api";
 import { useCreateDirectMessage } from "@/hooks/mutations/useConversationMutations";
 
 // Internal components
@@ -233,32 +230,12 @@ export const ConversationListSidebar: React.FC<
   const directsQuery = useDirectMessages({ enabled: useApiData });
   const createDMMutation = useCreateDirectMessage();
 
-  // Fetch department members for contacts tab
+  // Fetch all colleagues across all departments
   const departmentMembersQuery = useQuery({
-    queryKey: ["departmentMembers", selectedCategoryId],
+    queryKey: ["departmentColleagues"],
     queryFn: async () => {
-      const currentUser = await getCurrentUser();
-
-      if (!currentUser.departments || currentUser.departments.length === 0) {
-        return [];
-      }
-
-      const currentCategoryId = getStoredCategory();
-      let targetDepartment = currentUser.departments[0];
-
-      if (currentCategoryId) {
-        const matchingDept = currentUser.departments.find(
-          (dept) =>
-            dept.departmentCode === currentCategoryId ||
-            dept.departmentId === currentCategoryId,
-        );
-        if (matchingDept) {
-          targetDepartment = matchingDept;
-        }
-      }
-
-      const members = await getDepartmentMembers(targetDepartment.departmentId);
-      return members.filter((member) => member.userId !== currentUser.id);
+      const members = await getDepartmentColleagues();
+      return members.filter((member) => member.userId !== currentUserId);
     },
     enabled: useApiData && tab === "dm",
     staleTime: 1000 * 60 * 5,
@@ -341,7 +318,7 @@ export const ConversationListSidebar: React.FC<
 
   // Merged contacts list
   const mergedContacts = React.useMemo((): ContactItem[] => {
-    const departmentMembers = departmentMembersQuery.data || [];
+    const colleagues = departmentMembersQuery.data || [];
     const conversations = apiDirects;
 
     const conversationParticipantIds = new Set<string>();
@@ -355,51 +332,61 @@ export const ConversationListSidebar: React.FC<
       }
     });
 
-    const memberLeaderMap = new Map<string, boolean>();
-    departmentMembers.forEach((member) => {
-      memberLeaderMap.set(member.userId, member.isLeader);
-    });
+    // Build lookup map: userId → colleague DTO
+    const colleagueMap = new Map(
+      colleagues.map((c) => [c.userId, c]),
+    );
 
     const merged: ContactItem[] = [];
 
     conversations.forEach((conv) => {
       const otherMember = conv.members?.find((m) => m.userId !== currentUserId);
       const otherUserId = otherMember?.userId;
-      const isLeader = otherUserId
-        ? (memberLeaderMap.get(otherUserId) ?? null)
+      const colleague = otherUserId ? colleagueMap.get(otherUserId) : undefined;
+      const departments = colleague?.sharedDepartments ?? [];
+      const isLeader = departments.length > 0
+        ? departments.some((d) => d.isLeader)
         : null;
 
-      // ✅ FIX: Display other member's name, not the "DM: User1 <> User2" format
       const displayName =
-        otherMember?.userInfo?.fullName || otherMember?.userName || conv.name; // Fallback to conv.name if no member info
+        otherMember?.userInfo?.fullName ||
+        otherMember?.userName ||
+        colleague?.fullName ||
+        conv.name;
 
       merged.push({
         id: conv.id,
         userId: otherUserId || conv.id,
         name: displayName,
-        email: null,
+        email: colleague?.email ?? null,
+        avatarUrl: colleague?.avatarUrl ?? null,
         isLeader,
         isOnline: false,
         hasConversation: true,
         conversation: conv,
+        colleague,
+        sharedDepartments: departments,
       });
     });
 
-    departmentMembers.forEach((member) => {
-      if (member.userId === currentUserId) return;
+    colleagues.forEach((colleague) => {
+      if (colleague.userId === currentUserId) return;
 
-      const hasConversation = conversationParticipantIds.has(member.userId);
+      const hasConversation = conversationParticipantIds.has(colleague.userId);
 
       if (!hasConversation) {
+        const departments = colleague.sharedDepartments ?? [];
         merged.push({
-          id: member.userId,
-          userId: member.userId,
-          name: member.userFullName || "Unknown",
-          email: member.userEmail,
-          isLeader: member.isLeader,
+          id: colleague.userId,
+          userId: colleague.userId,
+          name: colleague.fullName || colleague.email || "Chưa cập nhật",
+          email: colleague.email,
+          avatarUrl: colleague.avatarUrl,
+          isLeader: departments.some((d) => d.isLeader),
           isOnline: false,
           hasConversation: false,
-          departmentMember: member,
+          colleague,
+          sharedDepartments: departments,
         });
       }
     });

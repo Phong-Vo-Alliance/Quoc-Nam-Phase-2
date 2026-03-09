@@ -1,25 +1,68 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import ImagePreviewModal from "../ImagePreviewModal";
 import * as filesApi from "@/api/files.api";
+import { fileApiClient } from "@/api/fileClient";
+
+// Mock toast
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 // Mock API
 vi.mock("@/api/files.api", () => ({
   getImagePreview: vi.fn(),
   createBlobUrl: vi.fn(),
   revokeBlobUrl: vi.fn(),
+  downloadFile: vi.fn(),
+}));
+
+// Mock fileApiClient
+vi.mock("@/api/fileClient", () => ({
+  fileApiClient: {
+    get: vi.fn(),
+  },
 }));
 
 describe("ImagePreviewModal", () => {
-  const mockBlob = new Blob(["fake preview"], { type: "image/jpeg" });
   const mockBlobUrl = "blob:preview-url-456";
   const mockOnOpenChange = vi.fn();
 
+  // Mock preview API response with canDownload
+  const mockPreviewResponse = {
+    data: {
+      fileId: "file-123",
+      fileName: "test.jpg",
+      dataBase64: btoa("fake preview image data"),
+      contentType: "image/jpeg",
+      canDownload: true,
+      wasWatermarked: true,
+      fromCache: false,
+      isPdf: false,
+      pageNumber: null,
+      totalPages: null,
+      wasRedacted: false,
+      watermark: null,
+    },
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(filesApi.getImagePreview).mockResolvedValue(mockBlob);
+
+    // Mock fileApiClient.get for preview endpoint
+    vi.mocked(fileApiClient.get).mockResolvedValue(mockPreviewResponse);
+
+    // Mock createBlobUrl
     vi.mocked(filesApi.createBlobUrl).mockReturnValue(mockBlobUrl);
+
+    // Mock URL methods
+    global.URL.createObjectURL = vi.fn(() => mockBlobUrl);
+    global.URL.revokeObjectURL = vi.fn();
   });
 
   it("should not render when closed", () => {
@@ -28,7 +71,7 @@ describe("ImagePreviewModal", () => {
         open={false}
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
-      />
+      />,
     );
 
     expect(screen.queryByTestId("image-preview-modal")).not.toBeInTheDocument();
@@ -40,7 +83,7 @@ describe("ImagePreviewModal", () => {
         open={true}
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
-      />
+      />,
     );
 
     expect(screen.getByTestId("image-preview-skeleton")).toBeInTheDocument();
@@ -53,7 +96,7 @@ describe("ImagePreviewModal", () => {
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
         fileName="test.jpg"
-      />
+      />,
     );
 
     await waitFor(() => {
@@ -64,21 +107,25 @@ describe("ImagePreviewModal", () => {
     expect(img.src).toBe(mockBlobUrl);
     expect(img.alt).toBe("test.jpg");
 
-    expect(filesApi.getImagePreview).toHaveBeenCalledWith("file-123");
-    expect(filesApi.createBlobUrl).toHaveBeenCalledWith(mockBlob);
+    expect(fileApiClient.get).toHaveBeenCalledWith(
+      "/api/Files/file-123/preview",
+      expect.objectContaining({
+        responseType: "json",
+        timeout: 30000,
+      }),
+    );
+    expect(filesApi.createBlobUrl).toHaveBeenCalled();
   });
 
   it("should show error state when preview fetch fails", async () => {
-    vi.mocked(filesApi.getImagePreview).mockRejectedValue(
-      new Error("Load error")
-    );
+    vi.mocked(fileApiClient.get).mockRejectedValueOnce(new Error("Load error"));
 
     render(
       <ImagePreviewModal
         open={true}
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
-      />
+      />,
     );
 
     await waitFor(() => {
@@ -94,12 +141,12 @@ describe("ImagePreviewModal", () => {
         open={true}
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
-      />
+      />,
     );
 
     await waitFor(() => {
       expect(
-        screen.getByTestId("image-preview-close-button")
+        screen.getByTestId("image-preview-close-button"),
       ).toBeInTheDocument();
     });
 
@@ -109,60 +156,13 @@ describe("ImagePreviewModal", () => {
     expect(mockOnOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("should trigger download when download button clicked", async () => {
-    // Mock document.createElement and appendChild
-    const mockLink = {
-      href: "",
-      download: "",
-      click: vi.fn(),
-    };
-    const createElementSpy = vi
-      .spyOn(document, "createElement")
-      .mockReturnValue(mockLink as any);
-    const appendChildSpy = vi
-      .spyOn(document.body, "appendChild")
-      .mockImplementation(() => mockLink as any);
-    const removeChildSpy = vi
-      .spyOn(document.body, "removeChild")
-      .mockImplementation(() => mockLink as any);
-
-    render(
-      <ImagePreviewModal
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        fileId="file-123"
-        fileName="download-test.png"
-      />
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("image-preview-download-button")
-      ).toBeInTheDocument();
-    });
-
-    const downloadBtn = screen.getByTestId("image-preview-download-button");
-    await userEvent.click(downloadBtn);
-
-    expect(createElementSpy).toHaveBeenCalledWith("a");
-    expect(mockLink.href).toBe(mockBlobUrl);
-    expect(mockLink.download).toBe("download-test.png");
-    expect(mockLink.click).toHaveBeenCalled();
-    expect(appendChildSpy).toHaveBeenCalled();
-    expect(removeChildSpy).toHaveBeenCalled();
-
-    createElementSpy.mockRestore();
-    appendChildSpy.mockRestore();
-    removeChildSpy.mockRestore();
-  });
-
   it("should use default file name if not provided", async () => {
     render(
       <ImagePreviewModal
         open={true}
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
-      />
+      />,
     );
 
     await waitFor(() => {
@@ -176,7 +176,7 @@ describe("ImagePreviewModal", () => {
         open={true}
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
-      />
+      />,
     );
 
     await waitFor(() => {
@@ -189,7 +189,7 @@ describe("ImagePreviewModal", () => {
         open={false}
         onOpenChange={mockOnOpenChange}
         fileId="file-123"
-      />
+      />,
     );
 
     await waitFor(() => {
@@ -203,9 +203,206 @@ describe("ImagePreviewModal", () => {
         open={true}
         onOpenChange={mockOnOpenChange}
         fileId={null}
-      />
+      />,
     );
 
-    expect(filesApi.getImagePreview).not.toHaveBeenCalled();
+    expect(fileApiClient.get).not.toHaveBeenCalled();
+  });
+
+  // ✅ NEW TESTS FOR DOWNLOAD FEATURE
+
+  describe("Download Button", () => {
+    it("should show download button when canDownload is true", async () => {
+      // Arrange - canDownload=true in mockPreviewResponse by default
+
+      // Act
+      render(
+        <ImagePreviewModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          fileId="file-123"
+          fileName="test.jpg"
+        />,
+      );
+
+      // Assert
+      await waitFor(() => {
+        const downloadButton = screen.getByTestId("image-download-button");
+        expect(downloadButton).toBeInTheDocument();
+        expect(downloadButton).not.toBeDisabled();
+      });
+    });
+
+    it("should hide download button when canDownload is false", async () => {
+      // Arrange - Override with canDownload=false
+      vi.mocked(fileApiClient.get).mockResolvedValueOnce({
+        data: {
+          ...mockPreviewResponse.data,
+          canDownload: false,
+        },
+      });
+
+      // Act
+      render(
+        <ImagePreviewModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          fileId="file-123"
+          fileName="test.jpg"
+        />,
+      );
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByTestId("image-preview-image")).toBeInTheDocument();
+      });
+
+      const downloadButton = screen.queryByTestId("image-download-button");
+      expect(downloadButton).not.toBeInTheDocument();
+    });
+
+    it("should trigger download when download button clicked", async () => {
+      // Arrange
+      const mockDownloadBlob = new Blob(["original file data"], {
+        type: "image/jpeg",
+      });
+      vi.mocked(filesApi.downloadFile).mockResolvedValueOnce(mockDownloadBlob);
+
+      const mockAnchor = {
+        href: "",
+        download: "",
+        click: vi.fn(),
+      };
+      vi.spyOn(document, "createElement").mockReturnValueOnce(
+        mockAnchor as any,
+      );
+
+      // Act
+      render(
+        <ImagePreviewModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          fileId="file-123"
+          fileName="test.jpg"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("image-download-button")).toBeInTheDocument();
+      });
+
+      const downloadButton = screen.getByTestId("image-download-button");
+      await userEvent.click(downloadButton);
+
+      // Assert
+      await waitFor(() => {
+        expect(filesApi.downloadFile).toHaveBeenCalledWith("file-123");
+        expect(mockAnchor.download).toBe("test.jpg");
+        expect(mockAnchor.click).toHaveBeenCalled();
+        expect(toast.success).toHaveBeenCalledWith("Tải ảnh thành công");
+      });
+    });
+
+    it("should show loading state during download", async () => {
+      // Arrange - Mock slow download
+      vi.mocked(filesApi.downloadFile).mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve(new Blob(["data"])), 200),
+          ),
+      );
+
+      // Act
+      render(
+        <ImagePreviewModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          fileId="file-123"
+          fileName="test.jpg"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("image-download-button")).toBeInTheDocument();
+      });
+
+      const downloadButton = screen.getByTestId("image-download-button");
+      await userEvent.click(downloadButton);
+
+      // Assert - Check loading spinner appears
+      await waitFor(() => {
+        const spinner = screen.getByTestId("download-spinner");
+        expect(spinner).toBeInTheDocument();
+        expect(downloadButton).toBeDisabled();
+      });
+
+      // Wait for download to complete
+      await waitFor(
+        () => {
+          expect(
+            screen.queryByTestId("download-spinner"),
+          ).not.toBeInTheDocument();
+        },
+        { timeout: 500 },
+      );
+    });
+
+    it("should show error toast when download fails with 404", async () => {
+      // Arrange
+      vi.mocked(filesApi.downloadFile).mockRejectedValueOnce({
+        response: { status: 404 },
+      });
+
+      // Act
+      render(
+        <ImagePreviewModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          fileId="file-123"
+          fileName="test.jpg"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("image-download-button")).toBeInTheDocument();
+      });
+
+      const downloadButton = screen.getByTestId("image-download-button");
+      await userEvent.click(downloadButton);
+
+      // Assert
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith("File không tồn tại");
+      });
+    });
+
+    it("should show error toast when download fails with 403", async () => {
+      // Arrange
+      vi.mocked(filesApi.downloadFile).mockRejectedValueOnce({
+        response: { status: 403 },
+      });
+
+      // Act
+      render(
+        <ImagePreviewModal
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          fileId="file-123"
+          fileName="test.jpg"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("image-download-button")).toBeInTheDocument();
+      });
+
+      const downloadButton = screen.getByTestId("image-download-button");
+      await userEvent.click(downloadButton);
+
+      // Assert
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith("Không có quyền tải file này");
+      });
+    });
   });
 });

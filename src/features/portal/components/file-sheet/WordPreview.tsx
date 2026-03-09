@@ -9,9 +9,11 @@
 
 import { useWordPreview } from "@/hooks/queries/useWordPreview";
 import { AlertCircle } from "lucide-react";
+import { downloadFile } from "@/api/files.api";
+import { toast } from "sonner";
 import { SecureWatermarkContainer } from "./Watermark";
 import PreviewHeader from "./PreviewHeader";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export interface WordPreviewProps {
   /** File ID to preview */
@@ -45,6 +47,30 @@ export default function WordPreview({
   onClose,
 }: WordPreviewProps) {
   const { data, isLoading, isError, error, refetch } = useWordPreview(fileId);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!fileId || !fileName) return;
+    setIsDownloading(true);
+    try {
+      const blob = await downloadFile(fileId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Tải file thành công");
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 404) toast.error("File không tồn tại");
+      else if (status === 403) toast.error("Không có quyền tải file này");
+      else if (status === 401) toast.error("Chưa đăng nhập");
+      else toast.error("Không thể tải file");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Inject CSS styles once to avoid re-render
   useEffect(() => {
@@ -69,7 +95,13 @@ export default function WordPreview({
 
   return (
     <div className="flex h-full flex-col" data-testid="word-preview-container">
-      <PreviewHeader fileName={fileName} onClose={onClose} />
+      <PreviewHeader
+        fileName={fileName}
+        onClose={onClose}
+        canDownload={data?.canDownload}
+        onDownload={handleDownload}
+        isDownloading={isDownloading}
+      />
 
       <div
         className="flex-1 overflow-y-auto bg-gray-50"

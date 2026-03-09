@@ -302,3 +302,31 @@ export function createBlobUrl(blob: Blob): string {
 export function revokeBlobUrl(url: string): void {
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Download original file (no watermark)
+ * API: GET /api/Files/{id}/download
+ *
+ * @param fileId File ID
+ * @returns Blob containing original file data
+ * @throws Error if file not found (404), forbidden (403), or unauthorized (401)
+ *
+ * @example
+ * ```typescript
+ * const blob = await downloadFile('file-123');
+ * const url = URL.createObjectURL(blob);
+ * const a = document.createElement('a');
+ * a.href = url;
+ * a.download = 'filename.jpg';
+ * a.click();
+ * URL.revokeObjectURL(url);
+ * ```
+ */
+export async function downloadFile(fileId: string): Promise<Blob> {
+  const response = await fileApiClient.get(`/api/Files/${fileId}/download`, {
+    responseType: "blob",
+    timeout: 60000, // 60s timeout for large files
+  });
+
+  return response.data;
+}

@@ -51,6 +51,8 @@ export function usePdfPreview(fileId: string | null) {
     error: null,
   });
 
+  const [canDownload, setCanDownload] = useState(false);
+
   // Cache for page images (persists across page changes within same session)
   const pageCacheRef = useRef<PageCache>(new Map());
 
@@ -112,6 +114,9 @@ export function usePdfPreview(fileId: string | null) {
 
       // Store totalPages in ref for cache logic
       totalPagesRef.current = totalPages;
+
+      // Set canDownload from first page response (per-file flag)
+      setCanDownload(response.canDownload);
 
       // Create object URL from blob
       const imageUrl = createObjectUrl(response.data);
@@ -286,6 +291,7 @@ export function usePdfPreview(fileId: string | null) {
     error: state.error,
     navigateToPage,
     retry,
+    canDownload,
   };
 }
 

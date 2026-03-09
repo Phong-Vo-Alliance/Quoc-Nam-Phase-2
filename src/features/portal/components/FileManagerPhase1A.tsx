@@ -15,6 +15,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useImageCacheStore } from "@/stores/imageCacheStore";
 import { toast } from "sonner"; // Phase 2: For toast notifications
 import FilePreviewModal from "@/components/FilePreviewModal"; // Phase 2.2: Document preview
+import ImagePreviewModal from "@/components/ImagePreviewModal"; // Image preview modal
 
 /**
  * Loại file Phase 1A – gom đơn giản thành 3 nhóm:
@@ -394,6 +395,14 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
   );
   const [showAll, setShowAll] = React.useState(false);
 
+  // State for ImagePreviewModal
+  const [imagePreviewOpen, setImagePreviewOpen] = React.useState(false);
+  const [imagePreviewFileId, setImagePreviewFileId] = React.useState<
+    string | null
+  >(null);
+  const [imagePreviewFileName, setImagePreviewFileName] =
+    React.useState<string>("");
+
   /**
    * Phase 2: Jump to Message with Auto-Load
    * Scrolls to message in ChatMain, auto-loading older messages if needed
@@ -594,7 +603,15 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
   }, [messageList]);
 
   const handleOpenPreview = (f: Phase1AFileItem) => {
-    setPreviewFile(f);
+    // If image, open ImagePreviewModal
+    if (f.kind === "image") {
+      setImagePreviewFileId(f.fileId || null);
+      setImagePreviewFileName(f.name);
+      setImagePreviewOpen(true);
+    } else {
+      // For video and documents, use old SimpleModal
+      setPreviewFile(f);
+    }
   };
 
   const handleClosePreview = () => setPreviewFile(null);
@@ -1045,6 +1062,18 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
           />
         )}
       </SimpleModal>
+
+      {/* ImagePreviewModal for images - Using Portal to render at body level */}
+      {imagePreviewOpen &&
+        createPortal(
+          <ImagePreviewModal
+            open={imagePreviewOpen}
+            onOpenChange={setImagePreviewOpen}
+            fileId={imagePreviewFileId}
+            fileName={imagePreviewFileName}
+          />,
+          document.body,
+        )}
     </div>
   );
 };

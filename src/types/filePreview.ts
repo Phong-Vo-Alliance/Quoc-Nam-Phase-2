@@ -59,6 +59,23 @@ export interface FilePreviewDto {
 }
 
 /**
+ * JSON response from GET /api/Files/{id}/preview-page (Swagger: PdfPreviewDto)
+ */
+export interface PdfPreviewPageDto {
+  fileId: string;
+  fileName: string | null;
+  pageNumber: number;
+  totalPages: number;
+  imageBase64: string;
+  contentType: string;
+  canDownload: boolean;
+  wasWatermarked: boolean;
+  wasRedacted: boolean;
+  fromCache: boolean;
+  watermark: PreviewWatermarkInfo | null;
+}
+
+/**
  * Response from file preview API
  * Includes binary image data and pagination headers
  */
@@ -77,6 +94,9 @@ export interface FilePreviewResponse {
     /** Content type (e.g., image/png) */
     "content-type": string;
   };
+
+  /** Whether the file can be downloaded */
+  canDownload: boolean;
 }
 
 /**
@@ -217,6 +237,9 @@ export interface WordPreviewDto {
 
   /** Watermark information */
   watermark: WatermarkInfoDto;
+
+  /** Whether the file can be downloaded */
+  canDownload: boolean;
 }
 
 /**
@@ -341,6 +364,9 @@ export interface ExcelPreviewDto {
 
   /** Watermark information */
   watermark: WatermarkInfoDto;
+
+  /** Whether the file can be downloaded */
+  canDownload: boolean;
 }
 
 /**

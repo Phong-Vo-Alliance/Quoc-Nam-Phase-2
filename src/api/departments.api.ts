@@ -4,7 +4,7 @@
  */
 
 import { identityApiClient } from "./identityClient";
-import type { DepartmentMemberDto } from "@/types/identity";
+import type { DepartmentMemberDto, DepartmentColleagueDto } from "@/types/identity";
 import type { GetDepartmentLeadersResponse } from "@/types/departments";
 
 /**
@@ -43,6 +43,20 @@ export async function getAdminDepartmentMembers(
     `/api/admin/identity/departments/${departmentId}/members`
   );
   
+  return response.data;
+}
+
+/**
+ * Get all colleagues across all departments the current user belongs to
+ * GET /api/v1/departments/colleagues
+ *
+ * @returns Array of colleagues from all departments
+ */
+export async function getDepartmentColleagues(): Promise<DepartmentColleagueDto[]> {
+  const response = await identityApiClient.get<DepartmentColleagueDto[]>(
+    "/api/v1/departments/colleagues"
+  );
+
   return response.data;
 }
 

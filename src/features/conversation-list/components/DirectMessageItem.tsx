@@ -46,10 +46,9 @@ export function DirectMessageItem({
       }
     >
       <div className="min-w-0">
-        {/* Row 1: [Name] [Role Badge] [Online/Offline] + Time */}
-        <div className="flex items-center justify-between mb-1">
+        {/* Row 1: [Name] [Role Badge] + Time */}
+        <div className="flex items-center justify-between mb-0.5">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {/* Name */}
             <span
               className={`text-sm truncate ${
                 hasUnread
@@ -73,17 +72,6 @@ export function DirectMessageItem({
                 {contact.isLeader ? "Trưởng nhóm" : "Thành viên"}
               </span>
             )}
-
-            {/* Online/Offline indicator - Hidden for now */}
-            {/* 
-            <span className="flex items-center gap-1 flex-shrink-0">
-              <span
-                className={`inline-block h-2 w-2 rounded-full ${
-                  contact.isOnline ? "bg-emerald-500" : "bg-gray-300"
-                }`}
-              />
-            </span>
-            */}
           </div>
 
           {/* Timestamp */}
@@ -115,6 +103,13 @@ export function DirectMessageItem({
             </span>
           )}
         </div>
+
+        {/* Row 3: Department names */}
+        {contact.sharedDepartments.length > 0 && (
+          <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+            {contact.sharedDepartments.map((d) => d.departmentName).join(" · ")}
+          </p>
+        )}
       </div>
     </button>
   );

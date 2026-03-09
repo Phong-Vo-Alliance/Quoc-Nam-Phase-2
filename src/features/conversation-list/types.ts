@@ -3,7 +3,7 @@
  */
 
 import type { DirectConversation } from "@/types/conversations";
-import type { DepartmentMemberDto } from "@/types/identity";
+import type { DepartmentColleagueDto, SharedDepartmentDto } from "@/types/identity";
 
 /**
  * Target for chat selection callback
@@ -19,18 +19,20 @@ export type ChatTarget = {
 
 /**
  * Contact item in merged contacts list
- * Combines DM conversations with department members
+ * Combines DM conversations with department colleagues
  */
 export interface ContactItem {
   id: string;
   userId: string;
   name: string;
   email: string | null;
-  isLeader: boolean | null; // null = unknown
+  avatarUrl: string | null;
+  isLeader: boolean | null; // null = unknown, true if leader in any shared department
   isOnline: boolean; // For future online/offline feature
   hasConversation: boolean;
   conversation?: DirectConversation;
-  departmentMember?: DepartmentMemberDto;
+  colleague?: DepartmentColleagueDto;
+  sharedDepartments: SharedDepartmentDto[];
 }
 
 /**

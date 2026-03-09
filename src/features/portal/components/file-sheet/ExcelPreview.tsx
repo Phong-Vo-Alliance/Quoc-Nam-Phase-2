@@ -10,6 +10,8 @@
 import { useState, useMemo, useRef } from "react";
 import { useExcelPreview } from "@/hooks/queries/useExcelPreview";
 import { AlertCircle } from "lucide-react";
+import { downloadFile } from "@/api/files.api";
+import { toast } from "sonner";
 import { useWatermarkStyles } from "./Watermark";
 import { useContentProtection } from "@/hooks/useContentProtection";
 import { securityConfig } from "@/config/security.config";
@@ -55,6 +57,30 @@ export default function ExcelPreview({
   const { data, isLoading, isError, error, refetch } = useExcelPreview(fileId, {
     includeStyles: true,
   });
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!fileId || !fileName) return;
+    setIsDownloading(true);
+    try {
+      const blob = await downloadFile(fileId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Tải file thành công");
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 404) toast.error("File không tồn tại");
+      else if (status === 403) toast.error("Không có quyền tải file này");
+      else if (status === 401) toast.error("Chưa đăng nhập");
+      else toast.error("Không thể tải file");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Generate watermark styles (always call hook, pass data?.watermark safely)
   const watermarkStyles = useWatermarkStyles(data?.watermark);
@@ -112,7 +138,13 @@ export default function ExcelPreview({
 
   return (
     <div className="flex h-full flex-col" data-testid="excel-preview-container">
-      <PreviewHeader fileName={fileName} onClose={onClose} />
+      <PreviewHeader
+        fileName={fileName}
+        onClose={onClose}
+        canDownload={data?.canDownload}
+        onDownload={handleDownload}
+        isDownloading={isDownloading}
+      />
 
       <div
         className="flex flex-1 flex-col overflow-hidden bg-gray-50"

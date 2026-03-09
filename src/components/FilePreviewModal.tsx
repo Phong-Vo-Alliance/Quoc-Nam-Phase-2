@@ -1,11 +1,15 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   X,
   ChevronLeft,
   ChevronRight,
   FileText,
   AlertCircle,
+  Download,
+  Loader2,
 } from "lucide-react";
+import { downloadFile } from "@/api/files.api";
+import { toast } from "sonner";
 import { useFilePreview } from "@/hooks/usePdfPreview";
 import { FILE_TYPE_ICONS, FILE_TYPE_LABELS } from "@/types/files";
 import type { SupportedPreviewFileType } from "@/types/files";
@@ -84,7 +88,33 @@ export default function FilePreviewModal({
     error,
     navigateToPage,
     retry,
+    canDownload,
   } = useFilePreview(fileId);
+
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!fileId || !fileName) return;
+    setIsDownloading(true);
+    try {
+      const blob = await downloadFile(fileId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Tải file thành công");
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 404) toast.error("File không tồn tại");
+      else if (status === 403) toast.error("Không có quyền tải file này");
+      else if (status === 401) toast.error("Chưa đăng nhập");
+      else toast.error("Không thể tải file");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Determine file type from filename
   const fileType: SupportedPreviewFileType = getFileType(fileName);
@@ -165,15 +195,32 @@ export default function FilePreviewModal({
               {fileName}
             </h2>
           </div>
-          <button
-            ref={closeButtonRef}
-            onClick={onClose}
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-800 transition-colors hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            aria-label="Đóng"
-            data-testid="file-preview-modal-close-button"
-          >
-            <span className="text-lg font-medium">✕</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {canDownload && (
+              <button
+                onClick={handleDownload}
+                disabled={isDownloading || isLoading}
+                aria-label="Tải xuống file"
+                data-testid="file-download-button"
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg p-0 text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDownloading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+              </button>
+            )}
+            <button
+              ref={closeButtonRef}
+              onClick={onClose}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-800 transition-colors hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Đóng"
+              data-testid="file-preview-modal-close-button"
+            >
+              <span className="text-lg font-medium">✕</span>
+            </button>
+          </div>
         </div>
 
         {/* Content Area */}

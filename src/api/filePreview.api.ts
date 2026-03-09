@@ -13,6 +13,7 @@ import { API_ENDPOINTS } from "@/config/env.config";
 import type {
   FilePreviewRequest,
   FilePreviewResponse,
+  PdfPreviewPageDto,
 } from "@/types/filePreview";
 
 // Use file API endpoint
@@ -86,30 +87,35 @@ export async function getFilePreview(
     const pageNumber = request.page || 1;
     const dpi = request.dpi || 200; // Default DPI = 200 per user decision
 
-    const response = await fileApiClient.get<Blob>(
+    const response = await fileApiClient.get<PdfPreviewPageDto>(
       `/api/Files/${request.fileId}/preview-page`,
       {
         params: {
           page: pageNumber,
           dpi: dpi,
         },
-        responseType: "blob",
+        responseType: "json",
       },
     );
 
+    const dto = response.data;
+
+    // Convert base64 to Blob
+    const binaryString = atob(dto.imageBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: dto.contentType || "image/png" });
+
     return {
-      data: response.data,
+      data: blob,
       headers: {
-        "x-total-pages":
-          response.headers["x-total-pages"] ||
-          response.headers["X-Total-Pages"] ||
-          "1",
-        "x-current-page":
-          response.headers["x-current-page"] ||
-          response.headers["X-Current-Page"] ||
-          "1",
-        "content-type": response.headers["content-type"] || "image/png",
+        "x-total-pages": String(dto.totalPages ?? 1),
+        "x-current-page": String(dto.pageNumber ?? 1),
+        "content-type": dto.contentType || "image/png",
       },
+      canDownload: dto.canDownload ?? false,
     };
   } catch (error) {
     if (axios.isAxiosError(error)) {

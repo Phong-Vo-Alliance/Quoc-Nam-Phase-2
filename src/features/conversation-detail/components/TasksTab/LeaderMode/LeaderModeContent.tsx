@@ -312,6 +312,16 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                       ))}
                     </select>
                   </div>
+
+                  {/* Template Checklist Button */}
+                  <button
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors group flex-shrink-0"
+                    onClick={() => setTemplateOpen(true)}
+                    data-testid="default-checklist-link"
+                    title="Xem và chỉnh sửa checklist mặc định"
+                  >
+                    <FileText className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
+                  </button>
                 </div>
               )}
             </div>

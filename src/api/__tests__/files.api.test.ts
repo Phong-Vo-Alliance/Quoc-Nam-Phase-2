@@ -8,6 +8,7 @@ import {
   getImagePreview,
   createBlobUrl,
   revokeBlobUrl,
+  downloadFile,
 } from "../files.api";
 import type { UploadFileResult } from "@/types/files";
 import type { ThumbnailInfoDto } from "@/types/filePreview";
@@ -448,6 +449,93 @@ describe("files.api", () => {
       // Should not throw when revoking invalid URL
       expect(() => revokeBlobUrl("invalid-url")).not.toThrow();
       expect(() => revokeBlobUrl("")).not.toThrow();
+    });
+  });
+
+  describe("downloadFile()", () => {
+    it("should download file successfully", async () => {
+      // Arrange
+      const mockFileId = "test-file-id-123";
+      const mockBlob = new Blob(["fake image data"], { type: "image/jpeg" });
+
+      mockAxios
+        .onGet(`/api/Files/${mockFileId}/download`)
+        .reply(200, mockBlob, {
+          "content-type": "image/jpeg",
+          "content-disposition": 'attachment; filename="test.jpg"',
+        });
+
+      // Act
+      const result = await downloadFile(mockFileId);
+
+      // Assert
+      expect(result).toBeInstanceOf(Blob);
+      expect(result.type).toBe("image/jpeg");
+    });
+
+    it("should use 60s timeout for large files", async () => {
+      // Arrange
+      const mockFileId = "large-file-id";
+      const mockBlob = new Blob(["large file data"]);
+
+      mockAxios.onGet(`/api/Files/${mockFileId}/download`).reply(200, mockBlob);
+
+      // Act
+      await downloadFile(mockFileId);
+
+      // Assert
+      const request = mockAxios.history.get[0];
+      expect(request.timeout).toBe(60000);
+    });
+
+    it("should throw error when file not found (404)", async () => {
+      // Arrange
+      const mockFileId = "non-existent-file-id";
+
+      mockAxios.onGet(`/api/Files/${mockFileId}/download`).reply(404, {
+        title: "Not Found",
+        status: 404,
+        errors: { fileId: ["File không tồn tại"] },
+      });
+
+      // Act & Assert
+      await expect(downloadFile(mockFileId)).rejects.toThrow();
+    });
+
+    it("should throw error when unauthorized (401)", async () => {
+      // Arrange
+      const mockFileId = "test-file-id";
+
+      mockAxios.onGet(`/api/Files/${mockFileId}/download`).reply(401, {
+        title: "Unauthorized",
+        status: 401,
+      });
+
+      // Act & Assert
+      await expect(downloadFile(mockFileId)).rejects.toThrow();
+    });
+
+    it("should throw error when forbidden (403)", async () => {
+      // Arrange
+      const mockFileId = "forbidden-file-id";
+
+      mockAxios.onGet(`/api/Files/${mockFileId}/download`).reply(403, {
+        title: "Forbidden",
+        status: 403,
+      });
+
+      // Act & Assert
+      await expect(downloadFile(mockFileId)).rejects.toThrow();
+    });
+
+    it("should throw error on network timeout", async () => {
+      // Arrange
+      const mockFileId = "test-file-id";
+
+      mockAxios.onGet(`/api/Files/${mockFileId}/download`).timeout();
+
+      // Act & Assert
+      await expect(downloadFile(mockFileId)).rejects.toThrow();
     });
   });
 });

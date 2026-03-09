@@ -8,7 +8,7 @@
  * @module components/portal/components/file-sheet/PreviewHeader
  */
 
-import { FileText, Sheet } from "lucide-react";
+import { FileText, Sheet, Download, Loader2 } from "lucide-react";
 
 /**
  * Get file icon and color based on file extension
@@ -36,6 +36,15 @@ export interface PreviewHeaderProps {
 
   /** Callback when close button clicked */
   onClose: () => void;
+
+  /** Whether the file can be downloaded */
+  canDownload?: boolean;
+
+  /** Callback when download button clicked */
+  onDownload?: () => void;
+
+  /** Whether download is in progress */
+  isDownloading?: boolean;
 }
 
 /**
@@ -51,6 +60,9 @@ export interface PreviewHeaderProps {
 export default function PreviewHeader({
   fileName,
   onClose,
+  canDownload,
+  onDownload,
+  isDownloading,
 }: PreviewHeaderProps) {
   const { Icon, colorClass } = getFileIcon(fileName);
 
@@ -69,14 +81,31 @@ export default function PreviewHeader({
           {fileName}
         </h2>
       </div>
-      <button
-        onClick={onClose}
-        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-800 transition-colors hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        aria-label="Đóng"
-        data-testid="file-preview-modal-close-button"
-      >
-        <span className="text-lg font-medium">✕</span>
-      </button>
+      <div className="flex items-center gap-2">
+        {canDownload && onDownload && (
+          <button
+            onClick={onDownload}
+            disabled={isDownloading}
+            aria-label="Tải xuống file"
+            data-testid="file-download-button"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg p-0 text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isDownloading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+          </button>
+        )}
+        <button
+          onClick={onClose}
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-800 transition-colors hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Đóng"
+          data-testid="file-preview-modal-close-button"
+        >
+          <span className="text-lg font-medium">✕</span>
+        </button>
+      </div>
     </div>
   );
 }
