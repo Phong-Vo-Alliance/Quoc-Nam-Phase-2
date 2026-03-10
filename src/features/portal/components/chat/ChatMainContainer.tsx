@@ -94,6 +94,7 @@ import { useQuickMessages } from "@/hooks/queries/useQuickMessages";
 import type { ChatMessage } from "@/types/messages";
 import ImagePreviewModal from "@/components/ImagePreviewModal";
 import type { ConversationInfoDto } from "@/types/categories"; // 🆕 NEW (CBN-002)
+import { TaskBanner } from "./TaskBanner"; // 🆕 NEW: Task banner for assigned tasks
 import type { FileUploadProgressState, SelectedFile } from "@/types/files";
 import { FILE_CATEGORIES, MAX_FILES_PER_MESSAGE } from "@/types/files";
 import type {
@@ -2143,6 +2144,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         }
         onSearchSelectMessage={handleSearchJumpToMessage}
       />
+
+      {/* Task banner: shows assigned tasks for current category */}
+      {activeCategoryId && (
+        <TaskBanner
+          categoryId={activeCategoryId}
+          onViewWorkType={handleConversationChange}
+        />
+      )}
 
       {/* Phase 7: Network status banner */}
       {(isOnline === false || wasOffline) && (

@@ -9,6 +9,7 @@ export interface MinimalMember {
   id: string;
   name: string;
   role?: "Leader" | "Member";
+  departments?: string[]; // Danh sách phòng ban
 }
 
 /**
@@ -50,6 +51,7 @@ export function transformMemberToMinimal(
       member.userInfo?.userName ||
       "Unknown User",
     role,
+    departments: member.departments?.map((dept) => dept.name),
   };
 }
 

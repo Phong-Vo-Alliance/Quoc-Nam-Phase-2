@@ -119,6 +119,25 @@ export const getTasks = async (params?: {
 };
 
 /**
+ * GET /api/tasks?categoryId={categoryId}&userTask=assigned
+ * Get tasks assigned to the current user, filtered by category
+ *
+ * @param categoryId - The category ID to filter by
+ * @returns Array of task details assigned to the current user in this category
+ */
+export const getTasksByCategory = async (
+  categoryId: string,
+): Promise<TaskDetailResponse[]> => {
+  const response = await taskApiClient.get<TaskDetailResponse[]>("/api/tasks", {
+    params: {
+      categoryId,
+      userTask: "assigned",
+    },
+  });
+  return response.data;
+};
+
+/**
  * POST /api/tasks/{id}/check-items
  * Add a new checklist item to a task
  *

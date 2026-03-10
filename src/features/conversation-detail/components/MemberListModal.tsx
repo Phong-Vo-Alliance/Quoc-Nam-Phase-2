@@ -135,7 +135,7 @@ export const MemberListModal: React.FC<MemberListModalProps> = ({
                   {getInitials(member.name)}
                 </div>
 
-                {/* Name and role */}
+                {/* Name and departments */}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm text-gray-900 truncate flex items-center gap-1.5">
                     <span>{member.name}</span>
@@ -145,16 +145,27 @@ export const MemberListModal: React.FC<MemberListModalProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {member.role === "Leader" ? "Trưởng nhóm" : "Thành viên"}
-                  </div>
+                  {/* Departments */}
+                  {member.departments && member.departments.length > 0 && (
+                    <div
+                      className="text-[11px] text-gray-400 line-clamp-2"
+                      title={member.departments.join(". ")}
+                    >
+                      {member.departments.join(". ")}
+                    </div>
+                  )}
                 </div>
 
-                {/* Leader badge */}
-                {member.role === "Leader" && (
+                {/* Role badge */}
+                {member.role === "Leader" ? (
                   <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
                     <Crown className="h-3 w-3" />
                     <span>Trưởng nhóm</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-gray-50 text-gray-600 text-xs font-medium">
+                    <User className="h-3 w-3" />
+                    <span>Thành viên</span>
                   </div>
                 )}
               </div>

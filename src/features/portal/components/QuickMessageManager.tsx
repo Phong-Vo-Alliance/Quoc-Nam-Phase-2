@@ -37,6 +37,7 @@ export const QuickMessageManager: React.FC<{
   const [editing, setEditing] = useState<QuickMessage | null>(null);
   const [key, setKey] = useState("");
   const [content, setContent] = useState("");
+  const [keyError, setKeyError] = useState<string>("");
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [deletedId, setDeletedId] = useState<string | null>(null);
 
@@ -47,14 +48,29 @@ export const QuickMessageManager: React.FC<{
   // Loading state - prevent modal close when any operation is in progress
   const isAnyLoading = isCreating || isUpdating || isDeleting;
 
+  // Validate key function
+  const validateKey = (value: string): string => {
+    if (!value) {
+      return "Phím tắt không được để trống";
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+      return "Chỉ cho phép chữ cái, số, gạch dưới (_) và gạch ngang (-)";
+    }
+    if (value.length > 50) {
+      return "Phím tắt không được vượt quá 50 ký tự";
+    }
+    return "";
+  };
+
   const resetForm = () => {
     setEditing(null);
     setKey("");
     setContent("");
+    setKeyError("");
   };
 
   const handleSave = () => {
-    if (!key || !content) return;
+    if (!key || !content || keyError) return;
 
     if (editing) {
       // Update existing message
@@ -118,6 +134,14 @@ export const QuickMessageManager: React.FC<{
     setEditing(msg);
     setKey(msg.key);
     setContent(msg.content);
+    setKeyError(""); // Clear error when editing existing message
+  };
+
+  // Handle key change with validation
+  const handleKeyChange = (value: string) => {
+    setKey(value);
+    const error = validateKey(value);
+    setKeyError(error);
   };
 
   // Prevent closing modal when operations are in progress
@@ -153,7 +177,9 @@ export const QuickMessageManager: React.FC<{
               Tin nhắn nhanh
             </DialogTitle>
             <p className="text-sm text-gray-500">
-              Tạo, chỉnh sửa và quản lý phím tắt cho các tin nhắn thường dùng.
+              Tạo phím tắt cho tin nhắn thường dùng. Gõ{" "}
+              <span className="font-medium text-brand-600">/xinchao</span> trong
+              chat để sử dụng.
             </p>
           </DialogHeader>
 
@@ -244,14 +270,40 @@ export const QuickMessageManager: React.FC<{
 
           {/* Form thêm/sửa */}
           <div className="mt-4 space-y-2">
-            <Input
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder="Phím tắt (ví dụ: xinchao)"
-              className="text-sm"
-              disabled={isAnyLoading}
-              data-testid="quick-message-keyword-input"
-            />
+            <div>
+              <div className="relative">
+                <span className="absolute left-3 inset-y-0 text-gray-400 font-medium pointer-events-none flex items-center">
+                  /
+                </span>
+                <Input
+                  value={key}
+                  onChange={(e) => handleKeyChange(e.target.value)}
+                  placeholder="Phím tắt (ví dụ: xinchao)"
+                  className={cn(
+                    "text-sm pl-9",
+                    keyError && "border-red-500 focus-visible:ring-red-500",
+                  )}
+                  disabled={isAnyLoading}
+                  data-testid="quick-message-keyword-input"
+                />
+              </div>
+              {keyError ? (
+                <p
+                  className="text-xs text-red-500 mt-1"
+                  data-testid="quick-message-key-error"
+                >
+                  {keyError}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Trong chat, gõ{" "}
+                  <span className="font-medium text-brand-600">
+                    /{key || "phímtắt"}
+                  </span>{" "}
+                  để dùng phím tắt này
+                </p>
+              )}
+            </div>
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -273,7 +325,7 @@ export const QuickMessageManager: React.FC<{
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!key || !content || isAnyLoading}
+              disabled={!key || !content || !!keyError || isAnyLoading}
               data-testid={
                 editing
                   ? "quick-message-save-button"

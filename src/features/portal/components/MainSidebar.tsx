@@ -12,6 +12,7 @@ import {
   ListTodo,
   User as UserIcon,
   Settings,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import QuocnamLogo from "@/assets/Quocnam_logo.png";
@@ -38,6 +39,7 @@ interface MainSidebarProps {
   workspaceMode?: "default" | "pinned";
   viewMode?: "lead" | "staff";
   currentUserName?: string;
+  currentUserDepartment?: string;
 
   pendingTasks?: {
     id: string;
@@ -58,6 +60,7 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   pendingTasks: initialPending = [],
   showPinnedToast,
   currentUserName = "",
+  currentUserDepartment = "",
   onOpenWorkTypeManager,
 }) => {
   const [openTools, setOpenTools] = React.useState(false);
@@ -136,8 +139,8 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
     // Remove special characters and normalize Vietnamese
     const normalized = withoutParentheses
       .normalize("NFD") // Normalize Vietnamese accents
-      .replace(/[\u0300-\u036f]/g, "") // Remove diacritics
-      .replace(/[^a-zA-Z0-9\s]/g, "") // Keep only letters, numbers, and spaces
+      .replace(/[\u0300-\u036f]/g, "") // Remove diacritics (combining marks)
+      .replace(/[^a-zA-ZĐđ0-9\s]/g, "") // Keep letters (including Đ/đ), numbers, and spaces
       .trim();
 
     const parts = normalized.split(/\s+/).filter((p) => p);
@@ -333,6 +336,17 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
                 {hasLeaderPermissions() ? "🎖️ Trưởng nhóm" : "👤 Nhân viên"}
               </span>
             </div>
+
+            {currentUserDepartment && (
+              <div className="mt-2 px-2 py-1 text-xs text-gray-600">
+                <div className="flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-gray-500" />
+                  <span className="font-medium text-gray-700">
+                    {currentUserDepartment}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="mt-1">
               <button

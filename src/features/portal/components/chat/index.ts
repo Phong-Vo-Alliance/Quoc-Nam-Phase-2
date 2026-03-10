@@ -14,3 +14,7 @@ export { SystemMessageBubble } from "./SystemMessageBubble";
 export type { SystemMessageBubbleProps } from "./SystemMessageBubble";
 export { MentionInputInline } from "./MentionInputInline";
 export type { MentionInputProps } from "./MentionInputInline";
+export { MentionDropdown } from "./MentionDropdown";
+export type { MentionDropdownProps } from "./MentionDropdown";
+export { ShortcutDropdown } from "./ShortcutDropdown";
+export type { ShortcutDropdownProps } from "./ShortcutDropdown";

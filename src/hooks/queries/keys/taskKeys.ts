@@ -20,4 +20,8 @@ export const taskKeys = {
   // Single task detail
   detail: (taskId: string) =>
     [...taskKeys.all, 'detail', taskId] as const,
+
+  // Tasks by category (for task banner)
+  byCategory: (categoryId: string) =>
+    [...taskKeys.all, 'byCategory', categoryId] as const,
 };

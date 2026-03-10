@@ -321,6 +321,20 @@ export default function PortalWireframes({
     return hasLeaderPermissions() ? "Trưởng nhóm" : "Nhân viên";
   }, [authUser?.fullName, authUser?.identifier]);
 
+  // Dynamic department name from first department (if any)
+  const currentUserDepartment = React.useMemo(() => {
+    if (authUser?.departments && authUser.departments.length > 0) {
+      const departmentNames = authUser.departments
+        .map((dept) => dept.departmentName)
+        .filter((name): name is string => !!name);
+
+      if (departmentNames.length > 0) {
+        return departmentNames.join(" . ");
+      }
+    }
+    return "—";
+  }, [authUser?.departments]);
+
   const currentUserId = getCurrentUserIdSync();
 
   //const now = new Date().toISOString();
@@ -564,7 +578,9 @@ export default function PortalWireframes({
 
     // Detect added items (items with temp IDs starting with "chk_")
     const addedItems = next.filter(
-      (item) => item.id.startsWith("chk_") && !currentChecklist.some((c) => c.id === item.id),
+      (item) =>
+        item.id.startsWith("chk_") &&
+        !currentChecklist.some((c) => c.id === item.id),
     );
 
     // Detect deleted items (items in current but not in next)
@@ -588,7 +604,11 @@ export default function PortalWireframes({
     }
 
     for (const item of editedItems) {
-      updateCheckItemMutation.mutate({ taskId, itemId: item.id, content: item.label });
+      updateCheckItemMutation.mutate({
+        taskId,
+        itemId: item.id,
+        content: item.label,
+      });
     }
   };
 
@@ -602,7 +622,9 @@ export default function PortalWireframes({
       (old) => {
         if (!old) return old;
         return old.map((t: Task) =>
-          t.workTypeId === workTypeId && (t.status?.code === "todo" || (t.status as unknown as string) === "todo")
+          t.workTypeId === workTypeId &&
+          (t.status?.code === "todo" ||
+            (t.status as unknown as string) === "todo")
             ? {
                 ...t,
                 checklist: tpl.map((it) => ({
@@ -1259,6 +1281,7 @@ export default function PortalWireframes({
           ]}
           showPinnedToast={showPinnedToast}
           currentUserName={currentUser}
+          currentUserDepartment={currentUserDepartment}
           onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
         />
       )}

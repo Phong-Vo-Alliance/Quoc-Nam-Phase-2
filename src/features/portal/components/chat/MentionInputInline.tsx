@@ -10,9 +10,11 @@ import React, {
   useImperativeHandle,
 } from "react";
 import { MentionDropdown } from "./MentionDropdown";
+import { ShortcutDropdown } from "./ShortcutDropdown";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuickMessageReplacement } from "@/hooks/useQuickMessageReplacement";
+import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 import type { ConversationMember } from "@/types/conversations";
 import type { MentionInputDto } from "@/types/messages";
 import { cn } from "@/lib/utils";
@@ -91,6 +93,12 @@ export const MentionInputInline = forwardRef<
     const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
     const [mentions, setMentionsState] = useState<MentionData[]>([]);
 
+    // Shortcut dropdown state
+    const [showShortcutDropdown, setShowShortcutDropdown] = useState(false);
+    const [shortcutSearchQuery, setShortcutSearchQuery] = useState("");
+    const [shortcutStartIndex, setShortcutStartIndex] = useState(-1);
+    const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
+
     // Quick message replacement hook
     const replaceQuickMessage = useQuickMessageReplacement();
 
@@ -151,6 +159,9 @@ export const MentionInputInline = forwardRef<
     // Get current user for filtering
     const { user: currentUser } = useAuthStore();
 
+    // Get shortcuts from store
+    const shortcuts = useQuickMessagesStore((state) => state.messages);
+
     // Filter members based on search query and exclude current user
     const filteredMembers = React.useMemo(() => {
       // Filter out current user first
@@ -169,6 +180,16 @@ export const MentionInputInline = forwardRef<
         return fullName.includes(query) || identifier.includes(query);
       });
     }, [members, mentionSearchQuery, currentUser?.id]);
+
+    // Filter shortcuts based on search query (case-insensitive, contains matching)
+    const filteredShortcuts = React.useMemo(() => {
+      if (!shortcutSearchQuery) return shortcuts;
+
+      const query = shortcutSearchQuery.toLowerCase();
+      return shortcuts.filter((shortcut) =>
+        shortcut.key.toLowerCase().includes(query),
+      );
+    }, [shortcuts, shortcutSearchQuery]);
 
     // Extract text content from editor (normalize \r\n to \n)
     const getTextContent = useCallback(() => {
@@ -384,8 +405,75 @@ export const MentionInputInline = forwardRef<
 
       const cursorPos = getCursorPosition();
 
-      // 🔧 FIX: Check for @ at different positions to handle cursor lag
+      // 🆕 NEW: Check for / to trigger shortcut dropdown
       let textBeforeCursor = replacedText.slice(0, cursorPos);
+      let lastSlashIndex = textBeforeCursor.lastIndexOf("/");
+
+      // If / not found before cursor, check if text ends with / (cursor lag case)
+      if (
+        lastSlashIndex === -1 &&
+        replacedText.endsWith("/") &&
+        cursorPos >= replacedText.length - 1
+      ) {
+        textBeforeCursor = replacedText;
+        lastSlashIndex = textBeforeCursor.lastIndexOf("/");
+      }
+
+      if (lastSlashIndex !== -1) {
+        // Check if / is at valid position (start of line or after whitespace)
+        const charBeforeSlash = textBeforeCursor[lastSlashIndex - 1];
+        const isValidSlashPosition =
+          lastSlashIndex === 0 ||
+          /[\s\n\r\t]/.test(charBeforeSlash) ||
+          charBeforeSlash === undefined;
+
+        if (isValidSlashPosition) {
+          const searchQuery = textBeforeCursor.slice(lastSlashIndex + 1);
+
+          // Check if query contains whitespace (means / trigger is not current)
+          // If user typed "/xinchao " (with space), auto-replace will trigger instead
+          if (!/[\s\n\r\t]/.test(searchQuery)) {
+            const coords = getCaretCoordinates();
+            setDropdownPosition(coords);
+
+            // Calculate fixed position - follow cursor but constrain to viewport
+            if (editorRef.current) {
+              const editorRect = editorRef.current.getBoundingClientRect();
+              const dropdownWidth = 320; // w-80 = 320px
+              const margin = 10;
+
+              // Calculate left position following cursor
+              let leftPos = editorRect.left + coords.left;
+
+              // Constrain to not overflow right edge of viewport
+              const maxLeft = window.innerWidth - dropdownWidth - margin;
+              leftPos = Math.min(leftPos, maxLeft);
+
+              // Constrain to not go past left edge of editor
+              leftPos = Math.max(leftPos, editorRect.left);
+
+              setFixedPosition({
+                top: editorRect.top,
+                left: leftPos,
+              });
+            }
+
+            setShowShortcutDropdown(true);
+            setShortcutSearchQuery(searchQuery);
+            setShortcutStartIndex(lastSlashIndex);
+            setSelectedShortcutIndex(0);
+
+            // Also close mention dropdown if open
+            setShowMentionDropdown(false);
+
+            onChange(replacedText);
+            return;
+          }
+        }
+      }
+
+      // 🔧 FIX: Check for @ at different positions to handle cursor lag
+      textBeforeCursor = replacedText.slice(0, cursorPos);
       let lastAtIndex = textBeforeCursor.lastIndexOf("@");
 
       // If @ not found before cursor, check if text ends with @ (cursor lag case)
@@ -440,13 +528,19 @@ export const MentionInputInline = forwardRef<
             setMentionSearchQuery(searchQuery);
             setMentionStartIndex(lastAtIndex);
             setSelectedMentionIndex(0);
+
+            // Also close shortcut dropdown if open
+            setShowShortcutDropdown(false);
+
             onChange(replacedText);
             return;
           }
         }
       }
 
+      // No triggers detected - close both dropdowns
       setShowMentionDropdown(false);
+      setShowShortcutDropdown(false);
       onChange(replacedText);
     }, [
       getTextContent,
@@ -592,6 +686,90 @@ export const MentionInputInline = forwardRef<
       ],
     );
 
+    // Handle shortcut selection
+    const handleShortcutSelect = useCallback(
+      (shortcut: { id: string; key: string; content: string }) => {
+        if (shortcutStartIndex === -1 || !editorRef.current) return;
+
+        const selection = window.getSelection();
+        if (!selection) return;
+
+        // Find /query in text nodes (skip mentions)
+        const queryToFind = `/${shortcutSearchQuery}`;
+        let found = false;
+
+        const walker = document.createTreeWalker(
+          editorRef.current,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: (node) => {
+              // Skip text nodes inside mention spans
+              let parent = node.parentElement;
+              while (parent && parent !== editorRef.current) {
+                if (parent.hasAttribute("data-mention-id")) {
+                  return NodeFilter.FILTER_REJECT;
+                }
+                parent = parent.parentElement;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            },
+          },
+        );
+
+        while (walker.nextNode()) {
+          const textNode = walker.currentNode as Text;
+          const nodeText = textNode.textContent || "";
+
+          // Find /query in this text node
+          const localIndex = nodeText.lastIndexOf(queryToFind);
+          if (localIndex !== -1) {
+            // Found it! Create range and replace with shortcut content
+            const range = document.createRange();
+            range.setStart(textNode, localIndex);
+            range.setEnd(textNode, localIndex + queryToFind.length);
+            range.deleteContents();
+
+            // Insert shortcut content as text
+            const contentNode = document.createTextNode(shortcut.content + " ");
+            range.insertNode(contentNode);
+
+            // Set cursor after inserted content
+            const newRange = document.createRange();
+            newRange.setStartAfter(contentNode);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          console.warn("Could not find /query to replace");
+          setShowShortcutDropdown(false);
+          return;
+        }
+
+        // Hide dropdown immediately
+        setShowShortcutDropdown(false);
+        setShortcutSearchQuery("");
+        setShortcutStartIndex(-1);
+
+        // Use setTimeout to call onChange after DOM manipulation is complete
+        setTimeout(() => {
+          if (!editorRef.current) return;
+
+          const finalText = getTextContent();
+          onChange(finalText);
+
+          // Ensure focus stays on editor
+          editorRef.current.focus();
+        }, 10);
+      },
+      [shortcutStartIndex, shortcutSearchQuery, getTextContent, onChange],
+    );
+
     // Build API mentions from text and mention data
     const buildMentionsForApi = (
       text: string,
@@ -619,6 +797,33 @@ export const MentionInputInline = forwardRef<
     // Handle keyboard events
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
+        // Handle shortcut dropdown navigation
+        if (showShortcutDropdown) {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            // Wrap to first item when at the end
+            setSelectedShortcutIndex((prev) =>
+              prev < filteredShortcuts.length - 1 ? prev + 1 : 0,
+            );
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            // Wrap to last item when at the start
+            setSelectedShortcutIndex((prev) =>
+              prev > 0 ? prev - 1 : filteredShortcuts.length - 1,
+            );
+          } else if (
+            (e.key === "Enter" || e.key === "Tab") &&
+            filteredShortcuts.length > 0
+          ) {
+            e.preventDefault();
+            handleShortcutSelect(filteredShortcuts[selectedShortcutIndex]);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setShowShortcutDropdown(false);
+          }
+          return;
+        }
+
         // Handle mention dropdown navigation
         if (showMentionDropdown) {
           if (e.key === "ArrowDown") {
@@ -765,6 +970,10 @@ export const MentionInputInline = forwardRef<
         }
       },
       [
+        showShortcutDropdown,
+        filteredShortcuts,
+        selectedShortcutIndex,
+        handleShortcutSelect,
         showMentionDropdown,
         filteredMembers,
         selectedMentionIndex,
@@ -774,6 +983,7 @@ export const MentionInputInline = forwardRef<
         onSend,
         onChange,
         onMentionsChange,
+        canSendWithoutText,
       ],
     );
 
@@ -802,6 +1012,7 @@ export const MentionInputInline = forwardRef<
           !editorRef.current.contains(e.target as Node)
         ) {
           setShowMentionDropdown(false);
+          setShowShortcutDropdown(false);
         }
       };
 
@@ -848,6 +1059,26 @@ export const MentionInputInline = forwardRef<
               members={filteredMembers}
               onSelect={handleMentionSelect}
               selectedIndex={selectedMentionIndex}
+            />
+          </div>
+        )}
+
+        {/* Shortcut Dropdown - Fixed positioning to avoid clipping */}
+        {showShortcutDropdown && filteredShortcuts.length > 0 && (
+          <div
+            ref={dropdownRef}
+            className="fixed z-[9999] w-80"
+            data-testid="shortcut-dropdown-container"
+            style={{
+              bottom: `calc(100vh - ${fixedPosition.top}px + 8px)`,
+              left: `${fixedPosition.left}px`,
+            }}
+          >
+            <ShortcutDropdown
+              shortcuts={filteredShortcuts}
+              onSelect={handleShortcutSelect}
+              selectedIndex={selectedShortcutIndex}
+              searchQuery={shortcutSearchQuery}
             />
           </div>
         )}

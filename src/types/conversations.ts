@@ -8,6 +8,13 @@ import type { ID } from "./common";
 
 export type ConversationType = "GRP" | "DM";
 
+// Department info
+export interface Department {
+  id: string;
+  name: string;
+  code: string;
+}
+
 // Conversation Member User Info
 export interface ConversationMemberUserInfo {
   id: string;
@@ -26,6 +33,7 @@ export interface ConversationMember {
   joinedAt: string;
   isMuted: boolean;
   userInfo: ConversationMemberUserInfo;
+  departments?: Department[]; // Danh sách phòng ban (root level)
 }
 
 // API returns array of members directly

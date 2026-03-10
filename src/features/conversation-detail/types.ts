@@ -8,6 +8,7 @@ export type MinimalMember = {
   id: string;
   name: string;
   role?: "Leader" | "Member";
+  departments?: string[]; // Danh sách phòng ban
 };
 
 export type FolderAttribute = {
