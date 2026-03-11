@@ -8,11 +8,28 @@ import { useAuthStore } from "./stores/authStore";
 import { initializeViewMode } from "./stores/uiStore";
 import { getCurrentUser } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
+import { getAccessToken } from "./lib/auth/tokenStorage";
 
 export default function App() {
   // Initialize client-side security protections
   const { isWhitelisted } = useSecurity();
-  const { user, isAuthenticated, setUser } = useAuthStore();
+  const { user, isAuthenticated, setUser, clearAuth } = useAuthStore();
+
+  // ✅ FIX: Detect and clear corrupted state (isAuthenticated = true but no token)
+  // This handles browsers that cached old state before the 401 fix was implemented
+  useEffect(() => {
+    const token = getAccessToken();
+
+    // If authenticated in store but no token exists → corrupted state
+    if (isAuthenticated && !token) {
+      console.warn(
+        "[App] Detected corrupted auth state (authenticated but no token). Clearing state...",
+      );
+      clearAuth();
+      // Reload to ensure clean state
+      window.location.reload();
+    }
+  }, []); // Run once on mount
 
   // Set viewMode from roles after all stores are initialized (avoids circular dependency)
   useEffect(() => {
