@@ -2,6 +2,7 @@ import axios from "axios";
 import { getAccessToken, removeAccessToken } from "@/lib/auth/tokenStorage";
 import { AUTH_CONFIG } from "@/lib/auth/config";
 import { API_ENDPOINTS } from "@/config/env.config";
+import { useSessionDialogStore } from "@/stores/sessionDialogStore";
 
 // Use the chat API endpoint from env config
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_ENDPOINTS.chat;
@@ -46,20 +47,34 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Handle 401 Unauthorized - Token expired
+    // Handle 401 Unauthorized - Token expired or account disabled
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       // Clear stored token
       removeAccessToken();
 
-      // Redirect to login page
-      if (
-        typeof window !== "undefined" &&
-        !window.location.pathname.includes(AUTH_CONFIG.routes.login)
-      ) {
-        window.location.href = AUTH_CONFIG.routes.login;
-      }
+      // ✅ Show session expired dialog instead of immediate redirect
+      // Dialog will handle logout and redirect after user interaction or 10s timeout
+      const reasonMap: Record<
+        string,
+        "token_expired" | "account_disabled" | "unauthorized"
+      > = {
+        "Account is disabled": "account_disabled",
+        "Token expired": "token_expired",
+        Unauthorized: "unauthorized",
+      };
+
+      // Try to detect reason from error message
+      const errorMessage =
+        error.response?.data?.message || error.response?.data?.error || "";
+      const reason = Object.keys(reasonMap).find((key) =>
+        errorMessage.toLowerCase().includes(key.toLowerCase()),
+      );
+
+      useSessionDialogStore
+        .getState()
+        .show(reason ? reasonMap[reason] : "account_disabled");
     }
 
     return Promise.reject(error);

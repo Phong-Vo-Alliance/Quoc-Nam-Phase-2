@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { useAuthStore } from "./stores/authStore";
 import { initializeViewMode } from "./stores/uiStore";
 import { getCurrentUser } from "./utils/getCurrentUser";
+import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
 
 export default function App() {
   // Initialize client-side security protections
@@ -60,6 +61,9 @@ export default function App() {
 
       <AppRouter />
       <Toaster position="top-center" richColors />
+
+      {/* Session expired / account disabled dialog */}
+      <SessionExpiredDialog />
     </SignalRProvider>
   );
 }
