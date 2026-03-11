@@ -226,6 +226,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
           open={isMemberListOpen}
           onOpenChange={setIsMemberListOpen}
           members={members}
+          categoryName={categoryName}
           groupName={groupName}
         />
       )}

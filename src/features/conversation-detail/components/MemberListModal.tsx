@@ -50,6 +50,8 @@ interface MemberListModalProps {
   onOpenChange: (open: boolean) => void;
   /** List of members to display */
   members: MinimalMember[];
+  /** Category name (e.g., "Danh mục A") */
+  categoryName?: string;
   /** Group name for the header */
   groupName?: string;
 }
@@ -74,6 +76,7 @@ export const MemberListModal: React.FC<MemberListModalProps> = ({
   open,
   onOpenChange,
   members,
+  categoryName,
   groupName = "Nhóm",
 }) => {
   // Get current user ID to highlight "Tôi"
@@ -93,13 +96,29 @@ export const MemberListModal: React.FC<MemberListModalProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-testid="member-list-modal"
-        className="sm:max-w-md max-h-[80vh] flex flex-col"
+        className="sm:max-w-lg max-h-[80vh] flex flex-col"
       >
         <DialogHeader className="pb-4 border-b">
           <DialogTitle className="flex items-center gap-2 text-brand-700">
             <Users className="h-5 w-5" />
-            <span>Thành viên - {groupName}</span>
+            <span>Thành viên</span>
           </DialogTitle>
+          {categoryName && (
+            <div className="text-sm text-gray-600 !mt-3 !mb-2 space-y-1">
+              <div>
+                Nhóm:{" "}
+                <span className="font-semibold bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded">
+                  {categoryName}
+                </span>
+              </div>
+              <div>
+                Loại việc:{" "}
+                <span className="font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
+                  {groupName}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="text-xs text-gray-500 mt-1">
             {leaderCount > 0 && (
               <span className="mr-3">

@@ -31,16 +31,9 @@ import {
   updateInformationConfirmed,
 } from "@/api/information_confirmed.api";
 import { toast } from "sonner";
-import {
-  useAddCheckItem,
-  useToggleCheckItem,
-  useUpdateCheckItem,
-  useDeleteCheckItem,
-  useUpdateTaskStatus,
-} from "@/hooks/mutations";
 import { useAuthStore } from "@/stores/authStore";
 import { useConversationStore } from "@/stores";
-import { isDirectConversation } from "@/types/conversations";
+import { useCategories } from "@/hooks/queries/useCategories";
 import { useFilteredAssignees } from "@/hooks/useFilteredAssignees";
 
 // Import extracted components from conversation-detail feature
@@ -143,13 +136,30 @@ export const ConversationDetailPanel: React.FC<
   conversationAttachment,
 }) => {
   /* =============== Store Data =============== */
-  const categoryName = useConversationStore((s) => s.getConversationCategory());
-  const groupName =
-    useConversationStore((s) => s.getConversationName()) || "Nhóm";
   const selectedConversation = useConversationStore(
     (s) => s.selectedConversation,
   );
   const activeTabType = useConversationStore((s) => s.activeTabType);
+
+  // Derive categoryName and groupName from categories query using conversation ID
+  const { data: categories } = useCategories();
+  const { categoryName, groupName } = React.useMemo(() => {
+    if (!selectedConversation?.id || !categories) {
+      return { categoryName: "", groupName: "Nhóm" };
+    }
+    for (const cat of categories) {
+      const conv = cat.conversations?.find(
+        (c) => c.conversationId === selectedConversation.id,
+      );
+      if (conv) {
+        return {
+          categoryName: cat.name || "",
+          groupName: conv.conversationName || "Nhóm",
+        };
+      }
+    }
+    return { categoryName: "", groupName: "Nhóm" };
+  }, [selectedConversation?.id, categories]);
   const isDM = activeTabType === "dm" || selectedConversation?.type === "dm";
   const authUser = useAuthStore((s) => s.user);
 
@@ -597,7 +607,7 @@ export const ConversationDetailPanel: React.FC<
             {/* Info Tab Content */}
             <InfoTabContent
               isDM={isDM}
-              categoryName={categoryName || ""}
+              categoryName={categoryName}
               groupName={groupName}
               groupId={groupId || ""}
               selectedWorkTypeId={selectedWorkTypeId}

@@ -594,13 +594,16 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
     to?: string;
   }>({});
 
-  /** Unique senders */
+  /** Unique senders - chỉ những user có gửi file/ảnh */
   const senders = React.useMemo(() => {
-    const s = messageList
-      .map((m: any) => m.senderName || m.sender)
-      .filter(Boolean);
-    return Array.from(new Set(s));
-  }, [messageList]);
+    // Lấy senders từ cả mediaFiles và docFiles
+    const allFileSenders = [
+      ...mediaFiles.map((f) => f.senderName),
+      ...docFiles.map((f) => f.senderName),
+    ].filter(Boolean);
+
+    return Array.from(new Set(allFileSenders));
+  }, [mediaFiles, docFiles]);
 
   const handleOpenPreview = (f: Phase1AFileItem) => {
     // If image, open ImagePreviewModal

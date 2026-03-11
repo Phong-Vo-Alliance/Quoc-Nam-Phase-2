@@ -257,7 +257,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // 🆕 NEW: Confirm info success callback
   onConfirmInfoSuccess,
-  // messages = []
+
 }) => {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient(); // 🆕 NEW: For cache manipulation in jump-to-message
@@ -930,8 +930,14 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       const messageElement = findMessageElement(targetMessageId);
 
       if (messageElement) {
-        // Message is in current view, scroll to it
-        scrollToAndHighlight(messageElement);
+        // Message is in current view — delay to ensure scroll container is fully laid out after mount
+        setTimeout(() => {
+          // Re-find element after delay (original ref may be stale after remount)
+          const freshElement = findMessageElement(targetMessageId);
+          if (freshElement) {
+            scrollToAndHighlight(freshElement);
+          }
+        }, 500);
         return;
       }
 

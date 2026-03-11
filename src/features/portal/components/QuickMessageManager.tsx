@@ -178,7 +178,7 @@ export const QuickMessageManager: React.FC<{
             </DialogTitle>
             <p className="text-sm text-gray-500">
               Tạo phím tắt cho tin nhắn thường dùng. Gõ{" "}
-              <span className="font-medium text-brand-600">/xinchao</span> trong
+              <span className="font-medium text-brand-600">/phimtat</span> trong
               chat để sử dụng.
             </p>
           </DialogHeader>
@@ -278,7 +278,7 @@ export const QuickMessageManager: React.FC<{
                 <Input
                   value={key}
                   onChange={(e) => handleKeyChange(e.target.value)}
-                  placeholder="Phím tắt (ví dụ: xinchao)"
+                  placeholder="Phím tắt (ví dụ: phimtat)"
                   className={cn(
                     "text-sm pl-9",
                     keyError && "border-red-500 focus-visible:ring-red-500",
@@ -298,7 +298,7 @@ export const QuickMessageManager: React.FC<{
                 <p className="text-xs text-gray-500 mt-1">
                   💡 Trong chat, gõ{" "}
                   <span className="font-medium text-brand-600">
-                    /{key || "phímtắt"}
+                    /{key || "phimtat"}
                   </span>{" "}
                   để dùng phím tắt này
                 </p>
