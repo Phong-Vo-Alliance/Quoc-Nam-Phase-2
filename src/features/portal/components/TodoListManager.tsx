@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Plus,
   Trash2,
@@ -55,13 +56,68 @@ export const TodoListManager: React.FC<{
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newTitleError, setNewTitleError] = useState<string>("");
+  const [newDescriptionError, setNewDescriptionError] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editTitleError, setEditTitleError] = useState<string>("");
+  const [editDescriptionError, setEditDescriptionError] = useState<string>("");
   const [showCompleted, setShowCompleted] = useState(true);
+
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const newTitleRef = useRef<HTMLInputElement>(null);
   const editTitleRef = useRef<HTMLInputElement>(null);
+
+  // Validate title function
+  const validateTitle = (value: string): string => {
+    if (!value.trim()) {
+      return "Tiêu đề không được để trống";
+    }
+    if (value.length > 500) {
+      return "Tiêu đề không được vượt quá 500 ký tự";
+    }
+    return "";
+  };
+
+  // Validate description function (optional field, only check max length)
+  const validateDescription = (value: string): string => {
+    if (value.length > 1000) {
+      return "Chi tiết không được vượt quá 1000 ký tự";
+    }
+    return "";
+  };
+
+  // Handle title change for new todo with validation
+  const handleNewTitleChange = (value: string) => {
+    setNewTitle(value);
+    const error = validateTitle(value);
+    setNewTitleError(error);
+  };
+
+  // Handle description change for new todo with validation
+  const handleNewDescriptionChange = (value: string) => {
+    setNewDescription(value);
+    const error = validateDescription(value);
+    setNewDescriptionError(error);
+  };
+
+  // Handle title change for edit todo with validation
+  const handleEditTitleChange = (value: string) => {
+    setEditTitle(value);
+    const error = validateTitle(value);
+    setEditTitleError(error);
+  };
+
+  // Handle description change for edit todo with validation
+  const handleEditDescriptionChange = (value: string) => {
+    setEditDescription(value);
+    const error = validateDescription(value);
+    setEditDescriptionError(error);
+  };
 
   useEffect(() => {
     if (isAddingNew && newTitleRef.current) {
@@ -79,11 +135,13 @@ export const TodoListManager: React.FC<{
     setIsAddingNew(true);
     setNewTitle("");
     setNewDescription("");
+    setNewTitleError("");
+    setNewDescriptionError("");
   };
 
   const handleSaveNew = () => {
     const title = newTitle.trim();
-    if (!title) {
+    if (!title || newTitleError || newDescriptionError) {
       setIsAddingNew(false);
       return;
     }
@@ -95,6 +153,8 @@ export const TodoListManager: React.FC<{
           setIsAddingNew(false);
           setNewTitle("");
           setNewDescription("");
+          setNewTitleError("");
+          setNewDescriptionError("");
         },
         onError: () => {
           toast.error("Không thể thêm công việc. Vui lòng thử lại.");
@@ -107,6 +167,8 @@ export const TodoListManager: React.FC<{
     setIsAddingNew(false);
     setNewTitle("");
     setNewDescription("");
+    setNewTitleError("");
+    setNewDescriptionError("");
   };
 
   const handleStartEdit = (todo: TodoItem) => {
@@ -114,12 +176,14 @@ export const TodoListManager: React.FC<{
     setEditingId(todo.id);
     setEditTitle(todo.title);
     setEditDescription(todo.description || "");
+    setEditTitleError(""); // Clear error when editing existing todo
+    setEditDescriptionError(""); // Clear description error too
   };
 
   const handleSaveEdit = () => {
     if (editingId === null) return;
     const title = editTitle.trim();
-    if (!title) return;
+    if (!title || editTitleError || editDescriptionError) return;
 
     updateMutation.mutate(
       {
@@ -131,6 +195,8 @@ export const TodoListManager: React.FC<{
           setEditingId(null);
           setEditTitle("");
           setEditDescription("");
+          setEditTitleError("");
+          setEditDescriptionError("");
         },
         onError: () => {
           toast.error("Không thể cập nhật công việc. Vui lòng thử lại.");
@@ -143,6 +209,8 @@ export const TodoListManager: React.FC<{
     setEditingId(null);
     setEditTitle("");
     setEditDescription("");
+    setEditTitleError("");
+    setEditDescriptionError("");
   };
 
   const handleToggleComplete = (todo: TodoItem) => {
@@ -158,10 +226,23 @@ export const TodoListManager: React.FC<{
     );
   };
 
-  const handleDelete = (id: string) => {
-    deleteMutation.mutate(id, {
+  const handleDeleteClick = (id: string) => {
+    setDeleteTargetId(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteTargetId) return;
+
+    deleteMutation.mutate(deleteTargetId, {
+      onSuccess: () => {
+        setShowDeleteConfirm(false);
+        setDeleteTargetId(null);
+      },
       onError: () => {
         toast.error("Không thể xóa công việc. Vui lòng thử lại.");
+        setShowDeleteConfirm(false);
+        setDeleteTargetId(null);
       },
     });
   };
@@ -169,7 +250,8 @@ export const TodoListManager: React.FC<{
   const isLoading = isLoadingActive || isLoadingDoneToday;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-w-[600px] h-[80vh] flex flex-col [&>button]:hidden"
         data-testid="todo-manager-dialog"
@@ -228,26 +310,60 @@ export const TodoListManager: React.FC<{
                 ) : (
                   <div className="rounded-lg border-brand-200 bg-brand-50 p-3">
                     <div className="space-y-2">
-                      <Input
-                        ref={newTitleRef}
-                        value={newTitle}
-                        onChange={(e) => setNewTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") handleCancelNew();
-                        }}
-                        placeholder="Tiêu đề"
-                        className="text-sm"
-                        disabled={isMutating}
-                        data-testid="todo-new-title-input"
-                      />
-                      <Textarea
-                        value={newDescription}
-                        onChange={(e) => setNewDescription(e.target.value)}
-                        placeholder="Chi tiết"
-                        className="text-sm h-20"
-                        disabled={isMutating}
-                        data-testid="todo-new-description-input"
-                      />
+                      <div>
+                        <Input
+                          ref={newTitleRef}
+                          value={newTitle}
+                          onChange={(e) => handleNewTitleChange(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") handleCancelNew();
+                          }}
+                          placeholder="Tiêu đề"
+                          className={cn(
+                            "text-sm",
+                            newTitleError &&
+                              "border-red-500 focus-visible:ring-red-500",
+                          )}
+                          disabled={isMutating}
+                          data-testid="todo-new-title-input"
+                        />
+                        {newTitleError ? (
+                          <p
+                            className="text-xs text-red-500 mt-1"
+                            data-testid="todo-new-title-error"
+                          >
+                            {newTitleError}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-500 mt-1">
+                            💡 Tối đa 500 ký tự ({newTitle.length}/500)
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <Textarea
+                          value={newDescription}
+                          onChange={(e) =>
+                            handleNewDescriptionChange(e.target.value)
+                          }
+                          placeholder="Chi tiết (không bắt buộc)"
+                          className={cn(
+                            "text-sm h-20",
+                            newDescriptionError &&
+                              "border-red-500 focus-visible:ring-red-500",
+                          )}
+                          disabled={isMutating}
+                          data-testid="todo-new-description-input"
+                        />
+                        {newDescriptionError && (
+                          <p
+                            className="text-xs text-red-500 mt-1"
+                            data-testid="todo-new-description-error"
+                          >
+                            {newDescriptionError}
+                          </p>
+                        )}
+                      </div>
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"
@@ -261,7 +377,12 @@ export const TodoListManager: React.FC<{
                         <Button
                           size="sm"
                           onClick={handleSaveNew}
-                          disabled={!newTitle.trim() || isMutating}
+                          disabled={
+                            !newTitle.trim() ||
+                            !!newTitleError ||
+                            !!newDescriptionError ||
+                            isMutating
+                          }
                           data-testid="todo-new-save-button"
                         >
                           {isMutating && (
@@ -309,28 +430,66 @@ export const TodoListManager: React.FC<{
                           <div className="flex-1 min-w-0">
                             {isEditing ? (
                               <div className="space-y-2">
-                                <Input
-                                  ref={editTitleRef}
-                                  value={editTitle}
-                                  onChange={(e) => setEditTitle(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Escape") handleCancelEdit();
-                                  }}
-                                  placeholder="Tiêu đề"
-                                  className="text-sm font-medium"
-                                  disabled={isMutating}
-                                  data-testid={`todo-edit-title-input-${editingId}`}
-                                />
-                                <Textarea
-                                  value={editDescription}
-                                  onChange={(e) =>
-                                    setEditDescription(e.target.value)
-                                  }
-                                  placeholder="Chi tiết"
-                                  className="text-sm h-16"
-                                  disabled={isMutating}
-                                  data-testid={`todo-edit-description-input-${editingId}`}
-                                />
+                                <div>
+                                  <Input
+                                    ref={editTitleRef}
+                                    value={editTitle}
+                                    onChange={(e) =>
+                                      handleEditTitleChange(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape")
+                                        handleCancelEdit();
+                                    }}
+                                    placeholder="Tiêu đề"
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      editTitleError &&
+                                        "border-red-500 focus-visible:ring-red-500",
+                                    )}
+                                    disabled={isMutating}
+                                    data-testid={`todo-edit-title-input-${editingId}`}
+                                  />
+                                  {editTitleError ? (
+                                    <p
+                                      className="text-xs text-red-500 mt-1"
+                                      data-testid={`todo-edit-title-error-${editingId}`}
+                                    >
+                                      {editTitleError}
+                                    </p>
+                                  ) : (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      💡 Tối đa 500 ký tự ({editTitle.length}
+                                      /500)
+                                    </p>
+                                  )}
+                                </div>
+                                <div>
+                                  <Textarea
+                                    value={editDescription}
+                                    onChange={(e) =>
+                                      handleEditDescriptionChange(
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Chi tiết (không bắt buộc)"
+                                    className={cn(
+                                      "text-sm h-16",
+                                      editDescriptionError &&
+                                        "border-red-500 focus-visible:ring-red-500",
+                                    )}
+                                    disabled={isMutating}
+                                    data-testid={`todo-edit-description-input-${editingId}`}
+                                  />
+                                  {editDescriptionError && (
+                                    <p
+                                      className="text-xs text-red-500 mt-1"
+                                      data-testid={`todo-edit-description-error-${editingId}`}
+                                    >
+                                      {editDescriptionError}
+                                    </p>
+                                  )}
+                                </div>
                                 <div className="flex justify-end gap-2">
                                   <Button
                                     variant="ghost"
@@ -344,7 +503,12 @@ export const TodoListManager: React.FC<{
                                   <Button
                                     size="sm"
                                     onClick={handleSaveEdit}
-                                    disabled={!editTitle.trim() || isMutating}
+                                    disabled={
+                                      !editTitle.trim() ||
+                                      !!editTitleError ||
+                                      !!editDescriptionError ||
+                                      isMutating
+                                    }
                                     data-testid={`todo-edit-save-button-${editingId}`}
                                   >
                                     {isMutating && (
@@ -386,7 +550,7 @@ export const TodoListManager: React.FC<{
                             icon={<Trash2 className="h-3.5 w-3.5" />}
                             className="bg-transparent h-6 w-6 flex-shrink-0 opacity-0 border-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out hover:bg-transparent hover:border-0"
                             title="Xóa công việc"
-                            onClick={() => handleDelete(todo.id)}
+                            onClick={() => handleDeleteClick(todo.id)}
                             disabled={isMutating}
                             data-testid={`todo-delete-button-${todo.id}`}
                           />
@@ -452,7 +616,7 @@ export const TodoListManager: React.FC<{
                             icon={<Trash2 className="h-3.5 w-3.5" />}
                             className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out hover:bg-transparent hover:border-0"
                             title="Xóa công việc"
-                            onClick={() => handleDelete(todo.id)}
+                            onClick={() => handleDeleteClick(todo.id)}
                             disabled={isMutating}
                             data-testid={`todo-completed-delete-button-${todo.id}`}
                           />
@@ -467,5 +631,19 @@ export const TodoListManager: React.FC<{
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Delete Confirmation Dialog */}
+    <ConfirmDialog
+      open={showDeleteConfirm}
+      onOpenChange={setShowDeleteConfirm}
+      title="Xác nhận xóa"
+      description="Bạn có chắc chắn muốn xóa công việc này?"
+      confirmText="Xóa"
+      cancelText="Hủy"
+      variant="danger"
+      onConfirm={handleConfirmDelete}
+      isLoading={deleteMutation.isPending}
+    />
+    </>
   );
 };

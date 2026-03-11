@@ -257,7 +257,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // 🆕 NEW: Confirm info success callback
   onConfirmInfoSuccess,
-
 }) => {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient(); // 🆕 NEW: For cache manipulation in jump-to-message
@@ -1520,9 +1519,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           bottomRef.current?.scrollIntoView({ behavior: "smooth" });
           inputRef.current?.focus();
         }, 100);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Send message error:", error);
-        toast.error("Lỗi gửi tin nhắn. Vui lòng thử lại.");
+
+        // Handle specific error codes
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", {
+            duration: 5000,
+          });
+        } else if (error.response?.status === 403) {
+          toast.error(
+            "Bạn không có quyền gửi tin nhắn trong cuộc trò chuyện này.",
+          );
+        } else if (error.response?.status === 404) {
+          toast.error("Cuộc trò chuyện không tồn tại hoặc đã bị xóa.");
+        } else if (error.response?.status >= 500) {
+          toast.error("Lỗi hệ thống. Vui lòng thử lại sau.");
+        } else {
+          toast.error("Lỗi gửi tin nhắn. Vui lòng thử lại.");
+        }
+
         setIsUploading(false);
       }
     },
