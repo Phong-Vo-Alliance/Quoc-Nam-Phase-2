@@ -284,6 +284,7 @@ export const QuickMessageManager: React.FC<{
                     keyError && "border-red-500 focus-visible:ring-red-500",
                   )}
                   disabled={isAnyLoading}
+                  maxLength={50}
                   data-testid="quick-message-keyword-input"
                 />
               </div>
@@ -310,6 +311,7 @@ export const QuickMessageManager: React.FC<{
               placeholder="Nội dung tin nhắn..."
               className="text-sm h-28"
               disabled={isAnyLoading}
+              maxLength={10000}
               data-testid="quick-message-content-input"
             />
           </div>

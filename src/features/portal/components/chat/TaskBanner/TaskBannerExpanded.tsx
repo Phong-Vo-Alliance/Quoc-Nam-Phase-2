@@ -13,16 +13,6 @@ const STATUS_STYLE_MAP: Record<string, { container: string; dot: string }> = {
       "inline-flex items-center gap-1 font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md",
     dot: "w-1.5 h-1.5 bg-orange-500 rounded-full",
   },
-  need_to_verified: {
-    container:
-      "inline-flex items-center gap-1 font-semibold text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-md",
-    dot: "w-1.5 h-1.5 bg-yellow-500 rounded-full",
-  },
-  finished: {
-    container:
-      "inline-flex items-center gap-1 font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-md",
-    dot: "w-1.5 h-1.5 bg-green-500 rounded-full",
-  },
 };
 
 interface TaskBannerExpandedProps {
@@ -72,9 +62,7 @@ export const TaskBannerExpanded: React.FC<TaskBannerExpandedProps> = ({
                 className="flex items-center gap-3 mt-0.5"
                 data-testid={`task-banner-status-counts-${item.conversationId}`}
               >
-                {item.statusCounts
-                  .filter((sc) => sc.status !== "finished")
-                  .map((sc) => {
+                {item.statusCounts.map((sc) => {
                     const style = STATUS_STYLE_MAP[sc.status];
                     return (
                       <span

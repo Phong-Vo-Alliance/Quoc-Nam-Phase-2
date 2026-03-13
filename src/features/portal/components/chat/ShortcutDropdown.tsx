@@ -142,7 +142,7 @@ export const ShortcutDropdown: React.FC<ShortcutDropdownProps> = ({
             {/* Shortcut info */}
             <div className="flex-1 min-w-0">
               {/* Shortcut key - bold */}
-              <div className="text-sm font-semibold text-gray-900 mb-0.5">
+              <div className="text-sm font-semibold text-gray-900 mb-0.5 truncate">
                 {highlightMatch(`/${shortcut.key}`, searchQuery)}
               </div>
 

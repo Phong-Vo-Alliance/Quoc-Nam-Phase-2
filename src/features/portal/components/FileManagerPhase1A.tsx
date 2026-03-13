@@ -667,9 +667,8 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         } else if (onOpenSourceMessage) {
           onOpenSourceMessage(targetMessageId);
         }
-
-        // Also try to open task log if this message has a thread
-        onOpenTaskLogByMessageId?.(targetMessageId);
+        // Do NOT open Nhật ký công việc for main chat messages.
+        // Task log should only open when the file is inside a thread (f.parentMessageId is set).
       }
     }
   };

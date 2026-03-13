@@ -19,11 +19,20 @@ describe("MemberListModal", () => {
     groupName: "Marketing",
   };
 
-  it("renders modal with title and group name", () => {
+  it("renders modal with title", () => {
     render(<MemberListModal {...defaultProps} />);
 
     expect(screen.getByTestId("member-list-modal")).toBeInTheDocument();
-    expect(screen.getByText("Thành viên - Marketing")).toBeInTheDocument();
+    expect(screen.getAllByText("Thành viên").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders modal with category name and group name", () => {
+    render(
+      <MemberListModal {...defaultProps} categoryName="Danh mục A" />,
+    );
+
+    expect(screen.getByText("Danh mục A")).toBeInTheDocument();
+    expect(screen.getByText("Marketing")).toBeInTheDocument();
   });
 
   it("displays all members with correct data-testid", () => {

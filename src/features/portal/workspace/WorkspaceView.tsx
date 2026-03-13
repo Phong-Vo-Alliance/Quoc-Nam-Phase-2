@@ -888,6 +888,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                         setShowRight(true);
                         setTab("order");
                       }}
+                      onViewTaskDetail={() => {
+                        setShowRight(true);
+                        setTab("order");
+                      }}
                     />
                   ) : (
                     <EmptyChatState isMobile={true} />
@@ -1153,6 +1157,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
               setMessages(messages);
             }}
             onConfirmInfoSuccess={() => {
+              setShowRight(true);
+              setTab("order");
+            }}
+            onViewTaskDetail={() => {
               setShowRight(true);
               setTab("order");
             }}

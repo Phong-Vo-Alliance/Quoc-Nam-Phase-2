@@ -200,6 +200,9 @@ interface ChatMainContainerProps {
 
   // 🆕 NEW: Confirm info success callback (for auto-switching to order tab)
   onConfirmInfoSuccess?: () => void;
+
+  // 🆕 NEW: Callback when user clicks "Xem chi tiết" in TaskBanner (to switch to Công việc tab)
+  onViewTaskDetail?: () => void;
   // messages:Message[];
 }
 
@@ -257,6 +260,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
 
   // 🆕 NEW: Confirm info success callback
   onConfirmInfoSuccess,
+
+  // 🆕 NEW: View task detail callback (switches to Công việc tab)
+  onViewTaskDetail,
 }) => {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient(); // 🆕 NEW: For cache manipulation in jump-to-message
@@ -1940,19 +1946,125 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   );
 
   // 🆕 NEW: Scroll to quoted message (Quote Reply feature - 2026-02-04)
+  // ✅ ENHANCED: Now supports jump-to-message via API if not in view
   const handleScrollToQuoted = useCallback(
-    (quotedMessageId: string) => {
+    async (quotedMessageId: string) => {
+      // Step 1: Check if message exists in current view
       const messageElement = findMessageElement(quotedMessageId);
 
-      if (!messageElement) {
-        toast.warning("Tin nhắn gốc không còn trong lịch sử hiển thị");
+      if (messageElement) {
+        // Message is in current view - scroll immediately
+        scrollToAndHighlight(messageElement);
         return;
       }
 
-      // 🎨 Use same highlight style as starred/pinned messages (border only, not background)
-      scrollToAndHighlight(messageElement);
+      // Step 2: ✅ NEW - Fetch messages around target (single API call)
+      setIsLoadingNewer(true); // Show loading indicator
+
+      try {
+        const result = await getMessagesAround({
+          conversationId,
+          aroundMessageId: quotedMessageId,
+          limit: 50,
+        });
+
+        // ✅ Merge messages into main cache (deduplicate by ID)
+        queryClient.setQueryData(
+          messageKeys.conversation(conversationId),
+          (oldData: any) => {
+            if (!oldData) {
+              // No existing data - create new cache structure
+              return {
+                pages: [
+                  {
+                    items: result.items,
+                    nextCursor: result.nextCursor,
+                    hasMore: result.hasMore,
+                  },
+                ],
+                pageParams: [undefined],
+              };
+            }
+
+            // Merge with existing data (deduplicate by message ID)
+            const existingMessageIds = new Set(
+              oldData.pages.flatMap((p: any) => p.items.map((m: any) => m.id)),
+            );
+
+            const newMessages = result.items.filter(
+              (msg) => !existingMessageIds.has(msg.id),
+            );
+
+            if (newMessages.length === 0) {
+              // All messages already cached - preserve existing pagination state
+              return oldData;
+            }
+
+            // Insert new messages in chronological order (newest first, like API returns)
+            const allMessages = [
+              ...oldData.pages.flatMap((p: any) => p.items),
+              ...newMessages,
+            ].sort(
+              (a, b) =>
+                new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(), // Newest first
+            );
+
+            // Determine if there are older messages to load
+            const oldestCachedMessage = allMessages[allMessages.length - 1];
+            const oldestCachedMessageId = oldestCachedMessage?.id;
+            const hasMoreOlderMessages = result.hasMore || !!result.nextCursor;
+
+            return {
+              pages: [
+                {
+                  items: allMessages,
+                  nextCursor: hasMoreOlderMessages
+                    ? result.nextCursor || oldestCachedMessageId
+                    : undefined,
+                  hasMore: hasMoreOlderMessages,
+                },
+              ],
+              pageParams: [undefined],
+            };
+          },
+        );
+
+        // Wait for DOM update
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Find and scroll to message
+        const updatedMessageElement = findMessageElement(quotedMessageId);
+
+        if (updatedMessageElement) {
+          scrollToAndHighlight(updatedMessageElement);
+          toast.success("Đã tìm thấy tin nhắn gốc!");
+          // Mark that we may have unloaded newer messages (after jumping to old message)
+          setHasUnloadedNewerMessages(true);
+        } else {
+          toast.error("Không thể hiển thị tin nhắn. Vui lòng thử lại.");
+        }
+      } catch (error: any) {
+        console.error("Error jumping to quoted message:", error);
+
+        if (error.response?.status === 404) {
+          toast.error("Tin nhắn gốc không tồn tại hoặc đã bị xóa.");
+        } else if (error.response?.status === 403) {
+          toast.error("Bạn không có quyền xem tin nhắn này.");
+        } else {
+          toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
+        }
+      } finally {
+        setIsLoadingNewer(false);
+      }
     },
-    [scrollToAndHighlight, findMessageElement],
+    [
+      findMessageElement,
+      scrollToAndHighlight,
+      conversationId,
+      queryClient,
+      setIsLoadingNewer,
+      setHasUnloadedNewerMessages,
+    ],
   );
 
   // API returns correct name directly, no transformation needed
@@ -2171,7 +2283,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       {activeCategoryId && (
         <TaskBanner
           categoryId={activeCategoryId}
-          onViewWorkType={handleConversationChange}
+          onViewWorkType={(conversationId: string) => {
+            handleConversationChange(conversationId);
+            onViewTaskDetail?.();
+          }}
         />
       )}
 

@@ -33,15 +33,17 @@ export function useStarMessage({
     mutationFn: ({ messageId }: { messageId: string }) =>
       starMessage(messageId),
 
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       // Invalidate all starred messages cache
       queryClient.invalidateQueries({
         queryKey: pinnedStarredKeys.starred,
       });
 
-      // Invalidate messages cache to update isStarred flag
+      // Force refetch messages cache to get fresh isStarred flag from API
       if (conversationId) {
-        queryClient.invalidateQueries({
+        // Use refetchQueries to force immediate refetch from API
+        // This ensures we always use the server's truth, not optimistic cache
+        queryClient.refetchQueries({
           queryKey: messageKeys.conversation(conversationId),
         });
       }
@@ -95,11 +97,13 @@ export function useUnstarMessage({
         queryKey: pinnedStarredKeys.starred,
       });
 
-      // Invalidate messages cache to update isStarred flag
+      // Force refetch messages cache to get fresh isStarred flag from API
       // Use conversationId from mutation call if provided, else use default from hook options
       const conversationId = variables.conversationId || defaultConversationId;
       if (conversationId) {
-        queryClient.invalidateQueries({
+        // Use refetchQueries to force immediate refetch from API
+        // This ensures we always use the server's truth, not optimistic cache
+        queryClient.refetchQueries({
           queryKey: messageKeys.conversation(conversationId),
         });
       }

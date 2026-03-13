@@ -76,17 +76,12 @@ export const ReceivedInfoSection: React.FC<{
 
                 {/* Buttons */}
                 {info.status === "waiting" && (
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" onClick={() => onAssignInfo?.(info)}>
-                      Giao Task
-                    </Button>
-
+                  <div className="mt-2">
                     <Button
                       size="sm"
-                      variant="outline"
                       onClick={() => onOpenGroupTransfer?.(info)}
                     >
-                      Chuyển nhóm
+                      Giao việc
                     </Button>
                   </div>
                 )}

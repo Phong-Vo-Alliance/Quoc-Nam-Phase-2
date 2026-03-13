@@ -192,6 +192,60 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   const markAsRead = useMarkConversationAsRead();
   const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 🆕 Helper function to scroll to and highlight a message
+  const scrollToAndHighlight = useCallback((element: Element) => {
+    // For system messages, highlight the inner pill element instead of the full-width wrapper
+    const isSystemMessage = element
+      .getAttribute("data-testid")
+      ?.startsWith("system-message-bubble-");
+    const highlightTarget = (
+      isSystemMessage
+        ? (element.firstElementChild as HTMLElement) || element
+        : element
+    ) as HTMLElement;
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // Add highlight class - different class for system vs regular messages
+    const highlightClass = isSystemMessage
+      ? "system-message-highlighted"
+      : "message-highlighted";
+    highlightTarget.classList.add(highlightClass);
+
+    setTimeout(() => {
+      highlightTarget.classList.remove(highlightClass);
+    }, 2500);
+  }, []);
+
+  // Helper to find a message element in DOM (supports both regular and system messages)
+  const findMessageElement = useCallback(
+    (messageId: string): Element | null => {
+      return (
+        document.querySelector(`[data-testid="message-bubble-${messageId}"]`) ||
+        document.querySelector(
+          `[data-testid="system-message-bubble-${messageId}"]`,
+        )
+      );
+    },
+    [],
+  );
+
+  // 🆕 Scroll to quoted message (Quote Reply feature)
+  const handleScrollToQuoted = useCallback(
+    (quotedMessageId: string) => {
+      const messageElement = findMessageElement(quotedMessageId);
+
+      if (!messageElement) {
+        toast.warning("Tin nhắn gốc không còn trong lịch sử hiển thị");
+        return;
+      }
+
+      // Use same highlight style as starred/pinned messages (border only, not background)
+      scrollToAndHighlight(messageElement);
+    },
+    [scrollToAndHighlight, findMessageElement],
+  );
+
   // ✅ FIX: Instant scroll to target message via useLayoutEffect (before paint — no jitter)
   useLayoutEffect(() => {
     if (!open || !initialTargetRef.current || !threadData || loading) return;
@@ -624,7 +678,11 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
         });
     };
 
-    const cleanup = chatHub.onWithCleanup('ThreadUpdated', handleThreadUpdated, false);
+    const cleanup = chatHub.onWithCleanup(
+      "ThreadUpdated",
+      handleThreadUpdated,
+      false,
+    );
 
     return () => {
       cleanup();
@@ -1144,6 +1202,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
                               images[initialIndex]?.fileId || null,
                             );
                           }}
+                          onScrollToQuoted={handleScrollToQuoted}
                           onReply={(replyData) => {
                             // Set local reply target for thread (not global)
                             setThreadReplyTarget(replyData);

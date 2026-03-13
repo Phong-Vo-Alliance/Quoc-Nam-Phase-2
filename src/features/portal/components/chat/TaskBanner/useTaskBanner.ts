@@ -33,8 +33,6 @@ export interface UseTaskBannerReturn {
 const STATUS_LABEL_MAP: Record<string, string> = {
   todo: "chưa xử lý",
   doing: "đang làm",
-  need_to_verified: "chờ xác nhận",
-  finished: "hoàn thành",
 };
 
 function computeStatusCounts(tasks: TaskDetailResponse[]): StatusCount[] {
@@ -84,10 +82,12 @@ export function useTaskBanner(
     return map;
   }, [categories]);
 
-  // Filter out finished tasks for the banner (only show actionable tasks)
+  // Only show tasks with actionable statuses (todo, doing) in the banner
   const activeTasks = useMemo(() => {
     if (!tasks) return [];
-    return tasks.filter((t) => t.status?.code !== "finished");
+    return tasks.filter(
+      (t) => t.status?.code === "todo" || t.status?.code === "doing",
+    );
   }, [tasks]);
 
   // Group tasks by conversationId
