@@ -312,7 +312,7 @@ export async function handleMemberRemoved(
     // === STEP 2: Xử lý theo role ===
     if (isCurrentUserRemoved) {
       // --- USER BỊ XÓA ---
-      toast.info(
+      toast.warning(
         `Bạn đã bị xóa khỏi loại việc ${conversationName || "không xác định"}`,
       );
 
