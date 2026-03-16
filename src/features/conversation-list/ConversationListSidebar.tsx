@@ -613,11 +613,13 @@ export const ConversationListSidebar: React.FC<
   // Sync internal category state when store selection changes externally
   // (e.g., when user is removed from a work type via SignalR)
   React.useEffect(() => {
-    if (
-      selectedCategoryId &&
-      selectedCategoryId !== internalSelectedCategoryId
-    ) {
-      setInternalSelectedCategoryId(selectedCategoryId);
+    if (selectedCategoryId) {
+      if (selectedCategoryId !== internalSelectedCategoryId) {
+        setInternalSelectedCategoryId(selectedCategoryId);
+      }
+    } else if (internalSelectedCategoryId) {
+      // Clear internal state when store selection is cleared
+      setInternalSelectedCategoryId(null);
     }
   }, [selectedCategoryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
