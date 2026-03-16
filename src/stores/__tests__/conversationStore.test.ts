@@ -11,6 +11,7 @@ vi.mock("@/utils/storage", () => ({
   getSelectedConversation: vi.fn(),
   getSelectedCategory: vi.fn(),
   clearSelectedConversation: vi.fn(),
+  clearSelectedCategory: vi.fn(),
 }));
 
 describe("conversationStore", () => {
@@ -191,6 +192,29 @@ describe("conversationStore", () => {
       expect(result.current.getConversationCategory()).toBeNull();
       expect(result.current.getConversationCategoryId()).toBeNull();
       expect(result.current.getConversationType()).toBeNull();
+    });
+
+    it("should clear legacy localStorage keys", () => {
+      const { result } = renderHook(() => useConversationStore());
+
+      const conversation: ChatTarget = {
+        type: "group",
+        id: "conv-123",
+        name: "Test Group",
+        categoryId: "cat-456",
+      };
+
+      act(() => {
+        result.current.setSelectedConversation(conversation);
+      });
+      vi.clearAllMocks();
+
+      act(() => {
+        result.current.clearSelectedConversation();
+      });
+
+      expect(storage.clearSelectedConversation).toHaveBeenCalled();
+      expect(storage.clearSelectedCategory).toHaveBeenCalled();
     });
   });
 

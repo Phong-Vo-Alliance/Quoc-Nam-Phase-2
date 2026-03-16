@@ -326,6 +326,11 @@ export async function handleMemberRemoved(
         queryKey: conversationKeys.members(data.conversationId),
       });
 
+      // Remove message cache for the removed conversation
+      queryClient.removeQueries({
+        queryKey: messageKeys.conversation(data.conversationId),
+      });
+
       // Nếu đang xem conversation này → auto-select conversation khác
       const activeConvId = getActiveConversationId();
       if (activeConvId === data.conversationId) {

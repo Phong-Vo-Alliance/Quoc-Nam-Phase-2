@@ -329,9 +329,7 @@ export const ConversationListSidebar: React.FC<
     });
 
     // Build lookup map: userId → colleague DTO
-    const colleagueMap = new Map(
-      colleagues.map((c) => [c.userId, c]),
-    );
+    const colleagueMap = new Map(colleagues.map((c) => [c.userId, c]));
 
     const merged: ContactItem[] = [];
 
@@ -340,9 +338,8 @@ export const ConversationListSidebar: React.FC<
       const otherUserId = otherMember?.userId;
       const colleague = otherUserId ? colleagueMap.get(otherUserId) : undefined;
       const departments = colleague?.sharedDepartments ?? [];
-      const isLeader = departments.length > 0
-        ? departments.some((d) => d.isLeader)
-        : null;
+      const isLeader =
+        departments.length > 0 ? departments.some((d) => d.isLeader) : null;
 
       const displayName =
         otherMember?.userInfo?.fullName ||
@@ -612,6 +609,18 @@ export const ConversationListSidebar: React.FC<
   };
 
   // Effects
+
+  // Sync internal category state when store selection changes externally
+  // (e.g., when user is removed from a work type via SignalR)
+  React.useEffect(() => {
+    if (
+      selectedCategoryId &&
+      selectedCategoryId !== internalSelectedCategoryId
+    ) {
+      setInternalSelectedCategoryId(selectedCategoryId);
+    }
+  }, [selectedCategoryId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   React.useEffect(() => {
     const parentTab = tab === "group" ? "messages" : "contacts";
     onTabChange?.(parentTab);

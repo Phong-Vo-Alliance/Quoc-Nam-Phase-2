@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 import {
   saveSelectedConversation,
   saveSelectedCategory,
+  clearSelectedConversation as clearStorageConversation,
+  clearSelectedCategory as clearStorageCategory,
 } from "@/utils/storage";
 
 /**
@@ -77,7 +79,10 @@ export const useConversationStore = create<ConversationState>()(
       clearSelectedConversation: () => {
         console.log("[ConversationStore] clearSelectedConversation called");
         set({ selectedConversation: null });
-        // 🆕 Keep activeTabType to preserve tab state when no conversation selected
+        // Sync legacy localStorage keys
+        clearStorageConversation();
+        clearStorageCategory();
+        // Keep activeTabType to preserve tab state when no conversation selected
       },
 
       // 🆕 Set active tab type (independent of conversation selection)

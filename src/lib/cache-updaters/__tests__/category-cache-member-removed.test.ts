@@ -18,6 +18,7 @@ vi.mock("@/api/conversations.api", () => ({
 vi.mock("sonner", () => ({
   toast: {
     info: vi.fn(),
+    warning: vi.fn(),
   },
 }));
 
@@ -352,7 +353,7 @@ describe("handleMemberRemoved", () => {
 
       await handleMemberRemoved(ctx, selfRemovedEvent);
 
-      expect(toast.info).toHaveBeenCalledWith(
+      expect(toast.warning).toHaveBeenCalledWith(
         "Bạn đã bị xóa khỏi loại việc Loại việc XYZ",
       );
       expect(mockSetSelectedConversation).not.toHaveBeenCalled();
