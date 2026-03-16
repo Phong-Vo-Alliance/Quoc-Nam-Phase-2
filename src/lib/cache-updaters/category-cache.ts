@@ -7,8 +7,12 @@ import { useClientSystemMessagesStore } from "@/stores/clientSystemMessagesStore
 import { getConversationMembers } from "@/api/conversations.api";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import { toast } from "sonner";
+import { useConversationStore } from "@/stores/conversationStore";
+import type { ChatTarget } from "@/stores/conversationStore";
 import type { CategoryWithUnread } from "@/types/categories";
 import type { ChatMessage, GetMessagesResponse } from "@/types/messages";
+import type { ConversationMember } from "@/types/conversations";
+import type { MemberRemovedEvent } from "@/types/signalr-events";
 
 export interface CategoryCacheContext {
   queryClient: QueryClient;
@@ -260,6 +264,141 @@ export async function handleMemberAdded(
     );
   } catch (error) {
     console.error("[CategoryCache] Error handling MemberAdded:", error);
+  }
+}
+
+export async function handleMemberRemoved(
+  ctx: CategoryCacheContext,
+  data: MemberRemovedEvent,
+): Promise<void> {
+  const { queryClient, getCurrentUserId, getActiveConversationId } = ctx;
+  const currentUserId = getCurrentUserId();
+  const isCurrentUserRemoved = data.userId === currentUserId;
+
+  try {
+    // === STEP 1: Lấy thông tin TRƯỚC KHI refetch ===
+    const cachedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+      categoriesKeys.list(),
+    );
+
+    let conversationName: string | null = null;
+    let removedCategoryId: string | null = null;
+    if (cachedCategories) {
+      for (const category of cachedCategories) {
+        const conv = category.conversations.find(
+          (c) => c.conversationId === data.conversationId,
+        );
+        if (conv) {
+          conversationName = conv.conversationName;
+          removedCategoryId = category.id;
+          break;
+        }
+      }
+    }
+
+    // Tìm tên user bị xóa từ members cache
+    let removedUserName: string | null = null;
+    if (!isCurrentUserRemoved) {
+      const cachedMembers = queryClient.getQueryData<ConversationMember[]>(
+        conversationKeys.members(data.conversationId),
+      );
+      if (cachedMembers) {
+        const member = cachedMembers.find((m) => m.userId === data.userId);
+        removedUserName =
+          member?.userInfo?.fullName || member?.userName || null;
+      }
+    }
+
+    // === STEP 2: Xử lý theo role ===
+    if (isCurrentUserRemoved) {
+      // --- USER BỊ XÓA ---
+      toast.info(
+        `Bạn đã bị xóa khỏi loại việc ${conversationName || "không xác định"}`,
+      );
+
+      // Refetch categories (conversation sẽ tự biến mất)
+      await queryClient.refetchQueries({
+        queryKey: categoriesKeys.list(),
+      });
+
+      // Remove members cache
+      queryClient.removeQueries({
+        queryKey: conversationKeys.members(data.conversationId),
+      });
+
+      // Nếu đang xem conversation này → auto-select conversation khác
+      const activeConvId = getActiveConversationId();
+      if (activeConvId === data.conversationId) {
+        const freshCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+          categoriesKeys.list(),
+        );
+
+        let fallbackConv: ChatTarget | null = null;
+
+        if (freshCategories?.length) {
+          // Ưu tiên 1: Conversation khác trong cùng category
+          const sameCategory = freshCategories.find(
+            (cat) => cat.id === removedCategoryId,
+          );
+          if (sameCategory?.conversations?.length) {
+            const conv = sameCategory.conversations[0];
+            fallbackConv = {
+              type: "group",
+              id: conv.conversationId,
+              name: conv.conversationName,
+              category: sameCategory.name,
+              categoryId: sameCategory.id,
+            };
+          }
+
+          // Ưu tiên 2: Conversation đầu tiên của category đầu tiên
+          if (!fallbackConv) {
+            for (const cat of freshCategories) {
+              if (cat.conversations?.length) {
+                const conv = cat.conversations[0];
+                fallbackConv = {
+                  type: "group",
+                  id: conv.conversationId,
+                  name: conv.conversationName,
+                  category: cat.name,
+                  categoryId: cat.id,
+                };
+                break;
+              }
+            }
+          }
+        }
+
+        if (fallbackConv) {
+          useConversationStore.getState().setSelectedConversation(fallbackConv);
+        } else {
+          useConversationStore.getState().clearSelectedConversation();
+        }
+      }
+    } else {
+      // --- THÀNH VIÊN CÒN LẠI ---
+      const displayName = removedUserName || "Một thành viên";
+
+      // Toast thông báo cho members còn lại
+      toast.info(
+        `${displayName} đã bị xóa khỏi nhóm ${conversationName || ""}`,
+      );
+
+      // Refetch categories + members
+      await queryClient.refetchQueries({
+        queryKey: categoriesKeys.list(),
+      });
+
+      const freshMembers = await getConversationMembers(data.conversationId);
+      if (Array.isArray(freshMembers)) {
+        queryClient.setQueryData(
+          conversationKeys.members(data.conversationId),
+          freshMembers,
+        );
+      }
+    }
+  } catch (error) {
+    console.error("[CategoryCache] Error handling MemberRemoved:", error);
   }
 }
 

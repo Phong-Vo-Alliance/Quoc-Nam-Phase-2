@@ -27,13 +27,13 @@ export const SegmentedTabs = ({
             onClick={() => onChange(tab.key)}
             data-testid={`segmented-tab-${tab.key}`}
             className={`
-              relative z-10 flex-1 px-3 py-1.5 rounded-lg transition-all select-none outline-none
+              relative flex-1 px-3 py-1.5 rounded-lg transition-all select-none outline-none
               ${noWrap ? "text-nowrap" : ""}
               ${textClass}
               ${
                 isActive
-                  ? "text-white font-semibold bg-brand-500 scale-[1.06]"
-                  : "text-gray-600 opacity-80"
+                  ? "z-20 text-white font-semibold bg-brand-500 scale-[1.06]"
+                  : "z-10 text-gray-600 opacity-80"
               }
               focus:outline-none focus:ring-0 focus-visible:ring-0
             `}

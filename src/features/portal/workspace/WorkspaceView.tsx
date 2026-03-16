@@ -288,6 +288,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     "messages" | "work" | "profile"
   >("messages");
 
+  // Force leader mode to "mine" when clicking "Xem chi tiết" in TaskBanner
+  const [forceLeaderMine, setForceLeaderMine] = React.useState(0);
+
   // Use conversation store instead of local state
   const selectedConversation = useConversationStore(
     (state) => state.selectedConversation,
@@ -891,6 +894,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                       onViewTaskDetail={() => {
                         setShowRight(true);
                         setTab("order");
+                        if (viewMode === "lead") {
+                          setForceLeaderMine((prev) => prev + 1);
+                        }
                       }}
                     />
                   ) : (
@@ -938,6 +944,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 messagesQuery={messagesQuery}
                 isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
                 conversationAttachment={conversationAttachment}
+                forceLeaderMine={forceLeaderMine}
               />
             </div>
           )}
@@ -1163,6 +1170,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             onViewTaskDetail={() => {
               setShowRight(true);
               setTab("order");
+              if (viewMode === "lead") {
+                setForceLeaderMine((prev) => prev + 1);
+              }
             }}
           />
         ) : (
@@ -1226,6 +1236,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             messagesQuery={messagesQuery}
             isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
             conversationAttachment={conversationAttachment}
+            forceLeaderMine={forceLeaderMine}
           />
         </div>
       )}

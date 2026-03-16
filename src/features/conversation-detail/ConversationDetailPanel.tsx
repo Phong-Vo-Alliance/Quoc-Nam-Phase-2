@@ -99,6 +99,9 @@ export interface ConversationDetailPanelProps {
   };
   /** Conversation attachments from API */
   conversationAttachment?: any;
+
+  /** Trigger to force leader mode to "mine" (increment to trigger) */
+  forceLeaderMine?: number;
 }
 
 /* =============== Main Component =============== */
@@ -134,6 +137,7 @@ export const ConversationDetailPanel: React.FC<
   messages = [],
   messagesQuery,
   conversationAttachment,
+  forceLeaderMine,
 }) => {
   /* =============== Store Data =============== */
   const selectedConversation = useConversationStore(
@@ -191,6 +195,13 @@ export const ConversationDetailPanel: React.FC<
 
   // Leader Mode
   const [leaderMode, setLeaderMode] = React.useState<"team" | "mine">("team");
+
+  // Auto-switch to "mine" when forceLeaderMine changes (from TaskBanner "Xem chi tiết")
+  React.useEffect(() => {
+    if (forceLeaderMine && forceLeaderMine > 0 && hasLeaderPermissions()) {
+      setLeaderMode("mine");
+    }
+  }, [forceLeaderMine]);
   const [assigneeFilter, setAssigneeFilter] = React.useState<string>("all");
 
   // Leader Team Mode - Collapse states

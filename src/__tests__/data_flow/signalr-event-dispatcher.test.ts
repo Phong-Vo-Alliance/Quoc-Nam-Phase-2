@@ -17,6 +17,7 @@ vi.mock("@/lib/signalr", () => ({
     CONVERSATION_CREATED: "ConversationCreated",
     CONVERSATION_UPDATED: "ConversationUpdated",
     MEMBER_ADDED: "MemberAdded",
+    MEMBER_REMOVED: "MemberRemoved",
     CATEGORY_DEPARTMENT_LINKED: "CategoryDepartmentLinked",
   },
 }));
@@ -55,6 +56,7 @@ vi.mock("@/lib/cache-updaters/category-cache", () => ({
   handleMessageRead: vi.fn(),
   handleConversationUpdated: vi.fn(),
   handleMemberAdded: vi.fn(() => Promise.resolve()),
+  handleMemberRemoved: vi.fn(() => Promise.resolve()),
   handleCategoryDepartmentLinked: vi.fn(() => Promise.resolve()),
 }));
 
@@ -93,8 +95,7 @@ describe("signalr-event-dispatcher", () => {
   describe("normalizeContentType", () => {
     it("maps 1 to TXT", () => expect(normalizeContentType(1)).toBe("TXT"));
     it("maps 2 to IMG", () => expect(normalizeContentType(2)).toBe("IMG"));
-    it("maps 3 to FILE", () =>
-      expect(normalizeContentType(3)).toBe("FILE"));
+    it("maps 3 to FILE", () => expect(normalizeContentType(3)).toBe("FILE"));
     it("passes through TXT string", () =>
       expect(normalizeContentType("TXT")).toBe("TXT"));
     it("passes through IMG string", () =>
@@ -114,14 +115,14 @@ describe("signalr-event-dispatcher", () => {
   // ────────────────────────────────────────────────────────
 
   describe("registerAllEventHandlers", () => {
-    it("registers 6 event handlers", () => {
+    it("registers 7 event handlers", () => {
       registerAllEventHandlers(queryClient);
-      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(6);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(7);
     });
 
-    it("returns 6 cleanup functions", () => {
+    it("returns 7 cleanup functions", () => {
       const cleanups = registerAllEventHandlers(queryClient);
-      expect(cleanups).toHaveLength(6);
+      expect(cleanups).toHaveLength(7);
       cleanups.forEach((fn) => expect(typeof fn).toBe("function"));
     });
 
@@ -161,6 +162,14 @@ describe("signalr-event-dispatcher", () => {
       registerAllEventHandlers(queryClient);
       expect(chatHub.onWithCleanup).toHaveBeenCalledWith(
         SIGNALR_EVENTS.MEMBER_ADDED,
+        expect.any(Function),
+      );
+    });
+
+    it("registers handler for MEMBER_REMOVED", () => {
+      registerAllEventHandlers(queryClient);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledWith(
+        SIGNALR_EVENTS.MEMBER_REMOVED,
         expect.any(Function),
       );
     });
@@ -268,9 +277,7 @@ describe("signalr-event-dispatcher", () => {
       });
 
       expect(groupManager.joinOne).toHaveBeenCalledWith("new-conv");
-      expect(
-        conversationCache.handleConversationCreated,
-      ).toHaveBeenCalled();
+      expect(conversationCache.handleConversationCreated).toHaveBeenCalled();
     });
 
     it("CONVERSATION_CREATED with conversationId field", () => {
@@ -294,9 +301,7 @@ describe("signalr-event-dispatcher", () => {
     it("CONVERSATION_UPDATED with no id/name is guarded", () => {
       capturedHandlers["ConversationUpdated"]({});
 
-      expect(
-        categoryCache.handleConversationUpdated,
-      ).not.toHaveBeenCalled();
+      expect(categoryCache.handleConversationUpdated).not.toHaveBeenCalled();
     });
 
     it("MEMBER_ADDED dispatches to categoryCache", () => {
@@ -308,6 +313,17 @@ describe("signalr-event-dispatcher", () => {
       expect(categoryCache.handleMemberAdded).toHaveBeenCalled();
     });
 
+    it("MEMBER_REMOVED dispatches to categoryCache.handleMemberRemoved", () => {
+      capturedHandlers["MemberRemoved"]({
+        conversationId: "conv-1",
+        userId: "user-2",
+        removedBy: "admin-1",
+        timestamp: "2026-03-16T10:00:00Z",
+      });
+
+      expect(categoryCache.handleMemberRemoved).toHaveBeenCalled();
+    });
+
     it("CATEGORY_DEPARTMENT_LINKED dispatches to categoryCache", () => {
       capturedHandlers["CategoryDepartmentLinked"]({
         categoryId: "cat-1",
@@ -315,9 +331,7 @@ describe("signalr-event-dispatcher", () => {
         departmentId: "dept-1",
       });
 
-      expect(
-        categoryCache.handleCategoryDepartmentLinked,
-      ).toHaveBeenCalled();
+      expect(categoryCache.handleCategoryDepartmentLinked).toHaveBeenCalled();
     });
 
     it("MESSAGE_SENT normalizes contentType before dispatching", () => {
@@ -327,8 +341,7 @@ describe("signalr-event-dispatcher", () => {
         conversationId: "conv-1",
       });
 
-      const callArgs = vi.mocked(messageCache.handleMessageSent).mock
-        .calls[0];
+      const callArgs = vi.mocked(messageCache.handleMessageSent).mock.calls[0];
       expect(callArgs[1].contentType).toBe("IMG");
     });
 
@@ -341,8 +354,7 @@ describe("signalr-event-dispatcher", () => {
         },
       });
 
-      const callArgs = vi.mocked(messageCache.handleMessageSent).mock
-        .calls[0];
+      const callArgs = vi.mocked(messageCache.handleMessageSent).mock.calls[0];
       expect(callArgs[1].contentType).toBe("IMG");
     });
 
@@ -353,8 +365,7 @@ describe("signalr-event-dispatcher", () => {
         conversationId: "conv-1",
       });
 
-      const callArgs = vi.mocked(messageCache.handleMessageSent).mock
-        .calls[0];
+      const callArgs = vi.mocked(messageCache.handleMessageSent).mock.calls[0];
       expect(callArgs[1].contentType).toBe("FILE");
     });
   });
