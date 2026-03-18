@@ -233,20 +233,22 @@ describe("TaskHub onStateChange lifecycle (regression)", () => {
     });
   });
 
-  it("should also subscribe InformationConfirmedCreated after delayed connection", () => {
+  it("should also subscribe InformationConfirmedCreated and InformationConfirmedUpdated after delayed connection", () => {
     renderHook(() => useTaskNotifications(), { wrapper });
 
     // Not subscribed yet
     expect(capturedHandlersRef.value["InformationConfirmedCreated"]).toBeUndefined();
+    expect(capturedHandlersRef.value["InformationConfirmedUpdated"]).toBeUndefined();
 
     // Connect
     act(() => {
       simulateTaskHubConnect();
     });
 
-    // Both handlers should be subscribed
+    // All handlers should be subscribed
     expect(capturedHandlersRef.value["TasksUpdated"]?.length).toBe(1);
     expect(capturedHandlersRef.value["InformationConfirmedCreated"]?.length).toBe(1);
+    expect(capturedHandlersRef.value["InformationConfirmedUpdated"]?.length).toBe(1);
   });
 
   it("should clean up subscriptions on unmount", () => {

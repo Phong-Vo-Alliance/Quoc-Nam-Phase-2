@@ -57,7 +57,7 @@ export function getFileIcon(mimeType: string): string {
  */
 export function truncateFileName(
   fileName: string,
-  maxLength: number = 40
+  maxLength: number = 40,
 ): string {
   if (fileName.length <= maxLength) return fileName;
 
@@ -70,7 +70,7 @@ export function truncateFileName(
 
   const truncatedName = nameWithoutExt.substring(
     0,
-    maxLength - extension.length - 3
+    maxLength - extension.length - 3,
   );
   return `${truncatedName}...${extension}`;
 }
@@ -93,12 +93,21 @@ export function isImage(mimeType: string): boolean {
 }
 
 /**
- * Create File object preview URL (for images)
+ * Check if file is a video
+ * @param mimeType MIME type of the file
+ * @returns True if file is a video
+ */
+export function isVideo(mimeType: string): boolean {
+  return mimeType.startsWith("video/");
+}
+
+/**
+ * Create File object preview URL (for images and videos)
  * @param file File object
- * @returns Object URL or undefined if not an image
+ * @returns Object URL or undefined if not an image/video
  */
 export function createFilePreview(file: File): string | undefined {
-  if (!isImage(file.type)) return undefined;
+  if (!isImage(file.type) && !isVideo(file.type)) return undefined;
   return URL.createObjectURL(file);
 }
 
@@ -177,7 +186,7 @@ export function validateBatchFileSelection(
   files: File[],
   maxFiles: number = BATCH_UPLOAD_LIMITS.MAX_FILES,
   maxSizePerFile: number = BATCH_UPLOAD_LIMITS.MAX_SIZE_PER_FILE,
-  maxTotalSize: number = BATCH_UPLOAD_LIMITS.MAX_TOTAL_SIZE
+  maxTotalSize: number = BATCH_UPLOAD_LIMITS.MAX_TOTAL_SIZE,
 ): BatchValidationError | undefined {
   // Check empty batch
   if (!files || files.length === 0) {
@@ -202,7 +211,7 @@ export function validateBatchFileSelection(
       return {
         type: "file-too-large",
         message: `File "${file.name}" quá lớn (${formatFileSize(
-          file.size
+          file.size,
         )}). Kích thước tối đa ${formatFileSize(maxSizePerFile)}.`,
         fileIndex: i,
         fileName: file.name,
@@ -216,9 +225,9 @@ export function validateBatchFileSelection(
     return {
       type: "total-size-exceeded",
       message: `Tổng kích thước ${formatFileSize(
-        totalSize
+        totalSize,
       )} vượt quá giới hạn ${formatFileSize(
-        maxTotalSize
+        maxTotalSize,
       )}. Vui lòng chọn ít file hơn.`,
     };
   }
@@ -249,7 +258,7 @@ export function validateBatchFileSelection(
  * ```
  */
 export function extractSuccessfulUploads(
-  batchResult: BatchUploadResult
+  batchResult: BatchUploadResult,
 ): AttachmentInputDto[] {
   return batchResult.results
     .filter((result) => result.success && result.fileId)

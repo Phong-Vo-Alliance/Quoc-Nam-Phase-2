@@ -1,10 +1,16 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, Sheet, Presentation, File } from "lucide-react";
+import { FileText, Sheet, Presentation, File, FileVideo } from "lucide-react";
 
 /**
  * File type categories for icon mapping
  */
-export type FileIconType = "pdf" | "word" | "excel" | "powerpoint" | "generic";
+export type FileIconType =
+  | "pdf"
+  | "word"
+  | "excel"
+  | "powerpoint"
+  | "video"
+  | "generic";
 
 /**
  * File icon configuration
@@ -35,6 +41,11 @@ const MIME_TYPE_MAP: Record<string, FileIconType> = {
   "application/vnd.ms-powerpoint": "powerpoint",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation":
     "powerpoint",
+
+  // Video
+  "video/mp4": "video",
+  "video/webm": "video",
+  "video/ogg": "video",
 };
 
 /**
@@ -60,6 +71,11 @@ export const FILE_ICON_MAP: Record<FileIconType, FileIconConfig> = {
     icon: Presentation,
     color: "text-orange-500",
     label: "PowerPoint",
+  },
+  video: {
+    icon: FileVideo,
+    color: "text-purple-500",
+    label: "Video",
   },
   generic: {
     icon: File,

@@ -42,7 +42,7 @@ export type Phase1AFileItem = {
 
 export type FileManagerPhase1AMode = "media" | "docs";
 
-type AttachmentType = "pdf" | "excel" | "word" | "image" | "other";
+type AttachmentType = "pdf" | "excel" | "word" | "image" | "video" | "other";
 
 export type MessageLike = {
   id: string;
@@ -118,8 +118,10 @@ const getDocIcon = (ext?: string) => {
   return <FileText className="h-6 w-6 text-gray-500" />;
 };
 
-const isMediaAttachment = (attType: AttachmentType) => attType === "image";
-const isDocAttachment = (attType: AttachmentType) => attType !== "image";
+const isMediaAttachment = (attType: AttachmentType) =>
+  attType === "image" || attType === "video";
+const isDocAttachment = (attType: AttachmentType) =>
+  attType !== "image" && attType !== "video";
 
 /**
  * BlobImage component - Fetches blob from API and displays as image
@@ -277,6 +279,94 @@ const BlobImage: React.FC<{
       alt={alt}
       className={className}
       draggable={draggable}
+    />
+  );
+};
+
+/**
+ * BlobVideo component - Fetches video blob from API and renders <video>
+ */
+const BlobVideo: React.FC<{
+  fileId?: string;
+  fallbackUrl?: string;
+  className?: string;
+  controls?: boolean;
+}> = ({ fileId, fallbackUrl, className, controls = true }) => {
+  const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState(false);
+  const accessToken = useAuthStore((state) => state.accessToken);
+
+  React.useEffect(() => {
+    if (!fileId) {
+      if (fallbackUrl) setObjectUrl(fallbackUrl);
+      return;
+    }
+
+    let isMounted = true;
+    let localUrl: string | null = null;
+
+    const fetchVideo = async () => {
+      setIsLoading(true);
+      setError(false);
+      try {
+        const apiEndpoint = `${API_ENDPOINTS.file}/api/Files/${fileId}/download`;
+        const response = await fetch(apiEndpoint, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        if (isMounted) {
+          localUrl = URL.createObjectURL(blob);
+          setObjectUrl(localUrl);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch video:", err);
+        if (isMounted) {
+          setError(true);
+          setIsLoading(false);
+          if (fallbackUrl) setObjectUrl(fallbackUrl);
+        }
+      }
+    };
+
+    fetchVideo();
+
+    return () => {
+      isMounted = false;
+      if (localUrl) URL.revokeObjectURL(localUrl);
+    };
+  }, [fileId, fallbackUrl, accessToken]);
+
+  if (isLoading) {
+    return (
+      <div
+        className={`flex items-center justify-center bg-gray-100 ${className || ""}`}
+      >
+        <div className="text-xs text-gray-400">Đang tải video...</div>
+      </div>
+    );
+  }
+
+  if (error && !objectUrl) {
+    return (
+      <div
+        className={`flex items-center justify-center bg-gray-100 ${className || ""}`}
+      >
+        <div className="text-xs text-gray-400">Lỗi tải video</div>
+      </div>
+    );
+  }
+
+  if (!objectUrl) return null;
+
+  return (
+    <video
+      src={objectUrl}
+      className={className}
+      controls={controls}
+      data-testid="file-preview-video"
     />
   );
 };
@@ -517,17 +607,19 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       const attType: AttachmentType =
         att.contentType && att.contentType.includes("image")
           ? "image"
-          : att.contentType && att.contentType.includes("pdf")
-            ? "pdf"
-            : att.contentType &&
-                (att.contentType.includes("word") ||
-                  att.contentType.includes("document"))
-              ? "word"
+          : att.contentType && att.contentType.includes("video")
+            ? "video"
+            : att.contentType && att.contentType.includes("pdf")
+              ? "pdf"
               : att.contentType &&
-                  (att.contentType.includes("excel") ||
-                    att.contentType.includes("spreadsheet"))
-                ? "excel"
-                : "other";
+                  (att.contentType.includes("word") ||
+                    att.contentType.includes("document"))
+                ? "word"
+                : att.contentType &&
+                    (att.contentType.includes("excel") ||
+                      att.contentType.includes("spreadsheet"))
+                  ? "excel"
+                  : "other";
 
       // Format file size
       let sizeLabel = undefined;
@@ -560,7 +652,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       };
 
       if (isMediaAttachment(attType)) {
-        media.push({ ...base, kind: "image" });
+        media.push({ ...base, kind: attType === "video" ? "video" : "image" });
       } else if (isDocAttachment(attType)) {
         docs.push({ ...base, kind: "doc" });
       }
@@ -1047,11 +1139,11 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         )}
 
         {previewFile && previewFile.kind === "video" && (
-          <video
-            src={previewFile.url}
+          <BlobVideo
+            fileId={previewFile.fileId}
+            fallbackUrl={previewFile.url}
             className="w-full max-h-[70vh] rounded-lg"
             controls
-            data-testid="file-preview-video"
           />
         )}
 

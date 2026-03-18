@@ -70,6 +70,7 @@ vi.mock("sonner", () => ({
 
 import { useTaskNotifications } from "../useTaskNotifications";
 import { tasksKeys } from "@/hooks/queries/useTasks";
+import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
 import { toast } from "sonner";
 
 describe("useTaskNotifications", () => {
@@ -107,6 +108,13 @@ describe("useTaskNotifications", () => {
     expect(capturedHandlersRef.value["TasksUpdated"].length).toBe(1);
   });
 
+  it("should subscribe to InformationConfirmedUpdated event when connected", () => {
+    renderHook(() => useTaskNotifications(), { wrapper });
+
+    expect(capturedHandlersRef.value["InformationConfirmedUpdated"]).toBeDefined();
+    expect(capturedHandlersRef.value["InformationConfirmedUpdated"].length).toBe(1);
+  });
+
   it("should not subscribe when task hub is not connected", () => {
     mockIsConnectedRef.value = false;
 
@@ -119,10 +127,12 @@ describe("useTaskNotifications", () => {
     const { unmount } = renderHook(() => useTaskNotifications(), { wrapper });
 
     expect(capturedHandlersRef.value["TasksUpdated"]?.length).toBe(1);
+    expect(capturedHandlersRef.value["InformationConfirmedUpdated"]?.length).toBe(1);
 
     unmount();
 
     expect(capturedHandlersRef.value["TasksUpdated"]?.length ?? 0).toBe(0);
+    expect(capturedHandlersRef.value["InformationConfirmedUpdated"]?.length ?? 0).toBe(0);
   });
 
   it("should refetch task queries when TasksUpdated event received", () => {
@@ -225,7 +235,7 @@ describe("useTaskNotifications", () => {
       );
     });
 
-    it("should show info toast when task created and not assigned to current user", () => {
+    it("should not show toast when task created, not assigned to current user, and no matched confirmed content", () => {
       const handler = renderAndGetHandler();
 
       act(() => {
@@ -247,9 +257,9 @@ describe("useTaskNotifications", () => {
         } satisfies TaskUpdatePayload);
       });
 
-      expect(toast.info).toHaveBeenCalledWith(
-        'Công việc "Team Task" đã được tạo',
-      );
+      // No toast shown because matchedConfirmedContent is null (no cached data)
+      expect(toast.info).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
     });
 
     it("should show toast for status change with Vietnamese label", () => {
@@ -412,6 +422,31 @@ describe("useTaskNotifications", () => {
 
       expect(toast.info).not.toHaveBeenCalled();
       expect(toast.success).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("InformationConfirmedUpdated event", () => {
+    it("should refetch information confirmed queries when event received", () => {
+      renderHook(() => useTaskNotifications(), { wrapper });
+
+      const handler = capturedHandlersRef.value["InformationConfirmedUpdated"][0];
+
+      act(() => {
+        handler({
+          id: "info-1",
+          conversationId: "conv-789",
+          messageId: "msg-1",
+          content: "Test content",
+          confirmedBy: "user-123",
+          confirmedAt: new Date().toISOString(),
+          statusCode: "confirmed",
+          isFinished: true,
+        });
+      });
+
+      expect(queryClient.refetchQueries).toHaveBeenCalledWith({
+        queryKey: informationConfirmedKeys.all,
+      });
     });
   });
 });

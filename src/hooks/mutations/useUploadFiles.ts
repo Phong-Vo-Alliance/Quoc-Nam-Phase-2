@@ -20,6 +20,7 @@ const ALLOWED_FILE_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "text/plain",
   "text/csv",
+  "video/mp4",
 ];
 
 /**
@@ -112,7 +113,7 @@ export interface UploadFilesResult {
 export function useUploadFiles() {
   return useMutation({
     mutationFn: async (
-      params: UploadFilesParams
+      params: UploadFilesParams,
     ): Promise<UploadFilesResult> => {
       const { files, sourceModule, sourceEntityId, onProgress } = params;
 
@@ -135,14 +136,14 @@ export function useUploadFiles() {
                 onUploadProgress: (progressEvent) => {
                   // Calculate progress percentage
                   const progress = Math.round(
-                    (progressEvent.loaded * 100) / progressEvent.total
+                    (progressEvent.loaded * 100) / progressEvent.total,
                   );
 
                   // Call progress callback
                   onProgress?.(selectedFile.id, progress);
                 },
               }),
-            FILE_RETRY_CONFIG
+            FILE_RETRY_CONFIG,
           );
 
           // Collect successful upload with full file data

@@ -1331,7 +1331,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
               className="hidden"
               onChange={handleFileSelect}
               disabled={isFileLimitReached}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.mp4"
               multiple
               data-testid="task-log-file-input"
             />

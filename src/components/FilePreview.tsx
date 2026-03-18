@@ -4,7 +4,7 @@
  * Phase 2: Shows upload progress inline
  */
 
-import { X, RotateCw } from "lucide-react";
+import { X, RotateCw, Play } from "lucide-react";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
 import { formatFileSize, truncateFileName } from "@/utils/fileHelpers";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ export default function FilePreview({
         const displayName = truncateFileName(file.name);
         const size = formatFileSize(file.size);
         const isImage = file.type.startsWith("image/");
+        const isVideoFile = file.type.startsWith("video/");
 
         // Phase 2: Get upload progress if available
         const progress = uploadProgress?.get(id);
@@ -53,13 +54,25 @@ export default function FilePreview({
             role="listitem"
           >
             <div className="flex items-center gap-2">
-              {/* Image preview or File Icon */}
+              {/* Image/Video preview or File Icon */}
               {isImage ? (
                 <img
                   src={preview}
                   alt={file.name}
                   className="w-10 h-10 object-cover rounded border border-border shrink-0"
                 />
+              ) : isVideoFile && preview ? (
+                <div className="relative w-10 h-10 shrink-0">
+                  <video
+                    src={preview}
+                    className="w-10 h-10 object-cover rounded border border-border"
+                    preload="metadata"
+                    muted
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded">
+                    <Play className="h-4 w-4 text-white fill-white" />
+                  </div>
+                </div>
               ) : (
                 <div className="bg-gray-100 rounded-lg p-2 flex-shrink-0">
                   <FileIcon

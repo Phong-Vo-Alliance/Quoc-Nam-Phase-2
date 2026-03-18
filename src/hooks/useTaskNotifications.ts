@@ -19,6 +19,7 @@ import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import type { ConversationMember } from "@/types/conversations";
 import type { TaskDetailResponse } from "@/types/tasks_api";
 import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
+import type { InformationConfirmedPagedResponse } from "@/types/information_confirmed";
 
 // Vietnamese labels for task statuses
 const STATUS_LABELS_VI: Record<string, string> = {
@@ -31,6 +32,19 @@ const STATUS_LABELS_VI: Record<string, string> = {
 
 // Event payload for InformationConfirmedCreated (from Task Hub)
 interface InformationConfirmedCreatedEvent {
+  id: string;
+  conversationId: string;
+  messageId: string;
+  content: string;
+  confirmedBy: string;
+  confirmedAt: string;
+  statusCode: string;
+  isFinished: boolean;
+}
+
+// Event payload for InformationConfirmedUpdated (from Task Hub)
+// Fired when PATCH /api/information-confirmed/{id} succeeds and data changes
+interface InformationConfirmedUpdatedEvent {
   id: string;
   conversationId: string;
   messageId: string;
@@ -92,7 +106,27 @@ export function useTaskNotifications() {
         queryKey: tasksKeys.all,
       });
 
+      // Capture confirmed info content from cache BEFORE any refetch (for toast later)
+      let matchedConfirmedContent: string | null = null;
+
       if (payload.changeType === "created") {
+        // Read confirmed info from cache BEFORE refetching (item will be gone after refetch)
+        const confirmedInfoQueries =
+          queryClient.getQueriesData<InformationConfirmedPagedResponse>({
+            queryKey: informationConfirmedKeys.all,
+          });
+        for (const [, data] of confirmedInfoQueries) {
+          const match = data?.data?.find(
+            (ci) =>
+              ci.messageId === payload.task.messageId &&
+              ci.confirmedBy === currentUserId,
+          );
+          if (match) {
+            matchedConfirmedContent = match.content;
+            break;
+          }
+        }
+
         queryClient.setQueryData<{
           pages: GetMessagesResponse[];
           pageParams: (string | undefined)[];
@@ -162,7 +196,7 @@ export function useTaskNotifications() {
       const isMyAction = payload.changedByUserId === currentUserId;
 
       switch (payload.changeType) {
-        case "created":
+        case "created": {
           // Skip toast if current user created the task (they already see success toast in UI)
           if (isMyAction) {
             break;
@@ -170,9 +204,17 @@ export function useTaskNotifications() {
           if (isAssignedToMe) {
             toast.success(`Công việc mới được giao: ${taskTitle}`);
           } else {
-            toast.info(`Công việc "${taskTitle}" đã được tạo`);
+            // Show toast only to the user who confirmed (tiếp nhận) this info
+            // matchedConfirmedContent was captured from cache BEFORE refetch
+            if (matchedConfirmedContent) {
+              const creatorName = getUserName(payload.changedByUserId);
+              toast.info(
+                `Thông tin "${matchedConfirmedContent}" đã được tạo công việc bởi ${creatorName}`,
+              );
+            }
           }
           break;
+        }
 
         case "status_changed": {
           const newStatus = payload.task.statusCode;
@@ -242,6 +284,16 @@ export function useTaskNotifications() {
     [queryClient],
   );
 
+  // Handle InformationConfirmedUpdated event (PATCH update completed)
+  const handleInformationConfirmedUpdated = useCallback(
+    (_event: InformationConfirmedUpdatedEvent) => {
+      queryClient.refetchQueries({
+        queryKey: informationConfirmedKeys.all,
+      });
+    },
+    [queryClient],
+  );
+
   // Monitor TaskHub connection state (no polling)
   useEffect(() => {
     setIsTaskHubConnected(taskHub.isConnected());
@@ -268,10 +320,16 @@ export function useTaskNotifications() {
       handleInformationConfirmedCreated,
       false,
     );
+    const cleanup3 = taskHub.onWithCleanup(
+      "InformationConfirmedUpdated",
+      handleInformationConfirmedUpdated,
+      false,
+    );
 
     return () => {
       cleanup1();
       cleanup2();
+      cleanup3();
     };
-  }, [isTaskHubConnected, handleTaskUpdate, handleInformationConfirmedCreated]);
+  }, [isTaskHubConnected, handleTaskUpdate, handleInformationConfirmedCreated, handleInformationConfirmedUpdated]);
 }

@@ -154,10 +154,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
   onOpenTaskLog,
   onOpenSourceMessage,
   messages = [],
-  receivedInfos = [],
   transformedConfirmedInfos = [],
-  onAssignInfo,
-  onOpenGroupTransfer,
   handleConfirmedInfoAssign,
   handleConfirmedInfoTransfer,
   conversationId,
@@ -167,27 +164,6 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
 }) => {
   return (
     <>
-      {/* HintBubble for Received Info */}
-      <HintBubble
-        storageKey="hint-received-info-bubble"
-        title="Cách hiển thị Thông tin được tiếp nhận"
-        content={
-          <>
-            Chỉ hiển thị thông tin được tiếp nhận chưa giao task/chuyển nhóm.
-            Các thông tin đã bàn giao chỉ hiển thị trong ngày.
-          </>
-        }
-        show={(receivedInfos?.length ?? 0) > 0}
-        autoCloseMs={9000}
-      />
-
-      {/* Received Info — thông tin tiếp nhận từ tin nhắn */}
-      <ReceivedInfoSection
-        items={receivedInfos}
-        onAssignInfo={(info) => onAssignInfo?.(info)}
-        onOpenGroupTransfer={onOpenGroupTransfer}
-      />
-
       {/* Confirmed Information Section */}
       {transformedConfirmedInfos.length > 0 && (
         <ReceivedInfoSection
@@ -816,18 +792,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                   </div>
 
                   {showLeaderOwnTodo && (
-                    <div
-                      className={`
-                    space-y-3
-                    transition-all duration-300 ease-out
-                    overflow-hidden
-                    ${
-                      showLeaderOwnTodo
-                        ? "max-h-[2000px] opacity-100"
-                        : "max-h-0 opacity-0"
-                    }
-                  `}
-                    >
+                    <div className="space-y-3">
                       {leaderOwnBuckets.todo.map((t) => (
                         <TaskCard
                           key={t.id}

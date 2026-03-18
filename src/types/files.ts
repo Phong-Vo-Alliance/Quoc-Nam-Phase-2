@@ -156,6 +156,8 @@ export const DEFAULT_FILE_RULES: FileValidationRules = {
     "image/png",
     "image/gif",
     "image/webp",
+    // Videos
+    "video/mp4",
   ],
 };
 
@@ -171,6 +173,7 @@ export const FILE_CATEGORIES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ],
   IMAGE: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+  VIDEO: ["video/mp4"],
 } as const;
 
 // Phase 2: API Integration types

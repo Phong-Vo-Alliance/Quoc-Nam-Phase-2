@@ -777,6 +777,38 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     isLoadingNewer,
   ]); // Dependencies for bidirectional scroll
 
+  // 🆕 FIX: ResizeObserver to re-scroll to bottom when container resizes
+  // (e.g., TaskBanner ~52px appears/disappears after initial scroll-to-bottom)
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    let prevHeight = container.clientHeight;
+
+    const observer = new ResizeObserver(() => {
+      const newHeight = container.clientHeight;
+      if (newHeight === prevHeight) return;
+
+      const heightDiff = prevHeight - newHeight; // positive = container got smaller
+      prevHeight = newHeight;
+
+      // Only re-scroll if container shrank (e.g., TaskBanner appeared)
+      // and user was near the bottom before the resize
+      if (heightDiff > 0) {
+        const distanceFromBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight;
+
+        // If user was near bottom before resize, compensate directly
+        if (distanceFromBottom <= heightDiff + 50) {
+          container.scrollTop = container.scrollHeight - container.clientHeight;
+        }
+      }
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [messagesQuery.isSuccess]); // Re-run when messages finish loading (container appears in DOM)
+
   // 🆕 NEW: Handler for loading newer messages (scroll-down pagination)
   const handleLoadNewerMessages = useCallback(async () => {
     if (!messages.length || isLoadingNewer) return;
@@ -2542,7 +2574,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
             className="hidden"
             onChange={handleFileSelect}
             disabled={isFileLimitReached}
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.mp4"
             multiple
             data-testid="file-input"
           />

@@ -16,10 +16,12 @@ import {
   Loader2,
   Paperclip,
   MessageSquarePlus,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
 import MessageImage from "@/features/portal/workspace/MessageImage";
+import MessageVideo from "@/features/portal/workspace/MessageVideo";
 import { MessageStatusIndicator } from "@/components/chat/MessageStatusIndicator";
 import QuotedMessagePreview from "./QuotedMessagePreview";
 import type { ChatMessage, AttachmentDto } from "@/types/messages";
@@ -475,17 +477,21 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
 
                 // Phase 2: Separate images from files
                 const images: AttachmentDto[] = [];
+                const videos: AttachmentDto[] = [];
                 const files: AttachmentDto[] = [];
 
                 message.attachments?.forEach((attachment) => {
                   if (attachment.contentType?.startsWith("image/")) {
                     images.push(attachment);
+                  } else if (attachment.contentType?.startsWith("video/")) {
+                    videos.push(attachment);
                   } else {
                     files.push(attachment);
                   }
                 });
 
                 const hasImages = images.length > 0;
+                const hasVideos = videos.length > 0;
                 const hasFiles = files.length > 0;
 
                 return (
@@ -512,7 +518,9 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     {hasText && (
                       <div
                         className={
-                          hasImages || hasFiles ? "px-4 pt-2 pb-2" : "px-4 py-2"
+                          hasImages || hasVideos || hasFiles
+                            ? "px-4 pt-2 pb-2"
+                            : "px-4 py-2"
                         }
                         data-testid={`message-content-${message.id}`}
                       >
@@ -526,7 +534,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                             true, // enableLinks
                             isOwn
                               ? "text-brand-700 underline hover:text-brand-900 cursor-pointer"
-                              : "text-blue-600 hover:text-blue-800 underline hover:no-underline cursor-pointer",
+                              : "text-brand-600 hover:text-brand-800 underline hover:no-underline cursor-pointer",
                           )}
                         </p>
                       </div>
@@ -803,12 +811,45 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       </div>
                     )}
 
+                    {/* Video attachments - show with thumbnail + play icon */}
+                    {hasVideos && (
+                      <div
+                        className={cn(
+                          "px-4",
+                          hasText || hasImages ? "pb-4" : "py-4",
+                        )}
+                        data-testid="message-videos-container"
+                      >
+                        <div className="flex flex-col gap-2">
+                          {videos.map((video) => (
+                            <div
+                              key={video.fileId}
+                              className="relative rounded-lg overflow-hidden cursor-pointer max-w-[280px] bg-black"
+                              data-testid={`message-video-attachment-${video.fileId}`}
+                              onClick={() => {
+                                onFilePreviewClick?.(
+                                  video.fileId,
+                                  video.fileName || "video.mp4",
+                                );
+                              }}
+                            >
+                              <MessageVideo
+                                fileId={video.fileId}
+                                fileName={video.fileName || "Video"}
+                                fileSize={video.fileSize}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* File attachments - Keep original logic */}
                     {hasFiles && (
                       <div
                         className={cn(
                           "px-1",
-                          hasText || hasImages ? "pb-1" : "py-1",
+                          hasText || hasImages || hasVideos ? "pb-1" : "py-1",
                         )}
                       >
                         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden min-w-[200px]">

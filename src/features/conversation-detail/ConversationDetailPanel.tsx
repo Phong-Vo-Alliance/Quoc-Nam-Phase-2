@@ -374,7 +374,8 @@ export const ConversationDetailPanel: React.FC<
       inProgress: leaderOwnTasks.filter((t) => t.status.code === "doing"),
       doneToday: leaderOwnTasks.filter(
         (t) =>
-          t.status.code === "need_to_verified" || t.status.code === "finished",
+          t.status.code === "finished" &&
+          isToday(t.updatedAt || t.createdAt || ""),
       ),
     }),
     [leaderOwnTasks],
