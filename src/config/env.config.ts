@@ -170,6 +170,15 @@ export const ENV_INFO = {
 } as const;
 
 // ==========================================
+// External Links
+// ==========================================
+
+export const EXTERNAL_LINKS = {
+  guideUrl:
+    import.meta.env.VITE_GUIDE_URL || "https://quoc-nam-guide.vercel.app",
+} as const;
+
+// ==========================================
 // SignalR Configuration
 // ==========================================
 

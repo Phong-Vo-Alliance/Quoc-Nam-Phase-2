@@ -13,8 +13,10 @@ import {
   User as UserIcon,
   Settings,
   Building2,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { openGuideWithToken } from "@/lib/auth/guideToken";
 import QuocnamLogo from "@/assets/Quocnam_logo.png";
 import {
   Popover,
@@ -300,6 +302,16 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
             </div>
           </PopoverContent>
         </Popover>
+
+        {/* Cẩm nang - Guide button */}
+        <button
+          title="Cẩm nang"
+          onClick={() => openGuideWithToken()}
+          data-testid="sidebar-guide-button"
+          className="p-2 rounded-lg transition-colors bg-brand-600 text-white/90 hover:text-white hover:bg-white/10"
+        >
+          <BookOpen className="h-6 w-6" />
+        </button>
 
         {/* NEW: User avatar with Popover */}
         <Popover open={openProfile} onOpenChange={setOpenProfile}>

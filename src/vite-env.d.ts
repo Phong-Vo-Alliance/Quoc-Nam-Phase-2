@@ -51,6 +51,10 @@ interface ImportMetaEnv {
 
   // Security - Other configs
   readonly VITE_CONTENT_PROTECTION_FILE_TYPES: string;
+
+  // External Links
+  readonly VITE_GUIDE_URL: string;
+  readonly VITE_GUIDE_JWT_SECRET: string;
 }
 
 interface ImportMeta {
