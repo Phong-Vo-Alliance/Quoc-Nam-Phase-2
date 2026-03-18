@@ -14,10 +14,12 @@
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run 'tests/**/unit/**'",
     "test:integration": "vitest run 'tests/**/integration/**'",
+    "test:src": "vitest run src/__tests__",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:clean": "rimraf test-results playwright-report playwright/.cache"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -41,6 +43,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.24",
+    "jose": "^6.2.1",
     "lucide-react": "^0.552.0",
     "react": "^19.1.1",
     "react-day-picker": "^9.12.0",
