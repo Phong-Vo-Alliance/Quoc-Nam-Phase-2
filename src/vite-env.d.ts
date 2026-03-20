@@ -4,15 +4,22 @@ interface ImportMetaEnv {
   // Environment
   readonly VITE_APP_ENV: "development" | "production";
 
+  // SignalR
+  readonly VITE_SIGNALR_LOG_LEVEL: string;
+
   // Development URLs
   readonly VITE_DEV_CHAT_API_URL: string;
   readonly VITE_DEV_AUTH_API_URL: string;
   readonly VITE_DEV_TASK_API_URL: string;
+  readonly VITE_DEV_FILE_API_URL: string;
+  readonly VITE_DEV_SIGNALR_HUB_URL: string;
 
   // Production URLs
   readonly VITE_PROD_CHAT_API_URL: string;
   readonly VITE_PROD_AUTH_API_URL: string;
   readonly VITE_PROD_TASK_API_URL: string;
+  readonly VITE_PROD_FILE_API_URL: string;
+  readonly VITE_PROD_SIGNALR_HUB_URL: string;
 
   // Feature Flags - Development
   readonly VITE_DEV_ENABLE_SIGNALR: string;

@@ -4,11 +4,11 @@
  * Centralized auth settings for the application
  */
 
+import { API_ENDPOINTS } from "@/config/env.config";
+
 export const AUTH_CONFIG = {
-  // API endpoint for identity service
-  identityApiUrl:
-    import.meta.env.VITE_IDENTITY_API_URL ||
-    "https://vega-identity-api-dev.allianceitsc.com",
+  // API endpoint for identity service (from centralized env config)
+  identityApiUrl: API_ENDPOINTS.auth,
 
   // Token refresh timing (10 minutes before expiry)
   tokenRefreshBeforeExpireMs: 10 * 60 * 1000,

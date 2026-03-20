@@ -840,7 +840,9 @@ export const TaskCard: React.FC<{
                     disabled={
                       updateStatusMutation.isPending ||
                       sendMessageMutation.isPending ||
-                      (t.checklist && t.checklist.some((c) => !c.done))
+                      (t.checklist &&
+                        t.checklist.length > 0 &&
+                        t.checklist.some((c) => !c.done))
                     }
                     onClick={async () => {
                       try {
@@ -872,7 +874,9 @@ export const TaskCard: React.FC<{
                     }}
                     className="inline-flex items-center justify-center rounded-md border px-2 h-[26px] text-[11px] min-w-[60px] transition-all duration-200 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title={
-                      t.checklist && t.checklist.some((c) => !c.done)
+                      t.checklist &&
+                      t.checklist.length > 0 &&
+                      t.checklist.some((c) => !c.done)
                         ? "Vui lòng hoàn thành tất cả checklist items trước"
                         : undefined
                     }
@@ -886,7 +890,9 @@ export const TaskCard: React.FC<{
                   </button>
                 )}
 
-              {permissions?.canChangeToFinished &&
+              {(permissions?.canChangeToFinished ||
+                (hasLeaderPermissions() &&
+                  t.status.code === "need_to_verified")) &&
                 (t.status.code === "doing" ||
                   t.status.code === "need_to_verified") && (
                   <button
@@ -894,7 +900,9 @@ export const TaskCard: React.FC<{
                     disabled={
                       updateStatusMutation.isPending ||
                       sendMessageMutation.isPending ||
-                      (t.checklist && t.checklist.some((c) => !c.done))
+                      (t.checklist &&
+                        t.checklist.length > 0 &&
+                        t.checklist.some((c) => !c.done))
                     }
                     onClick={async () => {
                       try {
@@ -925,7 +933,9 @@ export const TaskCard: React.FC<{
                     }}
                     className="inline-flex items-center justify-center rounded-md border px-2 h-[26px] text-[11px] min-w-[60px] transition-all duration-200 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title={
-                      t.checklist && t.checklist.some((c) => !c.done)
+                      t.checklist &&
+                      t.checklist.length > 0 &&
+                      t.checklist.some((c) => !c.done)
                         ? "Vui lòng hoàn thành tất cả checklist trước"
                         : undefined
                     }

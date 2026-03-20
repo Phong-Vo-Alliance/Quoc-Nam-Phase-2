@@ -8,6 +8,23 @@ import "./index.css";
 import "./styles/globals.css";
 import App from "./App";
 
+// Expose build info via console: type _M in browser console
+declare const __APP_BUILD_VERSION__: string;
+declare const __APP_BUILD_DATE__: string;
+
+Object.defineProperty(window, "_M", {
+  get() {
+    console.table({
+      AppBuildVersion: __APP_BUILD_VERSION__,
+      AppBuildDate: __APP_BUILD_DATE__,
+    });
+    return {
+      AppBuildVersion: __APP_BUILD_VERSION__,
+      AppBuildDate: __APP_BUILD_DATE__,
+    };
+  },
+});
+
 // Initialize SignalR with QueryClient for auto-refetch on reconnection
 initializeSignalR(queryClient);
 
