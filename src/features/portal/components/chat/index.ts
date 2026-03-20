@@ -7,7 +7,7 @@
  * - SystemMessageBubble: System notification messages (contentType = "SYS")
  */
 
-export { ChatMainContainer } from "./ChatMainContainer";
+export { ChatMainContainer } from "@/features/chat-main";
 export { MessageBubbleSimple } from "./MessageBubbleSimple";
 export type { MessageBubbleSimpleProps } from "./MessageBubbleSimple";
 export { SystemMessageBubble } from "./SystemMessageBubble";

@@ -64,7 +64,7 @@ export default function ImageGridItem({
       {
         rootMargin: "50px", // Load 50px before entering viewport
         threshold: 0.01,
-      }
+      },
     );
 
     if (containerRef.current) {
@@ -134,7 +134,7 @@ export default function ImageGridItem({
     <div
       ref={containerRef}
       data-testid={`image-grid-item-${fileId}`}
-      className="relative aspect-square overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 cursor-pointer group"
+      className="relative aspect-square overflow-hidden rounded-lg bg-gray-100 cursor-pointer group"
       onClick={onClick}
     >
       {/* Placeholder state - before image loads */}
@@ -143,7 +143,7 @@ export default function ImageGridItem({
           data-testid="image-grid-item-placeholder"
           className="w-full h-full flex items-center justify-center"
         >
-          <div className="w-8 h-8 bg-gray-300 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="w-8 h-8 bg-gray-300 rounded animate-pulse" />
         </div>
       )}
 
@@ -153,7 +153,7 @@ export default function ImageGridItem({
           data-testid="image-grid-item-loading"
           className="w-full h-full flex items-center justify-center"
         >
-          <div className="w-8 h-8 border-3 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />
+          <div className="w-8 h-8 border-3 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
         </div>
       )}
 
@@ -161,7 +161,7 @@ export default function ImageGridItem({
       {hasError && (
         <div
           data-testid="image-grid-item-error"
-          className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-600"
+          className="w-full h-full flex items-center justify-center text-gray-400"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

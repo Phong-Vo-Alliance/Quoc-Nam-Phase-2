@@ -1,0 +1,181 @@
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useCreateInformationConfirmed } from "@/hooks/mutations/useCreateInformationConfirmed";
+import { useAllInformationConfirmed } from "@/hooks/queries/useInformationConfirmed";
+import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useSendMessage } from "@/hooks/mutations/useSendMessage";
+import { useAuthStore } from "@/stores/authStore";
+import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { buildReceiveInfoContent } from "@/utils/receiveInfoMessage";
+import type { GroupedMessage } from "@/utils/messageGrouping";
+
+interface UseConfirmedInfoOptions {
+  conversationId: string;
+  workspaceId: string;
+  groupedMessages: GroupedMessage[];
+  onConfirmInfoSuccess?: () => void;
+}
+
+export function useConfirmedInfo({
+  conversationId,
+  workspaceId,
+  groupedMessages,
+  onConfirmInfoSuccess,
+}: UseConfirmedInfoOptions) {
+  const user = useAuthStore((state) => state.user);
+
+  const [confirmingMessageId, setConfirmingMessageId] = useState<string | null>(
+    null,
+  );
+  const confirmingRef = useRef(false); // Synchronous mutex to prevent duplicate API calls
+
+  // 🆕 NEW: Fetch ALL confirmed information for this conversation (leader only)
+  const { data: confirmedInfoData } = useAllInformationConfirmed(
+    {
+      conversationId,
+    },
+    { enabled: !!conversationId && hasLeaderPermissions() },
+  );
+
+  // 🆕 NEW: Fetch conversation members for confirmed info userName lookup
+  const { data: conversationMembers } = useConversationMembers({
+    conversationId,
+    enabled: !!conversationId && hasLeaderPermissions(),
+  });
+
+  // 🆕 NEW: Create Map of message IDs to confirmed info with userName
+  const confirmedMessageMap = useMemo(() => {
+    const map = new Map<string, string | undefined>();
+    if (confirmedInfoData?.data) {
+      confirmedInfoData.data.forEach((info) => {
+        let confirmedByName: string | undefined;
+
+        if (info.confirmedBy === user?.id) {
+          confirmedByName = "Bạn";
+        } else {
+          const member = conversationMembers?.find(
+            (m) =>
+              m.userId === info.confirmedBy ||
+              m.userInfo?.id === info.confirmedBy,
+          );
+          confirmedByName = member?.userInfo?.fullName || member?.userName;
+        }
+
+        map.set(info.messageId, confirmedByName);
+      });
+    }
+    return map;
+  }, [confirmedInfoData, conversationMembers, user?.id]);
+
+  // Send message mutation (for system messages after confirmation)
+  const sendMessageMutation = useSendMessage({
+    workspaceId,
+    conversationId,
+  });
+
+  // 🆕 NEW: Mutation for creating confirmed information
+  const createConfirmedInfoMutation = useCreateInformationConfirmed();
+
+  // 🆕 NEW: Handle confirm information from message
+  const handleConfirmInfo = useCallback(
+    (messageId: string) => {
+      // Synchronous mutex guard
+      if (confirmingRef.current) return;
+      confirmingRef.current = true;
+
+      const message = groupedMessages.find(
+        (g) => g.message.id === messageId,
+      )?.message;
+      if (!message || !user?.id) {
+        confirmingRef.current = false;
+        return;
+      }
+
+      setConfirmingMessageId(messageId);
+
+      const receiverName =
+        user?.fullName || user?.identifier || "Người tiếp nhận";
+      const systemMessageContent = buildReceiveInfoContent(
+        message,
+        receiverName,
+        new Date(),
+      );
+
+      createConfirmedInfoMutation.mutate(
+        {
+          conversationId,
+          messageId,
+          content: message.content || message.attachments?.[0]?.fileName || "",
+          statusCode: "pending",
+          confirmedBy: user.id,
+          senderId: message.senderId,
+          senderName: message.senderName || "",
+        },
+        {
+          onSuccess: () => {
+            confirmingRef.current = false;
+            setConfirmingMessageId(null);
+
+            sendMessageMutation.mutate({
+              conversationId,
+              content: systemMessageContent,
+              messageType: "SYS",
+            });
+
+            onConfirmInfoSuccess?.();
+          },
+          onError: () => {
+            confirmingRef.current = false;
+            setConfirmingMessageId(null);
+          },
+        },
+      );
+    },
+    [
+      conversationId,
+      groupedMessages,
+      user,
+      createConfirmedInfoMutation,
+      sendMessageMutation,
+      onConfirmInfoSuccess,
+    ],
+  );
+
+  // Handle create task from message
+  const handleCreateTask = useCallback(
+    (
+      messageId: string,
+      onCreateTaskFromMessage?: (payload: {
+        messageId: string;
+        messageContent: string;
+        conversationId: string;
+        confirmedInfoId?: string;
+      }) => void,
+    ) => {
+      const message = groupedMessages.find(
+        (g) => g.message.id === messageId,
+      )?.message;
+      if (!message) return;
+
+      const confirmedInfo = confirmedInfoData?.data?.find(
+        (info) => info.messageId === messageId && !info.isFinished,
+      );
+
+      onCreateTaskFromMessage?.({
+        messageId,
+        messageContent:
+          message.content || message.attachments?.[0]?.fileName || "",
+        conversationId,
+        confirmedInfoId: confirmedInfo?.id,
+      });
+    },
+    [conversationId, groupedMessages, confirmedInfoData],
+  );
+
+  return {
+    confirmedMessageMap,
+    confirmingMessageId,
+    handleConfirmInfo,
+    handleCreateTask,
+    confirmedInfoData,
+  };
+}

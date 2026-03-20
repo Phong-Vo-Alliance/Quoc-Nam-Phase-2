@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import ChatMainContainer from "../chat/ChatMainContainer";
+import ChatMainContainer from "../chat/OldChatMainContainer";
 import type { SelectedFile } from "@/types/files";
 
 // Mock hooks
@@ -115,7 +115,7 @@ describe("ChatMainContainer - Phase 2 Integration Tests", () => {
           isMobile={false}
           {...props}
         />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
   };
 
@@ -174,7 +174,7 @@ describe("ChatMainContainer - Phase 2 Integration Tests", () => {
         expect.objectContaining({
           sourceModule: 1,
           sourceEntityId: "conv1",
-        })
+        }),
       );
     });
 
@@ -184,7 +184,7 @@ describe("ChatMainContainer - Phase 2 Integration Tests", () => {
         expect.objectContaining({
           content: "Test message",
           contentType: "TXT",
-        })
+        }),
       );
     });
   });
@@ -230,7 +230,7 @@ describe("ChatMainContainer - Phase 2 Integration Tests", () => {
       () => {
         expect(screen.queryByText("test.pdf")).not.toBeInTheDocument();
       },
-      { timeout: 3000 }
+      { timeout: 3000 },
     );
   });
 
@@ -294,13 +294,13 @@ describe("ChatMainContainer - Phase 2 Integration Tests", () => {
     await waitFor(
       () => {
         const progressContainer = screen.queryByTestId(
-          "file-upload-progress-file-1"
+          "file-upload-progress-file-1",
         );
         if (progressContainer) {
           expect(progressContainer).toBeInTheDocument();
         }
       },
-      { timeout: 1000 }
+      { timeout: 1000 },
     );
   });
 
@@ -403,7 +403,7 @@ describe("ChatMainContainer - Phase 2 Integration Tests", () => {
       () => {
         expect(sendButton).not.toBeDisabled();
       },
-      { timeout: 3000 }
+      { timeout: 3000 },
     );
   });
 
@@ -583,7 +583,7 @@ describe("ChatMainContainer - Phase 2 Integration Tests", () => {
               fileSize: 7, // File mock size from 'content' string (7 bytes)
               contentType: "application/pdf",
             },
-          })
+          }),
         );
       });
     });
