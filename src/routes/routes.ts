@@ -6,6 +6,7 @@ export const ROUTES = {
   // Auth
   LOGIN: "/login",
   LOGOUT: "/logout",
+  AUTH_SSO: "/auth/session",
 
   // Portal
   PORTAL: "/",

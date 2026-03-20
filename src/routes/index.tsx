@@ -7,9 +7,7 @@ import { ROUTES } from "./routes";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 // Import pages/components
-import { LoginPage } from "@/pages/LoginPage";
-import { PortalPage } from "@/pages/PortalPage";
-import { BlockedPage } from "@/pages/BlockedPage";
+import { AuthSsoPage, BlockedPage, LoginPage, PortalPage } from "@/pages";
 
 function NotFoundPage() {
   return (
@@ -27,6 +25,10 @@ const router = createBrowserRouter([
   {
     path: ROUTES.LOGIN,
     element: <LoginPage />,
+  },
+  {
+    path: ROUTES.AUTH_SSO,
+    element: <AuthSsoPage />,
   },
   {
     path: ROUTES.PORTAL,
