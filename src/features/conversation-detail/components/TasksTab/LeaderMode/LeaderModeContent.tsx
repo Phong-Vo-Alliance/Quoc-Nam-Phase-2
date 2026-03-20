@@ -521,7 +521,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                     onClick={() =>
                       !isTasksLoading && setShowLeadCompletedAll(true)
                     }
-                    className={`text-xs font-medium transition-colors ${
+                    className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
                       isTasksLoading
                         ? "text-gray-400 cursor-not-allowed"
                         : "text-brand-600 hover:text-brand-700 cursor-pointer"
@@ -924,7 +924,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
                     onClick={() =>
                       !isTasksLoading && setShowLeaderOwnCompletedAll(true)
                     }
-                    className={`text-xs font-medium transition-colors ${
+                    className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
                       isTasksLoading
                         ? "text-gray-400 cursor-not-allowed"
                         : "text-brand-600 hover:text-brand-700 cursor-pointer"

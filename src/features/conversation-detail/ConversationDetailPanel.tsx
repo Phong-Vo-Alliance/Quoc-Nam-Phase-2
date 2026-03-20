@@ -347,20 +347,19 @@ export const ConversationDetailPanel: React.FC<
   const allLeadDoneTasks = React.useMemo(() => {
     const base =
       assigneeFilter === "all"
-        ? tasksByWorkRaw
+        ? tasksByWorkRaw.filter((t) =>
+            assigneeOptions.some((member) => member.id === t.assignTo),
+          )
         : tasksByWorkRaw.filter((t) => t.assignTo === assigneeFilter);
 
     return base
-      .filter(
-        (t) =>
-          t.status.code === "finished" || t.status.code === "need_to_verified",
-      )
+      .filter((t) => t.status.code === "finished")
       .sort((a, b) => {
         const da = new Date(a.updatedAt || a.createdAt || "");
         const db = new Date(b.updatedAt || b.createdAt || "");
         return db.getTime() - da.getTime();
       });
-  }, [tasksByWorkRaw, assigneeFilter]);
+  }, [tasksByWorkRaw, assigneeFilter, assigneeOptions]);
 
   // LEADER MINE MODE: Leader's own tasks
   const leaderOwnTasks = React.useMemo(() => {
@@ -389,8 +388,7 @@ export const ConversationDetailPanel: React.FC<
       .filter(
         (t) =>
           t.assignTo === effectiveUserId &&
-          (t.status.code === "need_to_verified" ||
-            t.status.code === "finished") &&
+          t.status.code === "finished" &&
           (!selectedWorkTypeId || t.workTypeId === selectedWorkTypeId),
       )
       .sort((a, b) => {

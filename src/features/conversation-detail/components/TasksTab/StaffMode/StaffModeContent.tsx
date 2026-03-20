@@ -188,7 +188,7 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
                   setShowCompleted(true);
                 }
               }}
-              className={`text-xs font-medium transition-colors ${
+              className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
                 isTasksLoading || isLoading
                   ? "text-gray-400 cursor-not-allowed"
                   : "text-brand-600 hover:text-brand-700 cursor-pointer"

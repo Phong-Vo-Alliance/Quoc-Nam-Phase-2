@@ -121,7 +121,7 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
       </Button>
 
       {/* Links (disabled for v1.0) */}
-      <div className="text-center space-y-2 text-sm">
+      {/* <div className="text-center space-y-2 text-sm">
         <button
           type="button"
           disabled
@@ -141,7 +141,7 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
             Đăng ký
           </button>
         </p>
-      </div>
+      </div> */}
     </form>
   );
 }
