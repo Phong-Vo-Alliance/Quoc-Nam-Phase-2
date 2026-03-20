@@ -247,8 +247,7 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
                 const completed = tasks
                   .filter(
                     (t) =>
-                      (t.status.code === "finished" ||
-                        t.status.code === "need_to_verified") &&
+                      t.status.code === "finished" &&
                       t.assignTo === effectiveUserId &&
                       (!selectedWorkTypeId ||
                         t.workTypeId === selectedWorkTypeId),
