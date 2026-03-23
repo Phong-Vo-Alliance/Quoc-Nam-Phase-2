@@ -51,6 +51,7 @@ import React from "react";
 export interface SystemMessagePart {
   type:
     | "text"
+    | "actor-name"
     | "highlight"
     | "time"
     | "task-name"
@@ -144,6 +145,17 @@ export function parseSystemMessageContent(
 
   // Pattern 13b (fallback): "Loại việc [oldName] đã đổi tên thành [newName]"
   const renameWorkTypePattern = /^Loại việc\s+(.+?)\s+đã đổi tên thành\s+(.+)$/;
+
+  // Pattern 14: "[leader] đã thêm mục [checklist-name] vào công việc [task-name]"
+  const checklistItemAddedPattern =
+    /^(.+?)\s+đã thêm mục\s+(.+?)\s+vào công việc\s+(.+)$/;
+
+  // Pattern 15: "[leader] đã cập nhật mục [old-name] thành [new-name] vào công việc [task-name]"
+  const checklistItemUpdatedPattern =
+    /^(.+?)\s+đã cập nhật mục\s+(.+?)\s+thành\s+(.+?)\s+vào công việc\s+(.+)$/;
+
+  // Pattern 16: "[leader] đã xóa mục [checklist-name]"
+  const checklistItemDeletedPattern = /^(.+?)\s+đã xóa mục\s+(.+)$/;
 
   let match: RegExpMatchArray | null;
 
@@ -314,11 +326,63 @@ export function parseSystemMessageContent(
     return parts;
   }
 
+  // Try Pattern 14: Checklist Item Added
+  if ((match = content.match(checklistItemAddedPattern))) {
+    const [, actorName, itemName, taskName] = match;
+    const cleanItemName = itemName.trim().replace(/^\s*["']|["']\s*$/g, "");
+    const cleanTaskName = taskName.trim().replace(/^\s*["']|["']\s*$/g, "");
+
+    parts.push({ type: "actor-name", content: actorName.trim() });
+    parts.push({ type: "text", content: " đã thêm mục " });
+    parts.push({ type: "item-name", content: cleanItemName });
+    parts.push({ type: "text", content: " vào công việc " });
+    parts.push({ type: "task-name", content: cleanTaskName });
+    return parts;
+  }
+
+  // Try Pattern 15: Checklist Item Updated
+  if ((match = content.match(checklistItemUpdatedPattern))) {
+    const [, actorName, oldItemName, newItemName, taskName] = match;
+    const cleanOldItemName = oldItemName
+      .trim()
+      .replace(/^\s*["']|["']\s*$/g, "");
+    const cleanNewItemName = newItemName
+      .trim()
+      .replace(/^\s*["']|["']\s*$/g, "");
+    const cleanTaskName = taskName.trim().replace(/^\s*["']|["']\s*$/g, "");
+
+    parts.push({ type: "actor-name", content: actorName.trim() });
+    parts.push({ type: "text", content: " đã cập nhật mục " });
+    parts.push({ type: "task-name", content: cleanOldItemName });
+    parts.push({ type: "text", content: " thành " });
+    parts.push({ type: "item-name", content: cleanNewItemName });
+    parts.push({ type: "text", content: " vào công việc " });
+    parts.push({ type: "task-name", content: cleanTaskName });
+    return parts;
+  }
+
+  // Try Pattern 16: Checklist Item Deleted
+  if ((match = content.match(checklistItemDeletedPattern))) {
+    const [, actorName, itemName] = match;
+    const cleanItemName = itemName.trim().replace(/^\s*["']|["']\s*$/g, "");
+
+    parts.push({ type: "actor-name", content: actorName.trim() });
+    parts.push({ type: "text", content: " đã xóa mục " });
+    parts.push({ type: "item-name", content: cleanItemName });
+    return parts;
+  }
+
   // Fallback: No pattern matched, return as plain text
   return [{ type: "text", content }];
 }
 
 export interface RenderSystemMessageOptions {
+  /**
+   * Class for actor names (e.g. leader name)
+   * @default "font-semibold text-gray-900"
+   */
+  actorNameClassName?: string;
+
   /**
    * Class for highlighted usernames
    * @default "font-semibold text-gray-900"
@@ -384,6 +448,7 @@ export function renderSystemMessageWithHighlights(
   options: RenderSystemMessageOptions = {},
 ): React.ReactNode {
   const {
+    actorNameClassName = "font-semibold text-gray-900",
     highlightClassName = "font-semibold text-gray-900",
     timeClassName = "text-gray-500",
     taskNameClassName = "font-medium",
@@ -416,6 +481,12 @@ export function renderSystemMessageWithHighlights(
     <>
       {parts.map((part, index) => {
         switch (part.type) {
+          case "actor-name":
+            return (
+              <span key={index} className={actorNameClassName}>
+                {part.content}
+              </span>
+            );
           case "highlight":
             return (
               <span key={index} className={highlightClassName}>

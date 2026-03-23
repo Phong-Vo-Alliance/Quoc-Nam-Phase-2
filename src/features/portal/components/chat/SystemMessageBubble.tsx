@@ -29,10 +29,13 @@ export const SystemMessageBubble: React.FC<SystemMessageBubbleProps> = ({
       <div className="flex items-center gap-2 text-xs text-gray-600 px-3 py-1.5 rounded-full max-w-[80%] text-center border-2 border-gray-100 system-message-pill">
         <span className="text-gray-700 break-words">
           {renderSystemMessageWithHighlights(message.content || "", {
+            actorNameClassName: "font-semibold text-gray-900",
             highlightClassName:
               "font-semibold text-brand-700 bg-brand-100 px-0.5 rounded",
             timeClassName: "text-gray-500 font-medium",
-            taskNameClassName: "font-medium text-gray-800",
+            taskNameClassName: "font-semibold text-gray-900",
+            itemNameClassName:
+              "font-semibold text-brand-700 bg-brand-100 px-0.5 rounded",
           })}
         </span>
         <span className="text-gray-500 shrink-0">•</span>

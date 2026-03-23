@@ -257,11 +257,27 @@ export const TaskCard: React.FC<{
                 ) {
                   e.preventDefault();
                   if (editingItem?.id === "new") {
+                    const addedLabel = newLabel.trim();
                     try {
                       await addCheckItemMutation.mutateAsync({
                         taskId: t.id,
-                        content: newLabel.trim(),
+                        content: addedLabel,
                       });
+
+                      // Send system message about adding checklist item
+                      if (conversationId && t.messageId) {
+                        try {
+                          await sendMessageMutation.mutateAsync({
+                            conversationId,
+                            content: `${currentUserFullName} đã thêm mục ${addedLabel} vào công việc ${t.title}`,
+                            messageType: "SYS",
+                            parentMessageId: t.messageId,
+                          });
+                        } catch (error) {
+                          // Silently fail - don't show error to user
+                        }
+                      }
+
                       setEditingItem(null);
                       setNewLabel("");
                       setOpen(true);
