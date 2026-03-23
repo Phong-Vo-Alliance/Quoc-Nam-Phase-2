@@ -1,5 +1,11 @@
 import React from "react";
-import { Image as ImageIcon, Loader2, Paperclip, Send } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Loader2,
+  MessageSquareText,
+  Paperclip,
+  SendHorizonal,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FilePreview from "@/components/FilePreview";
 import QuotedMessagePreview from "@/features/portal/components/chat/QuotedMessagePreview";
@@ -9,6 +15,7 @@ import {
 } from "@/features/portal/components/chat/MentionInputInline";
 import { FILE_CATEGORIES } from "@/types/files";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
+import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 
 interface ChatInputAreaProps {
   inputRef: React.RefObject<MentionInputHandle | null>;
@@ -58,6 +65,10 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onPaste,
   onClearReply,
 }) => {
+  const quickMessageCount = useQuickMessagesStore(
+    (state) => state.messages.length,
+  );
+
   return (
     <>
       {/* Quoted Message Preview (Reply Mode) */}
@@ -152,6 +163,21 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           />
 
           {/* Send button */}
+          {quickMessageCount > 0 && (
+            <button
+              type="button"
+              onClick={() => inputRef.current?.openShortcutPicker()}
+              disabled={isPending || isUploading}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              aria-label="Tin nhắn nhanh"
+              title="Tin nhắn nhanh"
+              data-testid="chat-quick-message-button"
+            >
+              <MessageSquareText className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Send button */}
           <button
             onClick={() => onSend(inputValue, currentMentions)}
             disabled={
@@ -159,13 +185,13 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               isPending ||
               isUploading
             }
-            className="rounded-lg bg-brand-600 px-4 py-2 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            className="inline-flex h-10 w-12 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
             data-testid="send-message-button"
           >
             {isPending || isUploading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              <Send className="h-5 w-5" />
+              <SendHorizonal className="h-5 w-5" />
             )}
           </button>
         </div>

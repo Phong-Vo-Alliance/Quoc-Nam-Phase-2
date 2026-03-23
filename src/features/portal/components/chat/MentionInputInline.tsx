@@ -28,6 +28,7 @@ export interface MentionData {
 export interface MentionInputHandle {
   focus: () => void;
   clear: () => void;
+  openShortcutPicker: () => void;
 }
 
 export interface MentionInputProps {
@@ -132,6 +133,58 @@ export const MentionInputInline = forwardRef<
     const lastKnownTextRef = useRef<string>("");
     const mentionsRef = useRef<MentionData[]>([]); // Ref to avoid stale closure
 
+    const updateFixedPosition = useCallback(
+      (coords: { top: number; left: number }) => {
+        if (!editorRef.current) return;
+
+        const editorRect = editorRef.current.getBoundingClientRect();
+        const dropdownWidth = 320;
+        const margin = 10;
+
+        let leftPos = editorRect.left + coords.left;
+        const maxLeft = window.innerWidth - dropdownWidth - margin;
+        leftPos = Math.min(leftPos, maxLeft);
+        leftPos = Math.max(leftPos, editorRect.left);
+
+        setFixedPosition({
+          top: editorRect.top,
+          left: leftPos,
+        });
+      },
+      [],
+    );
+
+    const openShortcutDropdown = useCallback(
+      (
+        searchQuery: string,
+        startIndex: number,
+        coords?: { top: number; left: number },
+      ) => {
+        const dropdownCoords = coords ?? { top: 0, left: 0 };
+        setDropdownPosition(dropdownCoords);
+        updateFixedPosition(dropdownCoords);
+
+        setShowShortcutDropdown(true);
+        setShortcutSearchQuery(searchQuery);
+        setShortcutStartIndex(startIndex);
+        setSelectedShortcutIndex(0);
+        setShowMentionDropdown(false);
+      },
+      [updateFixedPosition],
+    );
+
+    // Fetch conversation members
+    const { data: members = [] } = useConversationMembers({
+      conversationId: conversationId || "",
+      enabled: !!conversationId,
+    });
+
+    // Get current user for filtering
+    const { user: currentUser } = useAuthStore();
+
+    // Get shortcuts from store
+    const shortcuts = useQuickMessagesStore((state) => state.messages);
+
     useImperativeHandle(
       forwardedRef,
       () => ({
@@ -146,21 +199,26 @@ export const MentionInputInline = forwardRef<
             onMentionsChange([]);
           }
         },
+        openShortcutPicker: () => {
+          if (!editorRef.current || disabled || shortcuts.length === 0) return;
+
+          editorRef.current.focus();
+
+          const selection = window.getSelection();
+          if (selection) {
+            const range = document.createRange();
+            range.selectNodeContents(editorRef.current);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+
+          const editorRect = editorRef.current.getBoundingClientRect();
+          openShortcutDropdown("", -1, { top: editorRect.height, left: 0 });
+        },
       }),
-      [onMentionsChange],
+      [onMentionsChange, disabled, shortcuts.length, openShortcutDropdown],
     );
-
-    // Fetch conversation members
-    const { data: members = [] } = useConversationMembers({
-      conversationId: conversationId || "",
-      enabled: !!conversationId,
-    });
-
-    // Get current user for filtering
-    const { user: currentUser } = useAuthStore();
-
-    // Get shortcuts from store
-    const shortcuts = useQuickMessagesStore((state) => state.messages);
 
     // Filter members based on search query and exclude current user
     const filteredMembers = React.useMemo(() => {
@@ -434,37 +492,7 @@ export const MentionInputInline = forwardRef<
           // If user typed "/xinchao " (with space), auto-replace will trigger instead
           if (!/[\s\n\r\t]/.test(searchQuery)) {
             const coords = getCaretCoordinates();
-            setDropdownPosition(coords);
-
-            // Calculate fixed position - follow cursor but constrain to viewport
-            if (editorRef.current) {
-              const editorRect = editorRef.current.getBoundingClientRect();
-              const dropdownWidth = 320; // w-80 = 320px
-              const margin = 10;
-
-              // Calculate left position following cursor
-              let leftPos = editorRect.left + coords.left;
-
-              // Constrain to not overflow right edge of viewport
-              const maxLeft = window.innerWidth - dropdownWidth - margin;
-              leftPos = Math.min(leftPos, maxLeft);
-
-              // Constrain to not go past left edge of editor
-              leftPos = Math.max(leftPos, editorRect.left);
-
-              setFixedPosition({
-                top: editorRect.top,
-                left: leftPos,
-              });
-            }
-
-            setShowShortcutDropdown(true);
-            setShortcutSearchQuery(searchQuery);
-            setShortcutStartIndex(lastSlashIndex);
-            setSelectedShortcutIndex(0);
-
-            // Also close mention dropdown if open
-            setShowMentionDropdown(false);
+            openShortcutDropdown(searchQuery, lastSlashIndex, coords);
 
             onChange(replacedText);
             return;
@@ -547,6 +575,7 @@ export const MentionInputInline = forwardRef<
       getCursorPosition,
       onChange,
       getCaretCoordinates,
+      openShortcutDropdown,
       replaceQuickMessage,
     ]);
 
@@ -689,10 +718,43 @@ export const MentionInputInline = forwardRef<
     // Handle shortcut selection
     const handleShortcutSelect = useCallback(
       (shortcut: { id: string; key: string; content: string }) => {
-        if (shortcutStartIndex === -1 || !editorRef.current) return;
+        if (!editorRef.current) return;
 
         const selection = window.getSelection();
-        if (!selection) return;
+        if (!selection) {
+          editorRef.current.focus();
+          return;
+        }
+
+        if (shortcutStartIndex === -1) {
+          const range = document.createRange();
+          range.selectNodeContents(editorRef.current);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+
+          const contentNode = document.createTextNode(shortcut.content + " ");
+          range.insertNode(contentNode);
+
+          const newRange = document.createRange();
+          newRange.setStartAfter(contentNode);
+          newRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+
+          setShowShortcutDropdown(false);
+          setShortcutSearchQuery("");
+          setShortcutStartIndex(-1);
+
+          setTimeout(() => {
+            if (!editorRef.current) return;
+            const finalText = getTextContent();
+            onChange(finalText);
+            editorRef.current.focus();
+          }, 10);
+
+          return;
+        }
 
         // Find /query in text nodes (skip mentions)
         const queryToFind = `/${shortcutSearchQuery}`;

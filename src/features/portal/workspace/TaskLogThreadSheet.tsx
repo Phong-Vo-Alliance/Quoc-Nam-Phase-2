@@ -14,6 +14,7 @@ import {
   Loader2,
   AlertCircle,
   ChevronDown,
+  MessageSquareText,
   Paperclip,
   Image as ImageIcon,
 } from "lucide-react";
@@ -48,6 +49,7 @@ import MessageDateSeparator from "@/components/chat/MessageDateSeparator"; // �
 import { formatDateSeparator } from "@/utils/formatDateSeparator"; // 🆕 NEW: Date formatting
 import type { QuotedMessageData } from "@/stores/replyStore"; // 🆕 NEW: Reply type
 import QuotedMessagePreview from "@/features/portal/components/chat/QuotedMessagePreview"; // 🆕 NEW: Reply preview
+import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 
 /**
  * Merge two blocks of thread replies (around-block + latest-block).
@@ -185,6 +187,10 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   // 🆕 NEW: Local reply state for thread (separate from global replyStore)
   const [threadReplyTarget, setThreadReplyTarget] =
     useState<QuotedMessageData | null>(null);
+
+  const quickMessageCount = useQuickMessagesStore(
+    (state) => state.messages.length,
+  );
 
   const parentMessageId = task?.messageId;
 
@@ -1361,10 +1367,24 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
               data-testid="task-log-input"
             />
 
+            {quickMessageCount > 0 && (
+              <button
+                type="button"
+                onClick={() => mentionInputRef.current?.openShortcutPicker()}
+                disabled={sending || loading || isUploading}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                aria-label="Tin nhắn nhanh"
+                title="Tin nhắn nhanh"
+                data-testid="task-log-quick-message-button"
+              >
+                <MessageSquareText className="w-5 h-5" />
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => handleSend(inputValue, currentMentions)}
-              className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="inline-flex h-10 w-12 items-center justify-center rounded-lg bg-brand-600 text-white shadow-sm hover:bg-brand-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
               disabled={
                 (!inputValue.trim() && selectedFiles.length === 0) ||
                 sending ||
@@ -1376,10 +1396,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
               {sending || isUploading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <>
-                  <SendHorizonal className="w-4 h-4 mr-1" />
-                  Gửi
-                </>
+                <SendHorizonal className="w-5 h-5" />
               )}
             </button>
           </div>
