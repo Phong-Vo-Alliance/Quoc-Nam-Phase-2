@@ -100,6 +100,15 @@ export interface ConversationUpdatedEvent {
   // ... other updated fields
 }
 
+// Conversation Deleted Event
+export interface ConversationDeletedEvent {
+  conversationId: string;
+  conversationName?: string;
+  categoryId?: string;
+  categoryName?: string;
+  timestamp?: string;
+}
+
 // Category Events
 export interface CategoryDepartmentLinkedEvent {
   categoryId: string;

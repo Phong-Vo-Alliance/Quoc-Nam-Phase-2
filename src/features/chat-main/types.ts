@@ -61,4 +61,7 @@ export interface ChatMainContainerProps {
 
   // 🆕 NEW: Callback when user clicks "Xem chi tiết" in TaskBanner (to switch to Công việc tab)
   onViewTaskDetail?: () => void;
+
+  // 🆕 NEW: When true, conversation is disabled (no input allowed)
+  isConversationDisabled?: boolean;
 }

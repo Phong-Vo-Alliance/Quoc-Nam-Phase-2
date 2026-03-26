@@ -212,6 +212,52 @@ export async function getImageThumbnailInfo(
 }
 
 /**
+ * Get video thumbnail image for a file.
+ */
+export async function getVideoThumbnail(
+  fileId: string,
+  width = 320,
+): Promise<Blob> {
+  const dto = await getVideoThumbnailInfo(fileId, width);
+  return base64ToBlob(dto.imageBase64, dto.contentType || "image/jpeg");
+}
+
+/**
+ * Get video thumbnail info with metadata.
+ */
+export async function getVideoThumbnailInfo(
+  fileId: string,
+  width = 320,
+): Promise<ThumbnailInfoDto> {
+  const response = await fileApiClient.get<ThumbnailInfoDto>(
+    `/api/Files/${fileId}/video-thumbnail`,
+    {
+      params: { width },
+      timeout: 30000,
+    },
+  );
+
+  const dto = response.data;
+  if (!dto.imageBase64) {
+    throw new Error("No thumbnail data in video thumbnail response");
+  }
+
+  return dto;
+}
+
+/**
+ * Load video stream as a blob so the browser can play protected media.
+ */
+export async function getVideoStreamBlob(fileId: string): Promise<Blob> {
+  const response = await fileApiClient.get(`/api/Files/${fileId}/stream`, {
+    responseType: "blob",
+    timeout: 60000,
+  });
+
+  return response.data;
+}
+
+/**
  * Get watermarked preview (full-size) image for a file
  * API: GET /api/Files/{id}/preview
  *

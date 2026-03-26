@@ -48,6 +48,23 @@ const getTaskSignalRHubUrl = (): string => {
 
 const TASK_HUB_URL = getTaskSignalRHubUrl();
 
+// Get Identity SignalR Hub URL based on environment
+const getIdentitySignalRHubUrl = (): string => {
+  const isDev = import.meta.env.DEV;
+  const identityApiUrl = isDev
+    ? import.meta.env.VITE_DEV_AUTH_API_URL
+    : import.meta.env.VITE_PROD_AUTH_API_URL;
+
+  if (!identityApiUrl) {
+    console.warn("Identity API URL not configured");
+    return "";
+  }
+
+  return `${identityApiUrl}/hubs/identity`;
+};
+
+const IDENTITY_HUB_URL = getIdentitySignalRHubUrl();
+
 // SignalR Event Names (for consistency)
 // Note: Backend uses lowercase event names in some cases
 export const SIGNALR_EVENTS = {
@@ -65,8 +82,13 @@ export const SIGNALR_EVENTS = {
   MEMBER_PROMOTED: "MemberPromoted",
   CONVERSATION_UPDATED: "ConversationUpdated",
 
+  CONVERSATION_DELETED: "ConversationDeleted",
+
   // ============= Category Events =============
   CATEGORY_DEPARTMENT_LINKED: "CategoryDepartmentLinked",
+  CATEGORY_DEPARTMENT_UNLINKED: "CategoryDepartmentUnlinked",
+  CATEGORY_ASSIGNED_TO_CONVERSATION: "CategoryAssignedToConversation",
+  CATEGORY_UNASSIGNED_FROM_CONVERSATION: "CategoryUnassignedFromConversation",
 
   // ============= Typing Indicators =============
   USER_TYPING: "UserTyping",
@@ -93,6 +115,10 @@ export const SIGNALR_EVENTS = {
 
   // ============= Task Events =============
   TASKS_UPDATED: "TasksUpdated",
+
+  // ============= Identity Events =============
+  DEPARTMENT_MEMBERS_ADDED: "DepartmentMembersAdded",
+  DEPARTMENT_MEMBERS_REMOVED: "DepartmentMembersRemoved",
 
   // ============= Error Events =============
   ERROR: "Error",
@@ -246,10 +272,7 @@ class ChatHubConnection {
         conversationId,
       );
     } catch (error) {
-      console.error(
-        `[SignalR] | Failed to join ${conversationId}:`,
-        error,
-      );
+      console.error(`[SignalR] | Failed to join ${conversationId}:`, error);
     }
   }
 
@@ -328,11 +351,13 @@ class ChatHubConnection {
     };
   }
 
-  onStateChange(callback: (state: 'Connected' | 'Reconnecting' | 'Disconnected') => void): () => void {
+  onStateChange(
+    callback: (state: "Connected" | "Reconnecting" | "Disconnected") => void,
+  ): () => void {
     if (!this.connection) return () => {};
-    this.connection.onreconnecting(() => callback('Reconnecting'));
-    this.connection.onreconnected(() => callback('Connected'));
-    this.connection.onclose(() => callback('Disconnected'));
+    this.connection.onreconnecting(() => callback("Reconnecting"));
+    this.connection.onreconnected(() => callback("Connected"));
+    this.connection.onclose(() => callback("Disconnected"));
     return () => {}; // SignalR JS doesn't support removing lifecycle callbacks
   }
 
@@ -346,7 +371,6 @@ class ChatHubConnection {
       this.connection?.off(event);
     }
   }
-
 }
 
 // Singleton instance
@@ -356,8 +380,8 @@ export const chatHub = new ChatHubConnection();
 export function initializeSignalR(queryClient: QueryClient): void {
   chatHub.setQueryClient(queryClient);
   taskHub.setQueryClient(queryClient);
+  identityHub.setQueryClient(queryClient);
 }
-
 
 // ============= Task Hub Connection =============
 
@@ -371,7 +395,9 @@ class TaskHubConnection {
   private isConnecting = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private stateChangeListeners = new Set<(state: 'Connected' | 'Reconnecting' | 'Disconnected') => void>();
+  private stateChangeListeners = new Set<
+    (state: "Connected" | "Reconnecting" | "Disconnected") => void
+  >();
 
   getState(): signalR.HubConnectionState {
     return this.connection?.state || signalR.HubConnectionState.Disconnected;
@@ -484,25 +510,24 @@ class TaskHubConnection {
             `❌ Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
           );
         }
-
       });
 
       // Register state change listeners on the new connection
       this.connection.onreconnecting(() => {
-        this.stateChangeListeners.forEach(cb => cb('Reconnecting'));
+        this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
       });
       this.connection.onreconnected(() => {
-        this.stateChangeListeners.forEach(cb => cb('Connected'));
+        this.stateChangeListeners.forEach((cb) => cb("Connected"));
       });
       this.connection.onclose(() => {
-        this.stateChangeListeners.forEach(cb => cb('Disconnected'));
+        this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
       });
 
       await this.connection.start();
       this.reconnectAttempts = 0;
 
       // Notify listeners of initial connection
-      this.stateChangeListeners.forEach(cb => cb('Connected'));
+      this.stateChangeListeners.forEach((cb) => cb("Connected"));
 
       // After successful negotiation, save the task access token if it was provided
       if (taskAccessToken) {
@@ -510,10 +535,7 @@ class TaskHubConnection {
           // Store task token in localStorage for persistence
           localStorage.setItem("taskAccessToken", taskAccessToken);
         } catch (error) {
-          console.warn(
-            `[TaskHub] Failed to save task access token:`,
-            error,
-          );
+          console.warn(`[TaskHub] Failed to save task access token:`, error);
         }
       }
     } catch (error) {
@@ -569,23 +591,227 @@ class TaskHubConnection {
     };
   }
 
-  onStateChange(callback: (state: 'Connected' | 'Reconnecting' | 'Disconnected') => void): () => void {
+  onStateChange(
+    callback: (state: "Connected" | "Reconnecting" | "Disconnected") => void,
+  ): () => void {
     this.stateChangeListeners.add(callback);
 
     // If already connected, notify immediately
     if (this.isConnected()) {
-      callback('Connected');
+      callback("Connected");
     }
 
     return () => {
       this.stateChangeListeners.delete(callback);
     };
   }
-
 }
 
 // Singleton instance
 export const taskHub = new TaskHubConnection();
 
+// ============= Identity Hub Connection =============
+
+/**
+ * Identity Hub Connection Manager
+ * Manages SignalR connection to Identity Hub (/hubs/identity)
+ */
+class IdentityHubConnection {
+  private connection: signalR.HubConnection | null = null;
+  private queryClient: QueryClient | null = null;
+  private isConnecting = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private stateChangeListeners = new Set<
+    (state: "Connected" | "Reconnecting" | "Disconnected") => void
+  >();
+
+  getState(): signalR.HubConnectionState {
+    return this.connection?.state || signalR.HubConnectionState.Disconnected;
+  }
+
+  isConnected(): boolean {
+    return this.connection?.state === signalR.HubConnectionState.Connected;
+  }
+
+  setQueryClient(client: QueryClient): void {
+    this.queryClient = client;
+  }
+
+  private refreshDirectMessageRelatedQueries(): void {
+    if (!this.queryClient) return;
+
+    // Refresh direct message conversations list.
+    this.queryClient.invalidateQueries({
+      queryKey: ["conversations", "directs"],
+      refetchType: "active",
+    });
+
+    // Refresh colleagues list used in DM tab.
+    this.queryClient.invalidateQueries({
+      queryKey: ["departmentColleagues"],
+      refetchType: "active",
+    });
+    this.queryClient.invalidateQueries({
+      queryKey: ["department-colleagues"],
+      refetchType: "active",
+    });
+
+    // Refresh per-department member lists if they are active.
+    this.queryClient.invalidateQueries({
+      queryKey: ["department-members"],
+      refetchType: "active",
+    });
+  }
+
+  async start(identityAccessToken?: string): Promise<void> {
+    if (!IDENTITY_HUB_URL) {
+      console.warn(
+        "[IdentityHub] Identity API URL not configured, skipping connection",
+      );
+      return;
+    }
+
+    if (this.connection?.state === signalR.HubConnectionState.Connected) {
+      return;
+    }
+
+    if (this.isConnecting) {
+      return;
+    }
+
+    this.isConnecting = true;
+
+    try {
+      this.connection = new signalR.HubConnectionBuilder()
+        .withUrl(IDENTITY_HUB_URL, {
+          accessTokenFactory: () =>
+            identityAccessToken || localStorage.getItem("accessToken") || "",
+          skipNegotiation: false,
+          transport:
+            signalR.HttpTransportType.WebSockets |
+            signalR.HttpTransportType.ServerSentEvents |
+            signalR.HttpTransportType.LongPolling,
+        })
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+        .configureLogging(signalR.LogLevel.Information)
+        .build();
+
+      this.connection.on(SIGNALR_EVENTS.DEPARTMENT_MEMBERS_ADDED, () => {
+        this.refreshDirectMessageRelatedQueries();
+      });
+
+      this.connection.on(SIGNALR_EVENTS.DEPARTMENT_MEMBERS_REMOVED, () => {
+        this.refreshDirectMessageRelatedQueries();
+      });
+
+      this.connection.onreconnecting((error) => {
+        const ts = new Date().toISOString();
+        console.warn(
+          `[IdentityHub] ${ts} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
+          error,
+        );
+        this.reconnectAttempts++;
+      });
+
+      this.connection.onreconnected(() => {
+        this.reconnectAttempts = 0;
+
+        // Keep this generic for now; concrete query keys can be added when identity realtime events are wired.
+        if (this.queryClient) {
+          this.queryClient.invalidateQueries({
+            queryKey: ["users"],
+            refetchType: "active",
+          });
+        }
+      });
+
+      this.connection.onclose((error) => {
+        if (error) {
+          console.error("[IdentityHub] Connection closed with error:", error);
+        }
+
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          console.error(
+            `[IdentityHub] Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
+          );
+        }
+      });
+
+      this.connection.onreconnecting(() => {
+        this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
+      });
+      this.connection.onreconnected(() => {
+        this.stateChangeListeners.forEach((cb) => cb("Connected"));
+      });
+      this.connection.onclose(() => {
+        this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
+      });
+
+      await this.connection.start();
+      this.reconnectAttempts = 0;
+      this.stateChangeListeners.forEach((cb) => cb("Connected"));
+    } catch (error) {
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        console.error("[IdentityHub] Connection failed:", error);
+      }
+      throw error;
+    } finally {
+      this.isConnecting = false;
+    }
+  }
+
+  async stop(): Promise<void> {
+    this.isConnecting = false;
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore errors during stop
+      }
+      this.connection = null;
+    }
+  }
+
+  on(event: string, handler: (...args: any[]) => void): void {
+    this.connection?.on(event, handler);
+  }
+
+  off(event: string, handler?: (...args: any[]) => void): void {
+    if (handler) {
+      this.connection?.off(event, handler);
+    } else {
+      this.connection?.off(event);
+    }
+  }
+
+  onWithCleanup(event: string, callback: (...args: any[]) => void): () => void {
+    if (!this.connection) {
+      console.warn(`[IdentityHub] Cannot subscribe to ${event}: no connection`);
+      return () => {};
+    }
+    this.connection.on(event, callback);
+    return () => {
+      this.connection?.off(event, callback);
+    };
+  }
+
+  onStateChange(
+    callback: (state: "Connected" | "Reconnecting" | "Disconnected") => void,
+  ): () => void {
+    this.stateChangeListeners.add(callback);
+
+    if (this.isConnected()) {
+      callback("Connected");
+    }
+
+    return () => {
+      this.stateChangeListeners.delete(callback);
+    };
+  }
+}
+
+// Singleton instance
+export const identityHub = new IdentityHubConnection();
 
 export default chatHub;

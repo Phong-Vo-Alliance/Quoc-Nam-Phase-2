@@ -13,7 +13,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useConversationStore } from "./conversationStore";
 import { useImageCacheStore } from "./imageCacheStore";
-import { chatHub, taskHub } from "@/lib/signalr";
+import { chatHub, identityHub, taskHub } from "@/lib/signalr";
 import { resetDispatcherState } from "@/lib/signalr-event-dispatcher";
 
 // Auth user type (from login API)
@@ -118,7 +118,11 @@ export const useAuthStore = create<AuthState>()(
         // ✅ CRITICAL: Stop SignalR connections AFTER clearing tokens and WAIT for completion
         // This ensures WebSocket is fully closed before continuing
         try {
-          await Promise.all([chatHub.stop(), taskHub.stop()]);
+          await Promise.all([
+            chatHub.stop(),
+            taskHub.stop(),
+            identityHub.stop(),
+          ]);
           console.log("[authStore] SignalR connections closed successfully");
         } catch (error) {
           // Ignore errors during stop - connection may already be closed
@@ -167,7 +171,11 @@ export const useAuthStore = create<AuthState>()(
 
         // ✅ CRITICAL: Stop SignalR connections AFTER clearing tokens and WAIT for completion
         try {
-          await Promise.all([chatHub.stop(), taskHub.stop()]);
+          await Promise.all([
+            chatHub.stop(),
+            taskHub.stop(),
+            identityHub.stop(),
+          ]);
           console.log("[authStore] SignalR connections closed successfully");
         } catch (error) {
           // Ignore errors during stop

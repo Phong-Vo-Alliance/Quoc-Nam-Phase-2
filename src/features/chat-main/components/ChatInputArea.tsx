@@ -30,6 +30,7 @@ interface ChatInputAreaProps {
   isPending: boolean;
   isUploading: boolean;
   replyTarget: any;
+  disabled?: boolean;
   onInputChange: (value: string) => void;
   onSend: (
     content: string,
@@ -57,6 +58,7 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   isPending,
   isUploading,
   replyTarget,
+  disabled = false,
   onInputChange,
   onSend,
   onMentionsChange,
@@ -68,6 +70,19 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   const quickMessageCount = useQuickMessagesStore(
     (state) => state.messages.length,
   );
+
+  if (disabled) {
+    return (
+      <div
+        className="border-t p-3 shrink-0"
+        data-testid="message-input-disabled"
+      >
+        <div className="flex items-center justify-center py-2 text-sm text-gray-400">
+          Cuộc trò chuyện này đã bị vô hiệu hóa
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

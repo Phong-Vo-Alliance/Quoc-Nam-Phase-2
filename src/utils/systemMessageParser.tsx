@@ -44,6 +44,9 @@
  *    → Bold: oldName, categoryName. Highlight (username style): newName
  * 13b. (Fallback) "Loại việc [oldName] đã đổi tên thành [newName]"
  *    → Bold: oldName, Bold: newName
+ *
+ * 17. "[name] đã bị xóa khỏi loại việc"
+ *    → Danger highlight (red): name
  */
 
 import React from "react";
@@ -53,6 +56,7 @@ export interface SystemMessagePart {
     | "text"
     | "actor-name"
     | "highlight"
+    | "danger-highlight"
     | "time"
     | "task-name"
     | "item-name"
@@ -145,6 +149,10 @@ export function parseSystemMessageContent(
 
   // Pattern 13b (fallback): "Loại việc [oldName] đã đổi tên thành [newName]"
   const renameWorkTypePattern = /^Loại việc\s+(.+?)\s+đã đổi tên thành\s+(.+)$/;
+
+  // Pattern 17: "[name] đã bị xóa khỏi loại việc" (with or without quotes)
+  const removedFromWorkTypePattern =
+    /^["']?(.+?)["']?\s+đã bị xóa khỏi loại việc$/;
 
   // Pattern 14: "[leader] đã thêm mục [checklist-name] vào công việc [task-name]"
   const checklistItemAddedPattern =
@@ -326,6 +334,14 @@ export function parseSystemMessageContent(
     return parts;
   }
 
+  // Try Pattern 17: Removed from Work Type
+  if ((match = content.match(removedFromWorkTypePattern))) {
+    const [, name] = match;
+    parts.push({ type: "danger-highlight", content: name.trim() });
+    parts.push({ type: "text", content: " đã bị xóa khỏi loại việc" });
+    return parts;
+  }
+
   // Try Pattern 14: Checklist Item Added
   if ((match = content.match(checklistItemAddedPattern))) {
     const [, actorName, itemName, taskName] = match;
@@ -390,6 +406,12 @@ export interface RenderSystemMessageOptions {
   highlightClassName?: string;
 
   /**
+   * Class for danger-highlighted names (red)
+   * @default "font-semibold text-red-600"
+   */
+  dangerHighlightClassName?: string;
+
+  /**
    * Class for time
    * @default "text-gray-500"
    */
@@ -450,6 +472,7 @@ export function renderSystemMessageWithHighlights(
   const {
     actorNameClassName = "font-semibold text-gray-900",
     highlightClassName = "font-semibold text-gray-900",
+    dangerHighlightClassName = "font-semibold text-red-700 bg-red-100 px-1.5 py-0.5 rounded",
     timeClassName = "text-gray-500",
     taskNameClassName = "font-medium",
     itemNameClassName = "font-medium text-gray-800",
@@ -490,6 +513,12 @@ export function renderSystemMessageWithHighlights(
           case "highlight":
             return (
               <span key={index} className={highlightClassName}>
+                {part.content}
+              </span>
+            );
+          case "danger-highlight":
+            return (
+              <span key={index} className={dangerHighlightClassName}>
                 {part.content}
               </span>
             );

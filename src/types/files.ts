@@ -34,6 +34,7 @@ export type SupportedPreviewFileType =
   | "excel"
   | "powerpoint"
   | "text"
+  | "video"
   | "image";
 
 export const SUPPORTED_FILE_EXTENSIONS: Record<
@@ -45,6 +46,7 @@ export const SUPPORTED_FILE_EXTENSIONS: Record<
   excel: [".xls", ".xlsx"],
   powerpoint: [".ppt", ".pptx"],
   text: [".txt", ".rtf"],
+  video: [".mp4", ".webm", ".ogg", ".mov"],
   image: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
 } as const;
 
@@ -54,6 +56,7 @@ export const FILE_TYPE_ICONS: Record<SupportedPreviewFileType, string> = {
   excel: "📊",
   powerpoint: "📽️",
   text: "📃",
+  video: "🎬",
   image: "🖼️",
 };
 
@@ -63,6 +66,7 @@ export const FILE_TYPE_LABELS: Record<SupportedPreviewFileType, string> = {
   excel: "Excel",
   powerpoint: "PowerPoint",
   text: "Text",
+  video: "Video",
   image: "Ảnh",
 };
 
@@ -253,4 +257,156 @@ export interface FileUploadProgressState {
   error?: string;
   /** Server-returned fileId if success */
   uploadedFileId?: string;
+}
+
+// ============================================================
+// View All Files – shared types
+// ============================================================
+
+export interface AttachmentDto {
+  fileId: string;
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+  uploadedAt: string;
+  thumbnailUrl?: string;
+  duration?: number;
+  dimensions?: { width: number; height: number };
+}
+
+export interface MessageDto {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  attachments?: AttachmentDto[];
+}
+
+export interface ExtractedFile {
+  id: string;
+  name: string;
+  url: string;
+  thumbnailUrl?: string;
+  size: number;
+  contentType: string;
+  uploadedAt: string;
+  senderId: string;
+  senderName: string;
+  messageId: string;
+  dimensions?: { width: number; height: number };
+  duration?: number;
+}
+
+export interface FileFilters {
+  images: boolean;
+  videos: boolean;
+  pdf: boolean;
+  word: boolean;
+  excel: boolean;
+  powerpoint: boolean;
+  other: boolean;
+}
+
+export type FileSortOption =
+  | "newest"
+  | "oldest"
+  | "name-asc"
+  | "size-desc"
+  | "size-asc";
+
+export type ViewFileType = "media" | "docs";
+
+export interface ViewFilesState {
+  // State
+  isModalOpen: boolean;
+  currentGroupId: string | null;
+  currentWorkTypeId: string | null;
+  allFiles: ExtractedFile[];
+  filteredFiles: ExtractedFile[];
+  displayedFiles: ExtractedFile[];
+  filters: FileFilters;
+  sortBy: FileSortOption;
+  searchQuery: string;
+  currentPage: number;
+  pageSize: number;
+  totalFiles: number;
+  previewFile: ExtractedFile | null;
+  previewPosition: number | null;
+  isLoading: boolean;
+  error: Error | null;
+
+  // Actions
+  openModal: (
+    files: ExtractedFile[],
+    groupId: string,
+    workTypeId?: string,
+  ) => void;
+  closeModal: () => void;
+  setFilters: (filters: Partial<FileFilters>) => void;
+  resetFilters: () => void;
+  setSortBy: (sortBy: FileSortOption) => void;
+  setSearchQuery: (query: string) => void;
+  clearSearch: () => void;
+  goToPage: (page: number) => void;
+  nextPage: () => void;
+  prevPage: () => void;
+  setPageSize: (size: number) => void;
+  setPreviewFile: (file: ExtractedFile | null, position?: number) => void;
+  nextPreview: () => void;
+  prevPreview: () => void;
+  clearPreview: () => void;
+  setLoading: (isLoading: boolean) => void;
+  setError: (error: Error | null) => void;
+  updateFiles: (files: ExtractedFile[]) => void;
+  updateFilesFromMessages: (
+    messages: MessageDto[],
+    groupId: string,
+    workTypeId?: string,
+  ) => void;
+  reset: () => void;
+}
+
+// ============================================================
+// Component prop types
+// ============================================================
+
+export interface FileCardProps {
+  file: ExtractedFile;
+  onPreview?: (file: ExtractedFile, position: number) => void;
+  position: number;
+}
+
+export interface FileListItemProps {
+  file: ExtractedFile;
+  onPreview?: (file: ExtractedFile, position: number) => void;
+  position: number;
+}
+
+export interface FileGridProps {
+  files: ExtractedFile[];
+  onPreviewFile?: (file: ExtractedFile, position: number) => void;
+}
+
+export interface FileListProps {
+  files: ExtractedFile[];
+  onPreviewFile?: (file: ExtractedFile, position: number) => void;
+}
+
+export interface FileFiltersProps {
+  onFilterChange?: (filters: FileFilters) => void;
+  showCounts?: boolean;
+}
+
+export interface FilePaginationProps {
+  onPageChange?: (page: number) => void;
+}
+
+export interface FileSortDropdownProps {
+  onSortChange?: (sort: FileSortOption) => void;
+  fileType?: ViewFileType;
+}
+
+export interface FileSearchBarProps {
+  placeholder?: string;
+  onSearch?: (query: string) => void;
 }

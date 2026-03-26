@@ -1,8 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import FilePreviewModal from "../FilePreviewModal";
 import * as usePdfPreviewModule from "@/hooks/usePdfPreview";
+import { getVideoStreamBlob, getVideoThumbnailInfo } from "@/api/files.api";
+
+vi.mock("@/api/files.api", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/api/files.api")>("@/api/files.api");
+
+  return {
+    ...actual,
+    downloadFile: vi.fn(),
+    getVideoStreamBlob: vi.fn(),
+    getVideoThumbnailInfo: vi.fn(),
+  };
+});
 
 // Mock the usePdfPreview hook
 const mockUsePdfPreview = vi.spyOn(usePdfPreviewModule, "usePdfPreview");
@@ -23,11 +37,29 @@ describe("FilePreviewModal", () => {
     error: null,
     navigateToPage: vi.fn(),
     retry: vi.fn(),
+    canDownload: true,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockUsePdfPreview.mockReturnValue(defaultHookReturn);
+    vi.mocked(getVideoThumbnailInfo).mockResolvedValue({
+      fileId: "video-file-123",
+      fileName: "demo.mp4",
+      imageBase64: btoa("thumb"),
+      contentType: "image/jpeg",
+      canDownload: true,
+      hasWatermark: true,
+      size: "large",
+      fromCache: false,
+    });
+    vi.stubGlobal(
+      "URL",
+      Object.assign(globalThis.URL, {
+        createObjectURL: vi.fn(() => "blob:http://localhost:3000/mock-video"),
+        revokeObjectURL: vi.fn(),
+      }),
+    );
   });
 
   describe("TC-FM-001: Renders modal with correct file data", () => {
@@ -49,16 +81,16 @@ describe("FilePreviewModal", () => {
       // THEN
       expect(screen.getByTestId("file-preview-backdrop")).toBeInTheDocument();
       expect(
-        screen.getByTestId("file-preview-modal-container")
+        screen.getByTestId("file-preview-modal-container"),
       ).toBeInTheDocument();
       expect(
-        screen.getByTestId("file-preview-modal-header")
+        screen.getByTestId("file-preview-modal-header"),
       ).toBeInTheDocument();
       expect(
-        screen.getByTestId("file-preview-content-area")
+        screen.getByTestId("file-preview-content-area"),
       ).toBeInTheDocument();
       expect(
-        screen.getByTestId("file-preview-modal-footer")
+        screen.getByTestId("file-preview-modal-footer"),
       ).toBeInTheDocument();
     });
 
@@ -498,7 +530,7 @@ describe("FilePreviewModal", () => {
 
       // THEN
       const loadingSkeleton = screen.getByTestId(
-        "file-preview-loading-skeleton"
+        "file-preview-loading-skeleton",
       );
       expect(loadingSkeleton).toBeInTheDocument();
       expect(screen.getByText(/Đang tải trang/)).toBeInTheDocument();
@@ -517,7 +549,7 @@ describe("FilePreviewModal", () => {
 
       // THEN
       expect(
-        screen.queryByTestId("file-preview-image")
+        screen.queryByTestId("file-preview-image"),
       ).not.toBeInTheDocument();
     });
   });
@@ -541,7 +573,7 @@ describe("FilePreviewModal", () => {
       expect(image).toBeInTheDocument();
       expect(image).toHaveAttribute(
         "src",
-        "blob:http://localhost:3000/mock-image"
+        "blob:http://localhost:3000/mock-image",
       );
       expect(image).toHaveAttribute("alt", "Trang 2 của test-document.pdf");
     });
@@ -560,10 +592,95 @@ describe("FilePreviewModal", () => {
 
       // THEN
       expect(
-        screen.queryByTestId("file-preview-loading-skeleton")
+        screen.queryByTestId("file-preview-loading-skeleton"),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByTestId("file-preview-error-state")
+        screen.queryByTestId("file-preview-error-state"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should load and render video player for video files", async () => {
+      vi.mocked(getVideoStreamBlob).mockResolvedValue(
+        new Blob(["video"], { type: "video/mp4" }),
+      );
+
+      render(
+        <FilePreviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          fileId="video-file-123"
+          fileName="demo.mp4"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(getVideoStreamBlob).toHaveBeenCalledWith("video-file-123");
+      });
+      expect(getVideoThumbnailInfo).toHaveBeenCalledWith("video-file-123");
+
+      const video = await screen.findByTestId("file-preview-video");
+      expect(video).toBeInTheDocument();
+      expect(video).toHaveAttribute(
+        "src",
+        "blob:http://localhost:3000/mock-video",
+      );
+      expect(mockUsePdfPreview).toHaveBeenLastCalledWith(null);
+    });
+
+    it("should call video stream API once in StrictMode remount", async () => {
+      vi.mocked(getVideoStreamBlob).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(
+              () => resolve(new Blob(["video"], { type: "video/mp4" })),
+              20,
+            );
+          }),
+      );
+
+      render(
+        <StrictMode>
+          <FilePreviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            fileId="video-file-123"
+            fileName="demo.mp4"
+          />
+        </StrictMode>,
+      );
+
+      await waitFor(() => {
+        expect(getVideoStreamBlob).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("should hide video download button when canDownload is false", async () => {
+      vi.mocked(getVideoStreamBlob).mockResolvedValue(
+        new Blob(["video"], { type: "video/mp4" }),
+      );
+      vi.mocked(getVideoThumbnailInfo).mockResolvedValue({
+        fileId: "video-file-123",
+        fileName: "demo.mp4",
+        imageBase64: btoa("thumb"),
+        contentType: "image/jpeg",
+        canDownload: false,
+        hasWatermark: true,
+        size: "large",
+        fromCache: false,
+      });
+
+      render(
+        <FilePreviewModal
+          isOpen={true}
+          onClose={vi.fn()}
+          fileId="video-file-123"
+          fileName="demo.mp4"
+        />,
+      );
+
+      await screen.findByTestId("file-preview-video");
+      expect(
+        screen.queryByTestId("file-download-button"),
       ).not.toBeInTheDocument();
     });
   });
@@ -585,7 +702,7 @@ describe("FilePreviewModal", () => {
       // THEN
       await waitFor(() => {
         const closeButton = screen.getByTestId(
-          "file-preview-modal-close-button"
+          "file-preview-modal-close-button",
         );
         expect(closeButton).toHaveFocus();
       });

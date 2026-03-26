@@ -165,7 +165,6 @@ export function useSendChatMessage({
           });
 
           if (result.failedCount > 0) {
-            toast.error("Lỗi upload file. Vui lòng thử lại.");
             setIsUploading(false);
             return;
           }
@@ -200,7 +199,7 @@ export function useSendChatMessage({
 
           if (batchResult.partialSuccess) {
             toast.warning(
-              `${batchResult.successCount}/${batchResult.totalFiles} file upload thành công`,
+              `${batchResult.successCount}/${batchResult.totalFiles} file tải lên thành công`,
             );
           }
 

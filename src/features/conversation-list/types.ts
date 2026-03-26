@@ -3,7 +3,10 @@
  */
 
 import type { DirectConversation } from "@/types/conversations";
-import type { DepartmentColleagueDto, SharedDepartmentDto } from "@/types/identity";
+import type {
+  DepartmentColleagueDto,
+  SharedDepartmentDto,
+} from "@/types/identity";
 
 /**
  * Target for chat selection callback
@@ -30,6 +33,7 @@ export interface ContactItem {
   isLeader: boolean | null; // null = unknown, true if leader in any shared department
   isOnline: boolean; // For future online/offline feature
   hasConversation: boolean;
+  isDisabled?: boolean; // When true, conversation is disabled (cannot chat)
   conversation?: DirectConversation;
   colleague?: DepartmentColleagueDto;
   sharedDepartments: SharedDepartmentDto[];
@@ -65,7 +69,7 @@ export interface CategoryItemProps {
         content: string;
         sentAt: string;
         parentMessageId?: string | null;
-        parentMessageContent?:string | null;
+        parentMessageContent?: string | null;
       } | null;
     }>;
   };

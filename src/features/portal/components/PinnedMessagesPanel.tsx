@@ -1,7 +1,15 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Star, StarOff, Quote, ImageIcon, File, Loader2 } from "lucide-react";
+import {
+  Star,
+  StarOff,
+  Quote,
+  ImageIcon,
+  File,
+  Loader2,
+  X,
+} from "lucide-react";
 import FileIcon from "@/components/files/FileIcon";
 import MessageImage from "@/features/portal/workspace/MessageImage";
 import { cn } from "@/lib/utils";
@@ -21,6 +29,67 @@ import {
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages"; // Fetch DM conversations
 import type { StarredMessageDto } from "@/types/pinned_and_starred";
+
+/**
+ * Remove Vietnamese diacritics for accent-insensitive search
+ * e.g. "hình" → "hinh", "đẹp" → "dep"
+ */
+function removeDiacritics(str: string): string {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+}
+
+/**
+ * Check if text includes query (diacritics-insensitive)
+ */
+function includesNormalized(text: string, query: string): boolean {
+  return removeDiacritics(text.toLowerCase()).includes(
+    removeDiacritics(query.toLowerCase()),
+  );
+}
+
+/**
+ * Highlight matching text with a yellow background (diacritics-insensitive)
+ */
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const normalizedText = removeDiacritics(text.toLowerCase());
+  const normalizedQuery = removeDiacritics(query.toLowerCase());
+  if (!normalizedText.includes(normalizedQuery)) return <>{text}</>;
+
+  const result: React.ReactNode[] = [];
+  let remaining = text;
+  let normalizedRemaining = normalizedText;
+  let key = 0;
+
+  while (normalizedRemaining.length > 0) {
+    const idx = normalizedRemaining.indexOf(normalizedQuery);
+    if (idx === -1) {
+      result.push(remaining);
+      break;
+    }
+    if (idx > 0) {
+      result.push(remaining.slice(0, idx));
+    }
+    result.push(
+      <mark
+        key={key++}
+        className="bg-yellow-200 text-inherit rounded-sm px-0.5"
+      >
+        {remaining.slice(idx, idx + normalizedQuery.length)}
+      </mark>,
+    );
+    remaining = remaining.slice(idx + normalizedQuery.length);
+    normalizedRemaining = normalizedRemaining.slice(
+      idx + normalizedQuery.length,
+    );
+  }
+
+  return <>{result}</>;
+}
 
 /**
  * Format file size from bytes to human-readable format
@@ -120,68 +189,89 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
       return timeB - timeA; // Newest first
     });
 
-    return sortedData.map((starred: StarredMessageDto): PinnedMessage => {
-      const msg = starred.message;
+    return sortedData
+      .map((starred: StarredMessageDto): PinnedMessage | null => {
+        const msg = starred.message;
 
-      // 🆕 First check if it's a DM conversation
-      const dmConversation = directConversations.find(
-        (dm) => dm.id === msg.conversationId,
-      );
+        // 🆕 First check if it's a DM conversation
+        const dmConversation = directConversations.find(
+          (dm) => dm.id === msg.conversationId,
+        );
 
-      // Find category and conversation info by conversationId (for GRP)
-      const category = categoriesData?.find((cat) =>
-        cat.conversations?.some(
+        // Find category and conversation info by conversationId (for GRP)
+        const category = categoriesData?.find((cat) =>
+          cat.conversations?.some(
+            (conv) => conv.conversationId === msg.conversationId,
+          ),
+        );
+        const conversation = category?.conversations?.find(
           (conv) => conv.conversationId === msg.conversationId,
-        ),
-      );
-      const conversation = category?.conversations?.find(
-        (conv) => conv.conversationId === msg.conversationId,
-      );
+        );
 
-      // Determine message type based on contentType
-      let messageType: "text" | "image" | "file" = "text";
-      if (msg.contentType === "IMG") messageType = "image";
-      else if (msg.contentType === "FILE" || msg.contentType === "VID")
-        messageType = "file";
-      // SYS và TASK messages hiển thị dạng text
+        // Skip messages where category/conversation (GRP) or DM conversation not found
+        const isDM = !!dmConversation;
+        if (!isDM && (!category || !conversation)) return null;
 
-      // 🆕 DM: Show "Tin nhắn cá nhân với [name]" instead of Category • Conversation
-      const isDM = !!dmConversation;
-      const groupName = isDM
-        ? `Tin nhắn cá nhân với ${dmConversation.name}`
-        : category?.name || "[Category]";
-      const workTypeName = isDM
-        ? undefined // No workTypeName for DM
-        : conversation?.conversationName || "[Conversation]";
+        // Determine message type based on contentType
+        let messageType: "text" | "image" | "file" = "text";
+        if (msg.contentType === "IMG") messageType = "image";
+        else if (msg.contentType === "FILE" || msg.contentType === "VID")
+          messageType = "file";
+        // SYS và TASK messages hiển thị dạng text
 
-      return {
-        id: msg.id,
-        sender: msg.senderFullName || msg.senderName || "Unknown",
-        content: msg.content || "",
-        time: msg.sentAt,
-        type: messageType,
-        groupName, // Category name or "Tin nhắn cá nhân với [name]"
-        groupId: isDM ? undefined : category?.id, // Category ID (not for DM)
-        workTypeName, // Conversation name (undefined for DM)
-        workTypeId: isDM ? undefined : conversation?.conversationId, // Conversation ID (not for DM)
-        chatId: msg.conversationId, // Add chatId for navigation
-        fileInfo: msg.attachments?.[0]
-          ? {
-              id: msg.attachments[0].fileId || "",
-              name: msg.attachments[0].fileName || "file",
-              url: msg.attachments[0].fileId || "",
-              type: msg.attachments[0].contentType?.startsWith("image/")
-                ? "image"
-                : "other",
-              size: msg.attachments[0].fileSize?.toString(),
-            }
-          : undefined,
-      };
-    });
+        // 🆕 DM: Show "Tin nhắn cá nhân với [name]" instead of Category • Conversation
+        const groupName = isDM
+          ? `Tin nhắn cá nhân với ${dmConversation.name}`
+          : category!.name || "[Category]";
+        const workTypeName = isDM
+          ? undefined // No workTypeName for DM
+          : conversation!.conversationName || "[Conversation]";
+
+        return {
+          id: msg.id,
+          sender: msg.senderFullName || msg.senderName || "Unknown",
+          content: msg.content || "",
+          time: msg.sentAt,
+          type: messageType,
+          groupName, // Category name or "Tin nhắn cá nhân với [name]"
+          groupId: isDM ? undefined : category!.id, // Category ID (not for DM)
+          workTypeName, // Conversation name (undefined for DM)
+          workTypeId: isDM ? undefined : conversation!.conversationId, // Conversation ID (not for DM)
+          chatId: msg.conversationId, // Add chatId for navigation
+          fileInfo: msg.attachments?.[0]
+            ? {
+                id: msg.attachments[0].fileId || "",
+                name: msg.attachments[0].fileName || "file",
+                url: msg.attachments[0].fileId || "",
+                type: msg.attachments[0].contentType?.startsWith("image/")
+                  ? "image"
+                  : "other",
+                size: msg.attachments[0].fileSize?.toString(),
+              }
+            : undefined,
+        };
+      })
+      .filter((m): m is PinnedMessage => m !== null);
   }, [starredData, categoriesData, directConversations]);
+
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  const filteredMessages = React.useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return messages;
+    return messages.filter(
+      (m) =>
+        includesNormalized(m.content || "", q) ||
+        includesNormalized(m.sender || "", q) ||
+        includesNormalized(m.groupName || "", q) ||
+        includesNormalized(m.workTypeName || "", q) ||
+        includesNormalized(m.fileInfo?.name || "", q),
+    );
+  }, [messages, searchQuery]);
+
   const grouped = React.useMemo(() => {
     const groups: Record<string, PinnedMessage[]> = {};
-    messages.forEach((m: PinnedMessage) => {
+    filteredMessages.forEach((m: PinnedMessage) => {
       let dateObj = new Date(m.time);
 
       // Nếu không phải ngày hợp lệ → fallback về hôm nay
@@ -196,17 +286,34 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
       groups[dateKey] = groups[dateKey] ? [...groups[dateKey], m] : [m];
     });
     return groups;
-  }, [messages]);
+  }, [filteredMessages]);
 
   const hasMessages = messages.length > 0;
+  const hasFilteredMessages = filteredMessages.length > 0;
   const today = new Date().toISOString().split("T")[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
 
   return (
     <aside className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-y-auto min-h-0">
       <div className="border-b border-gray-200 p-3">
-        <div className="mt-3 flex items-center gap-2">
-          <Input placeholder="Tìm kiếm" className="h-9 text-sm" />
+        <div className="mt-3 flex items-center gap-2 relative">
+          <Input
+            placeholder="Tìm kiếm"
+            className="h-9 text-sm pr-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="pinned-messages-search-input"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              data-testid="pinned-messages-search-clear"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -254,8 +361,18 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
           </div>
         ) : null}
 
+        {/* No search results */}
+        {!isLoading && !isError && hasMessages && !hasFilteredMessages ? (
+          <div className="flex flex-col items-center justify-center text-center text-gray-500 mt-16">
+            <p className="text-sm max-w-[220px]">
+              Không tìm thấy tin đánh dấu phù hợp với &ldquo;{searchQuery}
+              &rdquo;
+            </p>
+          </div>
+        ) : null}
+
         {/* Messages List */}
-        {!isLoading && !isError && hasMessages ? (
+        {!isLoading && !isError && hasFilteredMessages ? (
           <div className="space-y-4">
             {Object.entries(grouped).map(([date, msgs]) => (
               <div key={date}>
@@ -339,7 +456,10 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                         {/* Nội dung chính */}
                         <div className="text-sm text-gray-800">
                           <span className="font-medium">
-                            {msg.sender}{" "}
+                            <HighlightText
+                              text={msg.sender}
+                              query={searchQuery}
+                            />{" "}
                             <span className="text-xs text-gray-500">
                               {isValid ? `- ${displayTime} ${displayDate}` : ""}
                             </span>
@@ -380,7 +500,10 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                               </div>
                               <div className="flex-1 min-w-0 overflow-hidden">
                                 <p className="text-xs font-medium truncate">
-                                  {msg.fileInfo.name || "File"}
+                                  <HighlightText
+                                    text={msg.fileInfo.name || "File"}
+                                    query={searchQuery}
+                                  />
                                 </p>
                                 <div className="flex items-center gap-2 text-[10px] text-gray-600 flex-wrap">
                                   {msg.fileInfo.size && (
@@ -406,16 +529,35 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                           {/* Tin nhắn text thuần */}
                           {msg.type === "text" && (
                             <div className="mt-1 text-[13px] text-gray-700">
-                              {msg.content?.slice(0, 100)}
-                              {msg.content && msg.content.length > 100
-                                ? "…"
-                                : ""}
+                              <HighlightText
+                                text={
+                                  (msg.content?.slice(0, 100) || "") +
+                                  (msg.content && msg.content.length > 100
+                                    ? "…"
+                                    : "")
+                                }
+                                query={searchQuery}
+                              />
                             </div>
                           )}
 
                           <div className="mt-2 text-[11px] text-gray-500">
-                            {msg.groupName}{" "}
-                            {msg.workTypeName ? ` • ${msg.workTypeName}` : ""}
+                            <HighlightText
+                              text={msg.groupName || ""}
+                              query={searchQuery}
+                            />{" "}
+                            {msg.workTypeName ? (
+                              <>
+                                {" "}
+                                •{" "}
+                                <HighlightText
+                                  text={msg.workTypeName}
+                                  query={searchQuery}
+                                />
+                              </>
+                            ) : (
+                              ""
+                            )}
                           </div>
                         </div>
                       </div>

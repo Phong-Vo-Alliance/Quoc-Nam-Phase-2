@@ -8,12 +8,16 @@ import React, {
 } from "react";
 import {
   chatHub,
+  identityHub,
   taskHub,
   type SignalRConnectionState,
 } from "@/lib/signalr";
 import { useAuthStore } from "@/stores/authStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { registerAllEventHandlers, resetDispatcherState } from "@/lib/signalr-event-dispatcher";
+import {
+  registerAllEventHandlers,
+  resetDispatcherState,
+} from "@/lib/signalr-event-dispatcher";
 import { groupManager } from "@/lib/signalr-group-manager";
 
 interface SignalRContextValue {
@@ -70,6 +74,17 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
         // Task hub failure is non-critical, continue with chat hub only
       }
 
+      // Connect Identity Hub (parallel)
+      try {
+        await identityHub.start(accessToken || undefined);
+      } catch (identityError) {
+        console.warn(
+          "[SignalRProvider] Identity hub connection failed (non-critical):",
+          identityError,
+        );
+        // Identity hub failure is non-critical, continue with chat hub only
+      }
+
       if (mountedRef.current && shouldConnectRef.current) {
         setConnectionState("Connected");
 
@@ -97,11 +112,8 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
       // Leave all SignalR groups
       groupManager.leaveAll();
 
-      // Disconnect both hubs
-      await Promise.all([
-        chatHub.stop(),
-        // taskHub.stop(),
-      ]);
+      // Disconnect all hubs
+      await Promise.all([chatHub.stop(), taskHub.stop(), identityHub.stop()]);
 
       if (mountedRef.current) {
         setConnectionState("Disconnected");
@@ -147,7 +159,8 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
       // The connection will be stopped when component re-mounts with new state
       if (!connectionAttemptRef.current) {
         chatHub.stop();
-        // taskHub.stop(); // Also stop Task Hub
+        taskHub.stop();
+        identityHub.stop();
       }
     };
   }, []);

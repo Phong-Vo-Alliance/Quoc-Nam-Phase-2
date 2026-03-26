@@ -499,6 +499,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     [directMessagesQuery.data],
   );
 
+  // Check if current DM conversation is disabled
+  const isConversationDisabled = React.useMemo(() => {
+    if (selectedConversation?.type !== "dm") return false;
+    const dm = directConversations.find(
+      (d) => d.id === selectedConversation.id,
+    );
+    return dm?.isDisabled === true;
+  }, [selectedConversation, directConversations]);
+
   // 🆕 NEW: Check if conversation list is still loading (to prevent showing ChatMainContainer too early)
   const activeTabType = selectedConversation?.type === "group" ? "group" : "dm";
   const isConversationListInitialLoading =
@@ -898,6 +907,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                           setForceLeaderMine((prev) => prev + 1);
                         }
                       }}
+                      isConversationDisabled={isConversationDisabled}
                     />
                   ) : (
                     <EmptyChatState isMobile={true} />
@@ -1174,6 +1184,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 setForceLeaderMine((prev) => prev + 1);
               }
             }}
+            isConversationDisabled={isConversationDisabled}
           />
         ) : (
           <EmptyChatState isMobile={false} />

@@ -67,6 +67,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   onScrollComplete,
   onConfirmInfoSuccess,
   onViewTaskDetail,
+  isConversationDisabled = false,
 }) => {
   const user = useAuthStore((state) => state.user);
   const inputRef = useRef<MentionInputHandle>(null);
@@ -391,6 +392,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           selectedCategoryId ? handleConversationChange : undefined
         }
         onSearchSelectMessage={handleSearchJumpToMessage}
+        isConversationDisabled={isConversationDisabled}
       />
 
       {/* Task banner */}
@@ -477,6 +479,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         isPending={sendMessageMutation.isPending}
         isUploading={isUploading}
         replyTarget={replyTarget}
+        disabled={isConversationDisabled}
         onInputChange={handleInputChange}
         onSend={handleSend}
         onMentionsChange={setCurrentMentions}

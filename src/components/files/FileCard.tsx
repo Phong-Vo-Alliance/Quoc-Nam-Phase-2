@@ -3,25 +3,73 @@
  * Displays a single file in grid layout
  */
 
-import { useState } from 'react';
-import { Download, Eye, ExternalLink } from 'lucide-react';
-import { getFileIcon, getFileTypeColor, getFileTypeLabel } from '@/utils/fileIcons';
-import { formatFileSize, formatDate, truncateFilename } from '@/utils/fileFormatting';
-import { useViewFilesStore } from '@/stores/viewFilesStore';
-import type { FileCardProps } from '@/types/files';
+import { useEffect, useState } from "react";
+import { Download, Eye, Play } from "lucide-react";
+import { getVideoThumbnail } from "@/api/files.api";
+import {
+  getFileIcon,
+  getFileTypeColor,
+  getFileTypeLabel,
+} from "@/utils/fileIcons";
+import {
+  formatFileSize,
+  formatDate,
+  truncateFilename,
+} from "@/utils/fileFormatting";
+import { useViewFilesStore } from "@/stores/viewFilesStore";
+import type { FileCardProps } from "@/types/files";
 
-export default function FileCard({
-  file,
-  onPreview,
-  position,
-}: FileCardProps) {
+export default function FileCard({ file, onPreview, position }: FileCardProps) {
   const [isHovering, setIsHovering] = useState(false);
+  const [videoThumbnailUrl, setVideoThumbnailUrl] = useState<string | null>(
+    null,
+  );
   const Icon = getFileIcon(file);
   const iconColor = getFileTypeColor(file);
   const typeLabel = getFileTypeLabel(file);
   const { previewFile } = useViewFilesStore();
+  const isVideoFile = file.contentType.startsWith("video/");
 
   const isPreviewActive = previewFile?.id === file.id;
+
+  useEffect(() => {
+    if (!isVideoFile) {
+      setVideoThumbnailUrl(null);
+      return;
+    }
+
+    let isCancelled = false;
+    let objectUrl: string | null = null;
+
+    async function loadVideoThumbnail() {
+      try {
+        const blob = await getVideoThumbnail(file.id);
+        if (isCancelled) {
+          return;
+        }
+
+        objectUrl = URL.createObjectURL(blob);
+        setVideoThumbnailUrl(objectUrl);
+      } catch (error) {
+        if (!isCancelled) {
+          setVideoThumbnailUrl(null);
+          console.error(
+            `Failed to load video thumbnail for ${file.name}:`,
+            error,
+          );
+        }
+      }
+    }
+
+    void loadVideoThumbnail();
+
+    return () => {
+      isCancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [file.id, file.name, isVideoFile]);
 
   const handlePreview = () => {
     onPreview?.(file, position);
@@ -30,7 +78,7 @@ export default function FileCard({
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
     // TODO: Implement download logic
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = file.url;
     link.download = file.name;
     link.click();
@@ -40,8 +88,8 @@ export default function FileCard({
     <div
       className={`group relative flex flex-col gap-2 p-3 rounded-lg border-2 transition-all ${
         isPreviewActive
-          ? 'border-blue-500 bg-blue-50'
-          : 'border-gray-200 hover:border-blue-400 bg-white'
+          ? "border-blue-500 bg-blue-50"
+          : "border-gray-200 hover:border-blue-400 bg-white"
       }`}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
@@ -54,18 +102,29 @@ export default function FileCard({
         data-testid={`chat-file-card-preview-${file.id}`}
       >
         {/* Media Preview or Icon */}
-        {file.contentType.startsWith('image/') ? (
+        {file.contentType.startsWith("image/") ? (
           <img
             src={file.url}
             alt={file.name}
             className="w-full h-full object-cover"
             loading="lazy"
           />
-        ) : file.contentType.startsWith('video/') ? (
-          <video
-            src={file.url}
-            className="w-full h-full object-cover"
-          />
+        ) : isVideoFile ? (
+          <div className="relative flex h-full w-full items-center justify-center bg-gray-900/5">
+            {videoThumbnailUrl ? (
+              <img
+                src={videoThumbnailUrl}
+                alt={file.name}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <Icon className={`h-8 w-8 ${iconColor}`} />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <Play className="h-10 w-10 fill-white text-white drop-shadow" />
+            </div>
+          </div>
         ) : (
           <Icon className={`h-8 w-8 ${iconColor}`} />
         )}
@@ -106,9 +165,7 @@ export default function FileCard({
 
         {/* File Type & Size */}
         <div className="flex items-center justify-between gap-2 mt-1">
-          <span className="text-xs text-gray-500 truncate">
-            {typeLabel}
-          </span>
+          <span className="text-xs text-gray-500 truncate">{typeLabel}</span>
           <span className="text-xs text-gray-500 whitespace-nowrap">
             {formatFileSize(file.size)}
           </span>

@@ -284,94 +284,6 @@ const BlobImage: React.FC<{
 };
 
 /**
- * BlobVideo component - Fetches video blob from API and renders <video>
- */
-const BlobVideo: React.FC<{
-  fileId?: string;
-  fallbackUrl?: string;
-  className?: string;
-  controls?: boolean;
-}> = ({ fileId, fallbackUrl, className, controls = true }) => {
-  const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState(false);
-  const accessToken = useAuthStore((state) => state.accessToken);
-
-  React.useEffect(() => {
-    if (!fileId) {
-      if (fallbackUrl) setObjectUrl(fallbackUrl);
-      return;
-    }
-
-    let isMounted = true;
-    let localUrl: string | null = null;
-
-    const fetchVideo = async () => {
-      setIsLoading(true);
-      setError(false);
-      try {
-        const apiEndpoint = `${API_ENDPOINTS.file}/api/Files/${fileId}/download`;
-        const response = await fetch(apiEndpoint, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        if (isMounted) {
-          localUrl = URL.createObjectURL(blob);
-          setObjectUrl(localUrl);
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.error("Failed to fetch video:", err);
-        if (isMounted) {
-          setError(true);
-          setIsLoading(false);
-          if (fallbackUrl) setObjectUrl(fallbackUrl);
-        }
-      }
-    };
-
-    fetchVideo();
-
-    return () => {
-      isMounted = false;
-      if (localUrl) URL.revokeObjectURL(localUrl);
-    };
-  }, [fileId, fallbackUrl, accessToken]);
-
-  if (isLoading) {
-    return (
-      <div
-        className={`flex items-center justify-center bg-gray-100 ${className || ""}`}
-      >
-        <div className="text-xs text-gray-400">Đang tải video...</div>
-      </div>
-    );
-  }
-
-  if (error && !objectUrl) {
-    return (
-      <div
-        className={`flex items-center justify-center bg-gray-100 ${className || ""}`}
-      >
-        <div className="text-xs text-gray-400">Lỗi tải video</div>
-      </div>
-    );
-  }
-
-  if (!objectUrl) return null;
-
-  return (
-    <video
-      src={objectUrl}
-      className={className}
-      controls={controls}
-      data-testid="file-preview-video"
-    />
-  );
-};
-
-/**
  * Simple Modal component using React Portal instead of Radix Dialog
  * This avoids the infinite re-render loop issue with Radix Dialog
  */
@@ -704,7 +616,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       setImagePreviewFileName(f.name);
       setImagePreviewOpen(true);
     } else {
-      // For video and documents, use old SimpleModal
+      // For video and documents, use the shared file preview modal
       setPreviewFile(f);
     }
   };
@@ -1119,43 +1031,16 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         </div>
       </SimpleModal>
 
-      {/* Modal preview đơn giản - Using React Portal instead of Radix Dialog */}
-      <SimpleModal
-        open={!!previewFile}
-        onClose={handleClosePreview}
-        title={previewFile?.name || "Xem trước"}
-        maxWidth="max-w-4xl"
-        testId="file-preview-modal"
-      >
-        {previewFile && previewFile.kind === "image" && (
-          <BlobImage
-            fileId={previewFile.fileId}
-            fallbackUrl={previewFile.url}
-            endpoint="preview"
-            alt={previewFile.name}
-            className="w-full max-h-[70vh] object-contain rounded-lg"
-            draggable={false}
-          />
-        )}
-
-        {previewFile && previewFile.kind === "video" && (
-          <BlobVideo
-            fileId={previewFile.fileId}
-            fallbackUrl={previewFile.url}
-            className="w-full max-h-[70vh] rounded-lg"
-            controls
-          />
-        )}
-
-        {previewFile && previewFile.kind === "doc" && (
+      {previewFile &&
+        createPortal(
           <FilePreviewModal
             isOpen={true}
             fileId={previewFile.fileId || ""}
             fileName={previewFile.name}
-            onClose={() => setPreviewFile(null)}
-          />
+            onClose={handleClosePreview}
+          />,
+          document.body,
         )}
-      </SimpleModal>
 
       {/* ImagePreviewModal for images - Using Portal to render at body level */}
       {imagePreviewOpen &&

@@ -12,12 +12,71 @@ import type { ChatTarget } from "@/stores/conversationStore";
 import type { CategoryWithUnread } from "@/types/categories";
 import type { ChatMessage, GetMessagesResponse } from "@/types/messages";
 import type { ConversationMember } from "@/types/conversations";
-import type { MemberRemovedEvent } from "@/types/signalr-events";
+import type {
+  MemberRemovedEvent,
+  ConversationDeletedEvent,
+} from "@/types/signalr-events";
+
+// Dedup: track recently toasted category move events to avoid duplicate toasts
+// when both Assigned and Unassigned fire for the same conversationId
+const recentCategoryMoveToasts = new Set<string>();
+const DEDUP_TIMEOUT_MS = 3000;
+
+function showCategoryMoveToast(
+  conversationId: string,
+  convName: string,
+  targetCategoryName: string | null,
+): void {
+  if (recentCategoryMoveToasts.has(conversationId)) return;
+  recentCategoryMoveToasts.add(conversationId);
+  setTimeout(
+    () => recentCategoryMoveToasts.delete(conversationId),
+    DEDUP_TIMEOUT_MS,
+  );
+
+  const displayName = convName || "Loại việc";
+  if (targetCategoryName) {
+    toast.info(
+      `Loại việc ${displayName} đã được chuyển sang nhóm ${targetCategoryName}`,
+    );
+  } else {
+    toast.info(`Loại việc ${displayName} đã được chuyển sang nhóm khác`);
+  }
+}
 
 export interface CategoryCacheContext {
   queryClient: QueryClient;
   getCurrentUserId: () => string | undefined;
   getActiveConversationId: () => string | undefined;
+}
+
+/**
+ * Sort categories by latest message timestamp (newest first)
+ * Matches the display order in ConversationListSidebar
+ */
+function sortCategoriesByLatestMessage(
+  categories: CategoryWithUnread[],
+): CategoryWithUnread[] {
+  return [...categories].sort((a, b) => {
+    const getLatestTime = (cat: CategoryWithUnread) => {
+      const latestConv = cat.conversations
+        ?.filter((conv) => conv.lastMessage !== null)
+        .sort((x, y) => {
+          const timeX = x.lastMessage?.sentAt || "";
+          const timeY = y.lastMessage?.sentAt || "";
+          return new Date(timeY).getTime() - new Date(timeX).getTime();
+        })[0];
+      return latestConv?.lastMessage?.sentAt || "";
+    };
+
+    const timeA = getLatestTime(a);
+    const timeB = getLatestTime(b);
+
+    if (!timeA && !timeB) return 0;
+    if (!timeA) return 1;
+    if (!timeB) return -1;
+    return new Date(timeB).getTime() - new Date(timeA).getTime();
+  });
 }
 
 export function handleMessageSent(
@@ -341,8 +400,11 @@ export async function handleMemberRemoved(
         let fallbackConv: ChatTarget | null = null;
 
         if (freshCategories?.length) {
+          // Sort theo thứ tự hiển thị sidebar (latest message first)
+          const sorted = sortCategoriesByLatestMessage(freshCategories);
+
           // Ưu tiên 1: Conversation khác trong cùng category
-          const sameCategory = freshCategories.find(
+          const sameCategory = sorted.find(
             (cat) => cat.id === removedCategoryId,
           );
           if (sameCategory?.conversations?.length) {
@@ -356,9 +418,9 @@ export async function handleMemberRemoved(
             };
           }
 
-          // Ưu tiên 2: Conversation đầu tiên của category đầu tiên
+          // Ưu tiên 2: Conversation đầu tiên của category đầu tiên (theo thứ tự sidebar)
           if (!fallbackConv) {
-            for (const cat of freshCategories) {
+            for (const cat of sorted) {
               if (cat.conversations?.length) {
                 const conv = cat.conversations[0];
                 fallbackConv = {
@@ -443,5 +505,313 @@ export async function handleCategoryDepartmentLinked(
       "[CategoryCache] Error handling CategoryDepartmentLinked:",
       error,
     );
+  }
+}
+
+export async function handleCategoryDepartmentUnlinked(
+  ctx: CategoryCacheContext,
+  data: { categoryId: string; categoryName: string; departmentId: string },
+): Promise<void> {
+  const { queryClient } = ctx;
+
+  try {
+    await queryClient.refetchQueries({
+      queryKey: categoriesKeys.list(),
+    });
+
+    toast.warning(`Nhóm chat ${data.categoryName} đã bị xóa`);
+  } catch (error) {
+    console.error(
+      "[CategoryCache] Error handling CategoryDepartmentUnlinked:",
+      error,
+    );
+  }
+}
+
+export async function handleCategoryAssignedToConversation(
+  ctx: CategoryCacheContext,
+  data: {
+    conversationId: string;
+    categoryId: string;
+    conversationName?: string;
+    categoryName?: string;
+  },
+): Promise<void> {
+  const { queryClient } = ctx;
+
+  try {
+    // Get conversation name from cache before refetch
+    const cachedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+      categoriesKeys.list(),
+    );
+    let convName = data.conversationName || null;
+    if (!convName && cachedCategories) {
+      for (const cat of cachedCategories) {
+        const conv = cat.conversations.find(
+          (c) => c.conversationId === data.conversationId,
+        );
+        if (conv) {
+          convName = conv.conversationName;
+          break;
+        }
+      }
+    }
+
+    await queryClient.refetchQueries({
+      queryKey: categoriesKeys.list(),
+    });
+
+    // Find the target category name from fresh data
+    const freshCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+      categoriesKeys.list(),
+    );
+    let targetCategoryName = data.categoryName || null;
+    if (!targetCategoryName && freshCategories) {
+      const targetCat = freshCategories.find(
+        (cat) => cat.id === data.categoryId,
+      );
+      targetCategoryName = targetCat?.name || null;
+    }
+
+    // Also try to get convName from fresh data if still missing
+    if (!convName && freshCategories) {
+      for (const cat of freshCategories) {
+        const conv = cat.conversations.find(
+          (c) => c.conversationId === data.conversationId,
+        );
+        if (conv) {
+          convName = conv.conversationName;
+          break;
+        }
+      }
+    }
+
+    const displayName = convName || "Loại việc";
+    showCategoryMoveToast(data.conversationId, displayName, targetCategoryName);
+  } catch (error) {
+    console.error(
+      "[CategoryCache] Error handling CategoryAssignedToConversation:",
+      error,
+    );
+  }
+}
+
+export async function handleCategoryUnassignedFromConversation(
+  ctx: CategoryCacheContext,
+  data: {
+    conversationId: string;
+    categoryId: string;
+    conversationName?: string;
+    categoryName?: string;
+  },
+): Promise<void> {
+  const { queryClient, getActiveConversationId } = ctx;
+
+  try {
+    const activeConvId = getActiveConversationId();
+
+    // Get conversation name from cache before refetch
+    const cachedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+      categoriesKeys.list(),
+    );
+    let convName = data.conversationName || null;
+    if (!convName && cachedCategories) {
+      for (const cat of cachedCategories) {
+        const conv = cat.conversations.find(
+          (c) => c.conversationId === data.conversationId,
+        );
+        if (conv) {
+          convName = conv.conversationName;
+          break;
+        }
+      }
+    }
+
+    await queryClient.refetchQueries({
+      queryKey: categoriesKeys.list(),
+    });
+
+    const freshCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+      categoriesKeys.list(),
+    );
+
+    // Find which category the conversation moved to (if user has access)
+    let newCategoryName: string | null = null;
+    if (freshCategories) {
+      for (const cat of freshCategories) {
+        if (
+          cat.id !== data.categoryId &&
+          cat.conversations.some(
+            (c) => c.conversationId === data.conversationId,
+          )
+        ) {
+          newCategoryName = cat.name;
+          break;
+        }
+      }
+    }
+
+    const displayName = convName || "Loại việc";
+    showCategoryMoveToast(data.conversationId, displayName, newCategoryName);
+
+    // If the unassigned conversation is the active one, auto-select another
+    // Always switch away since the work type was moved to a different group
+    if (activeConvId === data.conversationId) {
+      let fallbackConv: ChatTarget | null = null;
+
+      if (freshCategories?.length) {
+        // Sort theo thứ tự hiển thị sidebar (latest message first)
+        const sorted = sortCategoriesByLatestMessage(freshCategories);
+
+        // Ưu tiên 1: Loại việc khác trong cùng nhóm (không phải loại việc vừa bị chuyển đi)
+        const sameCategory = sorted.find((cat) => cat.id === data.categoryId);
+        if (sameCategory?.conversations?.length) {
+          const otherConv = sameCategory.conversations.find(
+            (c) => c.conversationId !== data.conversationId,
+          );
+          if (otherConv) {
+            fallbackConv = {
+              type: "group",
+              id: otherConv.conversationId,
+              name: otherConv.conversationName,
+              category: sameCategory.name,
+              categoryId: sameCategory.id,
+            };
+          }
+        }
+
+        // Ưu tiên 2: Nhóm đầu tiên theo thứ tự sidebar có loại việc (không phải loại việc vừa chuyển đi)
+        if (!fallbackConv) {
+          for (const cat of sorted) {
+            const validConv = cat.conversations?.find(
+              (c) => c.conversationId !== data.conversationId,
+            );
+            if (validConv) {
+              fallbackConv = {
+                type: "group",
+                id: validConv.conversationId,
+                name: validConv.conversationName,
+                category: cat.name,
+                categoryId: cat.id,
+              };
+              break;
+            }
+          }
+        }
+      }
+
+      if (fallbackConv) {
+        useConversationStore.getState().setSelectedConversation(fallbackConv);
+      } else {
+        useConversationStore.getState().clearSelectedConversation();
+      }
+    }
+  } catch (error) {
+    console.error(
+      "[CategoryCache] Error handling CategoryUnassignedFromConversation:",
+      error,
+    );
+  }
+}
+
+export async function handleConversationDeleted(
+  ctx: CategoryCacheContext,
+  data: ConversationDeletedEvent,
+): Promise<void> {
+  const { queryClient, getActiveConversationId } = ctx;
+
+  try {
+    // === STEP 1: Lấy thông tin conversation TRƯỚC KHI refetch ===
+    const cachedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+      categoriesKeys.list(),
+    );
+
+    let deletedConvName: string | null = data.conversationName || null;
+    let deletedCategoryId: string | null = data.categoryId || null;
+
+    // Luôn tra cứu cache để đảm bảo có đủ thông tin (tên + categoryId)
+    if (cachedCategories && (!deletedConvName || !deletedCategoryId)) {
+      for (const category of cachedCategories) {
+        const conv = category.conversations.find(
+          (c) => c.conversationId === data.conversationId,
+        );
+        if (conv) {
+          if (!deletedConvName) deletedConvName = conv.conversationName;
+          if (!deletedCategoryId) deletedCategoryId = category.id;
+          break;
+        }
+      }
+    }
+
+    // === STEP 2: Toast thông báo ===
+    toast.warning(`Loại việc ${deletedConvName || "không xác định"} đã bị xóa`);
+
+    // === STEP 3: Refetch categories để lấy danh sách mới ===
+    await queryClient.refetchQueries({
+      queryKey: categoriesKeys.list(),
+    });
+
+    // === STEP 4: Remove cache liên quan ===
+    queryClient.removeQueries({
+      queryKey: conversationKeys.members(data.conversationId),
+    });
+    queryClient.removeQueries({
+      queryKey: messageKeys.conversation(data.conversationId),
+    });
+
+    // === STEP 5: Auto-select fallback nếu đang xem conversation bị xóa ===
+    // Xử lý tương tự MemberRemoved: active nhóm đầu tiên theo thứ tự sidebar
+    const activeConvId = getActiveConversationId();
+    if (activeConvId === data.conversationId) {
+      const freshCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+        categoriesKeys.list(),
+      );
+
+      let fallbackConv: ChatTarget | null = null;
+
+      if (freshCategories?.length) {
+        // Sort theo thứ tự hiển thị sidebar (latest message first)
+        const sorted = sortCategoriesByLatestMessage(freshCategories);
+
+        // Ưu tiên 1: Conversation khác trong cùng category (nhóm chat còn loại việc khác)
+        const sameCategory = sorted.find((cat) => cat.id === deletedCategoryId);
+        if (sameCategory?.conversations?.length) {
+          const conv = sameCategory.conversations[0];
+          fallbackConv = {
+            type: "group",
+            id: conv.conversationId,
+            name: conv.conversationName,
+            category: sameCategory.name,
+            categoryId: sameCategory.id,
+          };
+        }
+
+        // Ưu tiên 2: Nhóm đầu tiên theo thứ tự sidebar có loại việc
+        if (!fallbackConv) {
+          for (const cat of sorted) {
+            if (cat.conversations?.length) {
+              const conv = cat.conversations[0];
+              fallbackConv = {
+                type: "group",
+                id: conv.conversationId,
+                name: conv.conversationName,
+                category: cat.name,
+                categoryId: cat.id,
+              };
+              break;
+            }
+          }
+        }
+      }
+
+      if (fallbackConv) {
+        useConversationStore.getState().setSelectedConversation(fallbackConv);
+      } else {
+        // Không còn nhóm nào → clear
+        useConversationStore.getState().clearSelectedConversation();
+      }
+    }
+  } catch (error) {
+    console.error("[CategoryCache] Error handling ConversationDeleted:", error);
   }
 }

@@ -7,8 +7,10 @@
  * - Online/Offline indicator (hidden, ready for future)
  * - Unread count badge
  * - Message preview
+ * - Disabled state indicator (isDisabled)
  */
 
+import { Ban } from "lucide-react";
 import { formatRelativeTime } from "@/utils/formatRelativeTime";
 import type { DirectMessageItemProps } from "../types";
 
@@ -20,25 +22,37 @@ export function DirectMessageItem({
   onCreateConversation,
 }: DirectMessageItemProps) {
   const hasConversation = contact.hasConversation && contact.conversation;
+  const isDisabled = contact.isDisabled === true;
   const unreadCount = contact.conversation?.unreadCount ?? 0;
-  const hasUnread = unreadCount > 0 && !isActive;
+  const hasUnread = unreadCount > 0 && !isActive && !isDisabled;
 
   // Handle click based on whether conversation exists
   const handleClick = () => {
     if (hasConversation) {
       onClick();
     } else {
+      if (isDisabled) return; // Cannot create new conversation with disabled user
       onCreateConversation?.();
     }
   };
 
   return (
     <button
-      className={`w-full text-left px-3 py-2 transition-colors hover:bg-brand-50 disabled:opacity-50 disabled:cursor-not-allowed ${
-        isActive ? "bg-brand-50" : ""
+      className={`w-full text-left px-3 py-2 transition-colors disabled:cursor-not-allowed ${
+        isDisabled && !hasConversation
+          ? "opacity-50 bg-gray-50 cursor-not-allowed"
+          : isDisabled && hasConversation
+            ? isActive
+              ? "bg-brand-50 opacity-70"
+              : "hover:bg-brand-50 opacity-70"
+            : isActive
+              ? "bg-brand-50"
+              : "hover:bg-brand-50"
       }`}
       onClick={handleClick}
-      disabled={!hasConversation && isCreating}
+      disabled={
+        (isDisabled && !hasConversation) || (!hasConversation && isCreating)
+      }
       data-testid={
         hasConversation
           ? `dm-conversation-${contact.id}`
@@ -70,6 +84,17 @@ export function DirectMessageItem({
                 }`}
               >
                 {contact.isLeader ? "Trưởng nhóm" : "Thành viên"}
+              </span>
+            )}
+
+            {/* Disabled Badge */}
+            {isDisabled && (
+              <span
+                className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] bg-red-50 text-red-600 border border-red-200 flex-shrink-0"
+                title="Tài khoản đã bị vô hiệu hóa"
+              >
+                <Ban className="h-2.5 w-2.5" />
+                Vô hiệu hóa
               </span>
             )}
           </div>

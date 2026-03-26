@@ -48,6 +48,12 @@ describe("fileUtils", () => {
       expect(getFileType("photo.webp")).toBe("image");
     });
 
+    it("should detect video files", () => {
+      expect(getFileType("clip.mp4")).toBe("video");
+      expect(getFileType("recording.webm")).toBe("video");
+      expect(getFileType("MOVIE.MOV")).toBe("video");
+    });
+
     it("should fallback to image for unknown extensions", () => {
       expect(getFileType("file.xyz")).toBe("image");
       expect(getFileType("no-extension")).toBe("image");
@@ -86,10 +92,10 @@ describe("fileUtils", () => {
       expect(isSupportedFileType("slides.pptx")).toBe(true);
       expect(isSupportedFileType("notes.txt")).toBe(true);
       expect(isSupportedFileType("photo.jpg")).toBe(true);
+      expect(isSupportedFileType("video.mp4")).toBe(true);
     });
 
     it("should return false for unsupported file types", () => {
-      expect(isSupportedFileType("video.mp4")).toBe(false);
       expect(isSupportedFileType("audio.mp3")).toBe(false);
       expect(isSupportedFileType("archive.zip")).toBe(false);
       expect(isSupportedFileType("unknown.xyz")).toBe(false);
@@ -98,7 +104,7 @@ describe("fileUtils", () => {
     it("should be case-insensitive", () => {
       expect(isSupportedFileType("FILE.PDF")).toBe(true);
       expect(isSupportedFileType("IMAGE.JPG")).toBe(true);
-      expect(isSupportedFileType("VIDEO.MP4")).toBe(false);
+      expect(isSupportedFileType("VIDEO.MP4")).toBe(true);
     });
 
     it("should handle edge cases", () => {

@@ -54,6 +54,9 @@ interface ChatHeaderProps {
 
   // 🆕 NEW: Message search
   onSearchSelectMessage?: (messageId: string) => void;
+
+  /** When true, show disabled badge instead of status */
+  isConversationDisabled?: boolean;
 }
 
 /**
@@ -97,6 +100,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
   // 🆕 NEW: Message search
   onSearchSelectMessage,
+
+  isConversationDisabled = false,
 }) => {
   // 🆕 Get current user info for DM member filtering
   const currentUser = useAuthStore((state) => state.user);
@@ -187,8 +192,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                     </span>
                   </>
                 )}
-                <Badge type={statusConfig.badgeType}>
-                  {statusConfig.label}
+                <Badge
+                  type={
+                    isConversationDisabled ? "danger" : statusConfig.badgeType
+                  }
+                >
+                  {isConversationDisabled ? "Vô hiệu hóa" : statusConfig.label}
                 </Badge>
               </>
             )}

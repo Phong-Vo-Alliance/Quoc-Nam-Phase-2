@@ -146,6 +146,42 @@ export function registerAllEventHandlers(
     },
   );
 
+  const cleanupCategoryDeptUnlinked = chatHub.onWithCleanup(
+    SIGNALR_EVENTS.CATEGORY_DEPARTMENT_UNLINKED,
+    (data: any) => {
+      categoryCache
+        .handleCategoryDepartmentUnlinked(categoryCacheCtx, data)
+        .catch(console.error);
+    },
+  );
+
+  const cleanupCategoryAssigned = chatHub.onWithCleanup(
+    SIGNALR_EVENTS.CATEGORY_ASSIGNED_TO_CONVERSATION,
+    (data: any) => {
+      categoryCache
+        .handleCategoryAssignedToConversation(categoryCacheCtx, data)
+        .catch(console.error);
+    },
+  );
+
+  const cleanupCategoryUnassigned = chatHub.onWithCleanup(
+    SIGNALR_EVENTS.CATEGORY_UNASSIGNED_FROM_CONVERSATION,
+    (data: any) => {
+      categoryCache
+        .handleCategoryUnassignedFromConversation(categoryCacheCtx, data)
+        .catch(console.error);
+    },
+  );
+
+  const cleanupConversationDeleted = chatHub.onWithCleanup(
+    SIGNALR_EVENTS.CONVERSATION_DELETED,
+    (data: any) => {
+      categoryCache
+        .handleConversationDeleted(categoryCacheCtx, data)
+        .catch(console.error);
+    },
+  );
+
   return [
     cleanupMessageSent,
     cleanupMessageRead,
@@ -154,6 +190,10 @@ export function registerAllEventHandlers(
     cleanupMemberAdded,
     cleanupMemberRemoved,
     cleanupCategoryDeptLinked,
+    cleanupCategoryDeptUnlinked,
+    cleanupCategoryAssigned,
+    cleanupCategoryUnassigned,
+    cleanupConversationDeleted,
   ];
 }
 

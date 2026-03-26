@@ -5,6 +5,8 @@ import {
   uploadFile,
   getImageThumbnail,
   getImageThumbnailInfo,
+  getVideoThumbnail,
+  getVideoStreamBlob,
   getImagePreview,
   createBlobUrl,
   revokeBlobUrl,
@@ -311,6 +313,66 @@ describe("files.api", () => {
 
       const request = mockAxios.history.get[0];
       expect(request.params).toEqual({ size: "large" });
+    });
+  });
+
+  describe("getVideoThumbnail()", () => {
+    const mockThumbnailDto: ThumbnailInfoDto = {
+      fileId: "video-file-123",
+      fileName: "demo.mp4",
+      imageBase64: btoa("fake-video-thumbnail"),
+      contentType: "image/jpeg",
+      canDownload: true,
+      hasWatermark: false,
+      size: "320",
+      fromCache: false,
+    };
+
+    it("should fetch video thumbnail and convert base64 to Blob", async () => {
+      mockAxios
+        .onGet(/\/api\/Files\/video-file-123\/video-thumbnail/)
+        .reply(200, mockThumbnailDto);
+
+      const result = await getVideoThumbnail("video-file-123");
+
+      expect(result).toBeInstanceOf(Blob);
+      expect(result.type).toBe("image/jpeg");
+
+      const request = mockAxios.history.get[0];
+      expect(request.url).toContain(
+        "/api/Files/video-file-123/video-thumbnail",
+      );
+      expect(request.params).toEqual({ width: 320 });
+      expect(request.timeout).toBe(30000);
+    });
+
+    it("should use custom width when provided", async () => {
+      mockAxios
+        .onGet(/\/api\/Files\/video-file-123\/video-thumbnail/)
+        .reply(200, mockThumbnailDto);
+
+      await getVideoThumbnail("video-file-123", 640);
+
+      expect(mockAxios.history.get[0].params).toEqual({ width: 640 });
+    });
+  });
+
+  describe("getVideoStreamBlob()", () => {
+    it("should fetch video stream as blob", async () => {
+      const mockBlob = new Blob(["video-bytes"], { type: "video/mp4" });
+
+      mockAxios
+        .onGet("/api/Files/video-stream-123/stream")
+        .reply(200, mockBlob);
+
+      const result = await getVideoStreamBlob("video-stream-123");
+
+      expect(result).toBeInstanceOf(Blob);
+      expect(result.type).toBe("video/mp4");
+
+      const request = mockAxios.history.get[0];
+      expect(request.responseType).toBe("blob");
+      expect(request.timeout).toBe(60000);
     });
   });
 

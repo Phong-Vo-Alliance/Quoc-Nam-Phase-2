@@ -25,6 +25,7 @@ import {
   useDirectMessages,
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages";
+import { useDepartmentColleagues } from "@/hooks/queries/useDepartmentMembers";
 import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import { ConversationSkeleton } from "@/features/portal/components/ConversationSkeleton";
 import type {
@@ -39,8 +40,7 @@ import {
   getSelectedCategory,
 } from "@/utils/storage";
 import { useConversationStore } from "@/stores/conversationStore";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getDepartmentColleagues } from "@/api/departments.api";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCreateDirectMessage } from "@/hooks/mutations/useConversationMutations";
 
 // Internal components
@@ -227,18 +227,10 @@ export const ConversationListSidebar: React.FC<
   const queryClient = useQueryClient();
   const categoriesQuery = useCategories();
   const directsQuery = useDirectMessages({ enabled: useApiData });
-  const createDMMutation = useCreateDirectMessage();
-
-  // Fetch all colleagues across all departments
-  const departmentMembersQuery = useQuery({
-    queryKey: ["departmentColleagues"],
-    queryFn: async () => {
-      const members = await getDepartmentColleagues();
-      return members.filter((member) => member.userId !== currentUserId);
-    },
+  const departmentMembersQuery = useDepartmentColleagues({
     enabled: useApiData && tab === "dm",
-    staleTime: 1000 * 60 * 5,
   });
+  const createDMMutation = useCreateDirectMessage();
 
   // Flatten conversations from categories
   const apiGroups = React.useMemo(() => {
@@ -314,7 +306,9 @@ export const ConversationListSidebar: React.FC<
 
   // Merged contacts list
   const mergedContacts = React.useMemo((): ContactItem[] => {
-    const colleagues = departmentMembersQuery.data || [];
+    const colleagues = (departmentMembersQuery.data || []).filter(
+      (member) => member.userId !== currentUserId,
+    );
     const conversations = apiDirects;
 
     const conversationParticipantIds = new Set<string>();
@@ -356,6 +350,7 @@ export const ConversationListSidebar: React.FC<
         isLeader,
         isOnline: false,
         hasConversation: true,
+        isDisabled: conv.isDisabled === true,
         conversation: conv,
         colleague,
         sharedDepartments: departments,
@@ -725,8 +720,10 @@ export const ConversationListSidebar: React.FC<
         selectedConversationId === undefined &&
         !hasAutoSelected
       ) {
-        const firstDirect = filteredApiDirects[0];
-        if (firstDirect.hasConversation && firstDirect.conversation) {
+        const firstDirect = filteredApiDirects.find(
+          (c) => c.hasConversation && c.conversation && !c.isDisabled,
+        );
+        if (firstDirect?.conversation) {
           handleDirectSelect(firstDirect.conversation);
           setHasAutoSelected(true);
           console.log("[Init] Auto-selected first DM conversation:", {

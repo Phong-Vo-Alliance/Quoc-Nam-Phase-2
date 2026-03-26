@@ -9,7 +9,12 @@ import FileCard from "@/components/files/FileCard";
 import FileListItem from "@/components/files/FileListItem";
 import FileGrid from "@/components/files/FileGrid";
 import FileList from "@/components/files/FileList";
+import { getVideoThumbnail } from "@/api/files.api";
 import type { ExtractedFile } from "@/types/files";
+
+vi.mock("@/api/files.api", () => ({
+  getVideoThumbnail: vi.fn(),
+}));
 
 const mockFile: ExtractedFile = {
   id: "1",
@@ -31,18 +36,39 @@ const mockImageFile: ExtractedFile = {
   senderName: "Bob",
 };
 
+const mockVideoFile: ExtractedFile = {
+  id: "3",
+  name: "demo.mp4",
+  contentType: "video/mp4",
+  size: 1024 * 500,
+  url: "https://example.com/demo.mp4",
+  uploadedAt: "2025-01-07T10:00:00Z",
+  senderName: "Carol",
+};
+
 describe("FileCard", () => {
+  beforeEach(() => {
+    vi.mocked(getVideoThumbnail).mockReset();
+    vi.stubGlobal(
+      "URL",
+      Object.assign(globalThis.URL, {
+        createObjectURL: vi.fn(() => "blob:video-thumb"),
+        revokeObjectURL: vi.fn(),
+      }),
+    );
+  });
+
   it("should render file card with name", () => {
     render(<FileCard file={mockFile} />);
     expect(
-      screen.getByTestId(`chat-file-card-${mockFile.id}`)
+      screen.getByTestId(`chat-file-card-${mockFile.id}`),
     ).toBeInTheDocument();
   });
 
   it("should display filename (truncated)", () => {
     render(<FileCard file={mockFile} />);
     const nameElement = screen.getByTestId(
-      `chat-file-card-name-${mockFile.id}`
+      `chat-file-card-name-${mockFile.id}`,
     );
     expect(nameElement).toHaveTextContent("document.pdf");
   });
@@ -52,15 +78,15 @@ describe("FileCard", () => {
     const { container } = render(<FileCard file={mockFile} />);
 
     const card = container.querySelector(
-      '[data-testid="chat-file-card-' + mockFile.id + '"]'
+      '[data-testid="chat-file-card-' + mockFile.id + '"]',
     );
     await user.hover(card!);
 
     const previewBtn = screen.getByTestId(
-      `chat-file-card-preview-button-${mockFile.id}`
+      `chat-file-card-preview-button-${mockFile.id}`,
     );
     const downloadBtn = screen.getByTestId(
-      `chat-file-card-download-button-${mockFile.id}`
+      `chat-file-card-download-button-${mockFile.id}`,
     );
 
     expect(previewBtn).toBeVisible();
@@ -73,7 +99,7 @@ describe("FileCard", () => {
     render(<FileCard file={mockFile} onPreview={onPreview} position={0} />);
 
     const viewButton = screen.getByTestId(
-      `chat-file-card-view-button-${mockFile.id}`
+      `chat-file-card-view-button-${mockFile.id}`,
     );
     await user.click(viewButton);
 
@@ -92,20 +118,31 @@ describe("FileCard", () => {
     const card = screen.getByTestId(`chat-file-card-${mockFile.id}`);
     expect(card.textContent).toContain("PDF");
   });
+
+  it("should load and display video thumbnail for video files", async () => {
+    vi.mocked(getVideoThumbnail).mockResolvedValue(
+      new Blob(["thumb"], { type: "image/jpeg" }),
+    );
+
+    render(<FileCard file={mockVideoFile} />);
+
+    expect(await screen.findByAltText("demo.mp4")).toBeInTheDocument();
+    expect(getVideoThumbnail).toHaveBeenCalledWith("3");
+  });
 });
 
 describe("FileListItem", () => {
   it("should render list item", () => {
     render(<FileListItem file={mockFile} />);
     expect(
-      screen.getByTestId(`chat-file-list-item-${mockFile.id}`)
+      screen.getByTestId(`chat-file-list-item-${mockFile.id}`),
     ).toBeInTheDocument();
   });
 
   it("should display full filename", () => {
     render(<FileListItem file={mockFile} />);
     const nameElement = screen.getByTestId(
-      `chat-file-list-item-name-${mockFile.id}`
+      `chat-file-list-item-name-${mockFile.id}`,
     );
     expect(nameElement).toHaveTextContent("document.pdf");
   });
@@ -129,12 +166,12 @@ describe("FileListItem", () => {
     const { container } = render(<FileListItem file={mockFile} />);
 
     const listItem = container.querySelector(
-      `[data-testid="chat-file-list-item-${mockFile.id}"]`
+      `[data-testid="chat-file-list-item-${mockFile.id}"]`,
     );
     await user.hover(listItem!);
 
     const senderInfo = screen.getByTestId(
-      `chat-file-list-item-sender-${mockFile.id}`
+      `chat-file-list-item-sender-${mockFile.id}`,
     );
     expect(senderInfo).toBeVisible();
     expect(senderInfo).toHaveTextContent("Alice");
@@ -146,7 +183,7 @@ describe("FileListItem", () => {
     render(<FileListItem file={mockFile} onPreview={onPreview} position={0} />);
 
     const previewButton = screen.getByTestId(
-      `chat-file-list-item-preview-button-${mockFile.id}`
+      `chat-file-list-item-preview-button-${mockFile.id}`,
     );
     await user.click(previewButton);
 
@@ -165,10 +202,10 @@ describe("FileGrid", () => {
   it("should render file cards for each file", () => {
     render(<FileGrid files={mockFiles} />);
     expect(
-      screen.getByTestId(`chat-file-card-${mockFile.id}`)
+      screen.getByTestId(`chat-file-card-${mockFile.id}`),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId(`chat-file-card-${mockImageFile.id}`)
+      screen.getByTestId(`chat-file-card-${mockImageFile.id}`),
     ).toBeInTheDocument();
   });
 
@@ -184,7 +221,7 @@ describe("FileGrid", () => {
     render(<FileGrid files={mockFiles} onPreviewFile={onPreview} />);
 
     const viewButton = screen.getByTestId(
-      `chat-file-card-view-button-${mockFile.id}`
+      `chat-file-card-view-button-${mockFile.id}`,
     );
     await user.click(viewButton);
 
@@ -203,10 +240,10 @@ describe("FileList", () => {
   it("should render list items for each file", () => {
     render(<FileList files={mockFiles} />);
     expect(
-      screen.getByTestId(`chat-file-list-item-${mockFile.id}`)
+      screen.getByTestId(`chat-file-list-item-${mockFile.id}`),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId(`chat-file-list-item-${mockImageFile.id}`)
+      screen.getByTestId(`chat-file-list-item-${mockImageFile.id}`),
     ).toBeInTheDocument();
   });
 
@@ -222,7 +259,7 @@ describe("FileList", () => {
     render(<FileList files={mockFiles} onPreviewFile={onPreview} />);
 
     const previewButton = screen.getByTestId(
-      `chat-file-list-item-preview-button-${mockFile.id}`
+      `chat-file-list-item-preview-button-${mockFile.id}`,
     );
     await user.click(previewButton);
 
@@ -232,16 +269,16 @@ describe("FileList", () => {
   it("should maintain order of files", () => {
     const { container } = render(<FileList files={mockFiles} />);
     const items = container.querySelectorAll(
-      '[data-testid="chat-file-list-container"] > *'
+      '[data-testid="chat-file-list-container"] > *',
     );
 
     expect(items[0]).toHaveAttribute(
       "data-testid",
-      `chat-file-list-item-${mockFile.id}`
+      `chat-file-list-item-${mockFile.id}`,
     );
     expect(items[1]).toHaveAttribute(
       "data-testid",
-      `chat-file-list-item-${mockImageFile.id}`
+      `chat-file-list-item-${mockImageFile.id}`,
     );
   });
 });

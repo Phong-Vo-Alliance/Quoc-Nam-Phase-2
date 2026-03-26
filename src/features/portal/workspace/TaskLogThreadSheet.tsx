@@ -970,7 +970,6 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
           });
 
           if (result.failedCount > 0) {
-            toast.error("Lỗi upload file. Vui lòng thử lại.");
             setIsUploading(false);
             return;
           }
@@ -990,14 +989,14 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
 
           const uploadedAttachments = extractSuccessfulUploads(batchResult);
           if (uploadedAttachments.length === 0) {
-            toast.error("Tất cả file upload thất bại. Vui lòng thử lại.");
+            toast.error("Tất cả file tải lên thất bại. Vui lòng thử lại.");
             setIsUploading(false);
             return;
           }
 
           if (batchResult.partialSuccess) {
             toast.warning(
-              `${batchResult.successCount}/${batchResult.totalFiles} file upload thành công`,
+              `${batchResult.successCount}/${batchResult.totalFiles} tệp tải lên thành công`,
             );
           }
 

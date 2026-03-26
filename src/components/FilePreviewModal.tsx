@@ -7,10 +7,15 @@ import {
   AlertCircle,
   Download,
   Loader2,
+  Play,
 } from "lucide-react";
-import { downloadFile } from "@/api/files.api";
+import {
+  downloadFile,
+  getVideoStreamBlob,
+  getVideoThumbnailInfo,
+} from "@/api/files.api";
 import { toast } from "sonner";
-import { useFilePreview } from "@/hooks/usePdfPreview";
+import { usePdfPreview } from "@/hooks/usePdfPreview";
 import { FILE_TYPE_ICONS, FILE_TYPE_LABELS } from "@/types/files";
 import type { SupportedPreviewFileType } from "@/types/files";
 import { getFileType } from "@/utils/fileUtils";
@@ -18,6 +23,22 @@ import { getFileType } from "@/utils/fileUtils";
 // Phase 5: Import Word/Excel preview components
 import WordPreview from "@/features/portal/components/file-sheet/WordPreview";
 import ExcelPreview from "@/features/portal/components/file-sheet/ExcelPreview";
+
+const pendingVideoStreamRequests = new Map<string, Promise<Blob>>();
+
+function getVideoStreamBlobOnce(fileId: string): Promise<Blob> {
+  const pendingRequest = pendingVideoStreamRequests.get(fileId);
+  if (pendingRequest) {
+    return pendingRequest;
+  }
+
+  const request = getVideoStreamBlob(fileId).finally(() => {
+    pendingVideoStreamRequests.delete(fileId);
+  });
+
+  pendingVideoStreamRequests.set(fileId, request);
+  return request;
+}
 
 // Helper to get file extension
 function getFileExtension(fileName?: string): string {
@@ -41,12 +62,19 @@ export default function FilePreviewModal({
 }: FilePreviewModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const fileType: SupportedPreviewFileType = getFileType(fileName);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState<Error | null>(null);
+  const [videoRetryKey, setVideoRetryKey] = useState(0);
+  const [videoCanDownload, setVideoCanDownload] = useState(false);
 
   // Phase 5: Check if this is Word/Excel file
   const extension = getFileExtension(fileName);
   const isWordFile = extension === "docx";
   const isExcelFile = extension === "xlsx" || extension === "xls";
   const isPhase5File = isWordFile || isExcelFile;
+  const isVideoFile = fileType === "video";
 
   // Phase 5: Render Word/Excel preview (different UI)
   if (isPhase5File && isOpen) {
@@ -81,17 +109,105 @@ export default function FilePreviewModal({
 
   // Phase 3.2: Use generic file preview hook (for PDF/Image)
   const {
-    currentPage,
-    totalPages,
+    currentPage: previewCurrentPage,
+    totalPages: previewTotalPages,
     imageUrl,
-    isLoading,
-    error,
+    isLoading: isPreviewLoading,
+    error: previewError,
     navigateToPage,
-    retry,
-    canDownload,
-  } = useFilePreview(fileId);
+    retry: retryPreview,
+    canDownload: canPreviewDownload,
+  } = usePdfPreview(!isVideoFile && !isPhase5File ? fileId : null);
 
   const [isDownloading, setIsDownloading] = useState(false);
+  const canDownload = isVideoFile ? videoCanDownload : canPreviewDownload;
+  const currentPage = isVideoFile ? 1 : previewCurrentPage;
+  const totalPages = isVideoFile ? 1 : previewTotalPages;
+  const isLoading = isVideoFile ? isVideoLoading : isPreviewLoading;
+  const error = isVideoFile ? videoError : previewError;
+  const retry = isVideoFile
+    ? () => setVideoRetryKey((current) => current + 1)
+    : retryPreview;
+
+  useEffect(() => {
+    if (!isOpen || !isVideoFile || !fileId) {
+      setVideoUrl((current) => {
+        if (current) {
+          URL.revokeObjectURL(current);
+        }
+        return null;
+      });
+      setIsVideoLoading(false);
+      setVideoError(null);
+      setVideoCanDownload(false);
+      return;
+    }
+
+    let isCancelled = false;
+    let objectUrl: string | null = null;
+
+    async function loadVideo() {
+      setIsVideoLoading(true);
+      setVideoError(null);
+
+      try {
+        const [streamResult, thumbnailResult] = await Promise.allSettled([
+          getVideoStreamBlobOnce(fileId),
+          getVideoThumbnailInfo(fileId),
+        ]);
+
+        if (thumbnailResult.status === "fulfilled") {
+          setVideoCanDownload(Boolean(thumbnailResult.value.canDownload));
+        } else {
+          setVideoCanDownload(false);
+        }
+
+        if (streamResult.status === "rejected") {
+          throw streamResult.reason;
+        }
+
+        const blob = streamResult.value;
+        if (isCancelled) {
+          return;
+        }
+
+        objectUrl = URL.createObjectURL(blob);
+        setVideoUrl((current) => {
+          if (current) {
+            URL.revokeObjectURL(current);
+          }
+          return objectUrl;
+        });
+      } catch (videoLoadError) {
+        if (!isCancelled) {
+          setVideoError(
+            videoLoadError instanceof Error
+              ? videoLoadError
+              : new Error("Không thể phát video"),
+          );
+          setVideoUrl((current) => {
+            if (current) {
+              URL.revokeObjectURL(current);
+            }
+            return null;
+          });
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsVideoLoading(false);
+        }
+      }
+    }
+
+    void loadVideo();
+
+    return () => {
+      isCancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [fileId, isOpen, isVideoFile, videoRetryKey]);
 
   const handleDownload = async () => {
     if (!fileId || !fileName) return;
@@ -115,9 +231,6 @@ export default function FilePreviewModal({
       setIsDownloading(false);
     }
   };
-
-  // Determine file type from filename
-  const fileType: SupportedPreviewFileType = getFileType(fileName);
   const shouldShowFooter = (totalPages ?? 0) > 1;
   const showFileTypeIcon = shouldShowFooter && fileType !== "image";
 
@@ -237,7 +350,9 @@ export default function FilePreviewModal({
               <div className="flex flex-col items-center gap-4">
                 <div className="h-16 w-16 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600"></div>
                 <p className="text-sm text-gray-600">
-                  Đang tải trang {currentPage}...
+                  {isVideoFile
+                    ? "Đang tải video..."
+                    : `Đang tải trang ${currentPage}...`}
                 </p>
               </div>
             </div>
@@ -253,15 +368,17 @@ export default function FilePreviewModal({
                 <AlertCircle className="h-16 w-16 text-red-500" />
                 <div>
                   <h3 className="mb-2 text-lg font-semibold text-gray-900">
-                    {error.message.includes("404") ||
-                    error.message.includes("Không tìm thấy")
-                      ? "Không tìm thấy tệp"
-                      : error.message.includes("401") ||
-                          error.message.includes("Unauthorized")
-                        ? "Không có quyền truy cập"
-                        : error.message.includes("Network")
-                          ? "Lỗi kết nối mạng"
-                          : "Không thể tải tệp"}
+                    {isVideoFile
+                      ? "Không thể phát video"
+                      : error.message.includes("404") ||
+                          error.message.includes("Không tìm thấy")
+                        ? "Không tìm thấy tệp"
+                        : error.message.includes("401") ||
+                            error.message.includes("Unauthorized")
+                          ? "Không có quyền truy cập"
+                          : error.message.includes("Network")
+                            ? "Lỗi kết nối mạng"
+                            : "Không thể tải tệp"}
                   </h3>
                   <p className="text-sm text-gray-600">{error.message}</p>
                 </div>
@@ -290,6 +407,23 @@ export default function FilePreviewModal({
                 onDragStart={(e) => e.preventDefault()}
                 data-testid="file-preview-image"
               />
+            </div>
+          )}
+
+          {!isLoading && !error && isVideoFile && videoUrl && (
+            <div
+              className="flex h-full items-center justify-center p-2 sm:p-4 md:p-6"
+              data-testid="file-preview-video-container"
+            >
+              <video
+                src={videoUrl}
+                controls
+                autoPlay
+                className="h-full w-full max-h-[78vh] rounded-lg bg-black object-contain"
+                data-testid="file-preview-video"
+              >
+                Trình duyệt không hỗ trợ phát video.
+              </video>
             </div>
           )}
         </div>

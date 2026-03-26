@@ -93,6 +93,7 @@ export interface DirectConversation extends BaseConversation {
   type: "DM";
   memberCount: 2; // Always 2 for DM
   members?: ConversationMember[]; // Members from API (optional for backward compatibility)
+  isDisabled?: boolean; // When true, conversation is disabled (cannot chat)
 }
 
 // Union type for any conversation
