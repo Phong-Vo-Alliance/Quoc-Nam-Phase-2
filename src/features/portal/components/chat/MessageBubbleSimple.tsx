@@ -318,7 +318,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
               </div>
             )}
           </div>
-          <div className="relative w-fit">
+          <div className="relative w-fit max-w-full">
             {/* Hover action buttons */}
             {
               <div
@@ -524,7 +524,10 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         }
                         data-testid={`message-content-${message.id}`}
                       >
-                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                        <p
+                          className="text-sm whitespace-pre-wrap leading-relaxed"
+                          style={{ overflowWrap: "anywhere" }}
+                        >
                           {renderMessageWithMentions(
                             message.content,
                             message.mentions,

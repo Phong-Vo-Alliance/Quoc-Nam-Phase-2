@@ -90,12 +90,13 @@ export function parseSystemMessageContent(
     /^(.+?)\s+đã được tiếp nhận bởi\s+(.+?)\s+lúc\s+(\d{1,2}:\d{2})$/;
 
   // Pattern 2: "Công việc [tên] đã được tạo bởi [creator] và giao cho [assignee]"
+  // Note: uses 's' flag (dotAll) because task names can contain newlines
   const createTaskPattern =
-    /^Công việc\s+(.+?)\s+đã được tạo bởi\s+(.+?)\s+và giao cho\s+(.+)$/;
+    /^Công việc\s+([\s\S]+?)\s+đã được tạo bởi\s+(.+?)\s+và giao cho\s+(.+)$/;
 
   // Pattern 3: "Công việc [tên] đã được chuyển giao cho [user]"
   const transferTaskPattern =
-    /^Công việc\s+(.+?)\s+đã được chuyển giao cho\s+(.+)$/;
+    /^Công việc\s+([\s\S]+?)\s+đã được chuyển giao cho\s+(.+)$/;
 
   // Pattern 4: "[user] đã thêm [user2] vào nhóm"
   const addMemberPattern = /^(.+?)\s+đã thêm\s+(.+?)\s+vào nhóm$/;
@@ -108,7 +109,7 @@ export function parseSystemMessageContent(
 
   // Pattern 7: "Công việc [tên] đã được tạo và giao cho [user]" (without creator)
   const createTaskSimplePattern =
-    /^Công việc\s+(.+?)\s+đã được tạo và giao cho\s+(.+)$/;
+    /^Công việc\s+([\s\S]+?)\s+đã được tạo và giao cho\s+(.+)$/;
 
   // Pattern 8: "[username] ([email]) đã được thêm vào nhóm"
   const addMemberWithEmailPattern =
@@ -141,7 +142,7 @@ export function parseSystemMessageContent(
   };
 
   const changeStatusPattern =
-    /^(.+?)\s+đã chuyển trạng thái công việc\s+(.+?)\s+sang\s+(.+)$/;
+    /^(.+?)\s+đã chuyển trạng thái công việc\s+([\s\S]+?)\s+sang\s+(.+)$/;
 
   // Pattern 13: "Loại việc [oldName] thuộc nhóm [categoryName] đã đổi tên thành [newName]"
   const renameWorkTypeWithCategoryPattern =
@@ -156,11 +157,11 @@ export function parseSystemMessageContent(
 
   // Pattern 14: "[leader] đã thêm mục [checklist-name] vào công việc [task-name]"
   const checklistItemAddedPattern =
-    /^(.+?)\s+đã thêm mục\s+(.+?)\s+vào công việc\s+(.+)$/;
+    /^(.+?)\s+đã thêm mục\s+(.+?)\s+vào công việc\s+([\s\S]+)$/;
 
   // Pattern 15: "[leader] đã cập nhật mục [old-name] thành [new-name] vào công việc [task-name]"
   const checklistItemUpdatedPattern =
-    /^(.+?)\s+đã cập nhật mục\s+(.+?)\s+thành\s+(.+?)\s+vào công việc\s+(.+)$/;
+    /^(.+?)\s+đã cập nhật mục\s+(.+?)\s+thành\s+(.+?)\s+vào công việc\s+([\s\S]+)$/;
 
   // Pattern 16: "[leader] đã xóa mục [checklist-name]"
   const checklistItemDeletedPattern = /^(.+?)\s+đã xóa mục\s+(.+)$/;

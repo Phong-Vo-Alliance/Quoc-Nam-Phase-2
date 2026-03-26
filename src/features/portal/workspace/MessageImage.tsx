@@ -132,7 +132,7 @@ export default function MessageImage({
           "cursor-pointer group overflow-hidden rounded-lg",
           isInGrid
             ? "w-full aspect-square"
-            : "w-[320px] max-w-full max-h-[180px]",
+            : "w-[320px] max-w-full h-[180px]",
         )}
         onClick={handleClick}
       >
@@ -141,8 +141,7 @@ export default function MessageImage({
           src={imageUrl}
           alt={fileName}
           className={cn(
-            "w-full transition-all duration-200 group-hover:opacity-90",
-            isInGrid ? "h-full object-cover" : "max-h-[400px] object-contain",
+            "w-full h-full object-cover object-center transition-all duration-200 group-hover:opacity-90",
           )}
         />
       </div>

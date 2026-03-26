@@ -26,8 +26,11 @@ export const SystemMessageBubble: React.FC<SystemMessageBubbleProps> = ({
       className="flex justify-center py-2"
       data-testid={`system-message-bubble-${message.id}`}
     >
-      <div className="flex items-center gap-2 text-xs text-gray-600 px-3 py-1.5 rounded-full max-w-[80%] text-center border-2 border-gray-100 system-message-pill">
-        <span className="text-gray-700 break-words">
+      <div className="inline-flex items-center gap-2 text-xs text-gray-600 px-3 py-1.5 rounded-full max-w-[80%] text-center border-2 border-gray-100 system-message-pill overflow-hidden">
+        <span
+          className="text-gray-700 min-w-0"
+          style={{ overflowWrap: "anywhere" }}
+        >
           {renderSystemMessageWithHighlights(message.content || "", {
             actorNameClassName: "font-semibold text-gray-900",
             highlightClassName:

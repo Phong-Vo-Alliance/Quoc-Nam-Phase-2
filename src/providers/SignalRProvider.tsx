@@ -180,6 +180,23 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     return cleanup;
   }, []);
 
+  // Network awareness: auto-reconnect once when browser comes back online
+  useEffect(() => {
+    const handleOnline = () => {
+      if (
+        shouldConnectRef.current &&
+        !connectionAttemptRef.current &&
+        chatHub.state !== "Connected"
+      ) {
+        console.info("[SignalRProvider] Network online — attempting reconnect");
+        connect();
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [connect]);
+
   const value: SignalRContextValue = {
     connectionState,
     isConnected: connectionState === "Connected",

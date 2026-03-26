@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectTrigger,
@@ -15,7 +15,13 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-import React, { useState, useEffect, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
@@ -368,9 +374,23 @@ export function AssignTaskSheet({
     createTaskMutation.mutate(createTaskData);
   };
 
+  // Auto-resize title textarea
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const autoResizeTitle = useCallback(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    autoResizeTitle();
+  }, [formData.title, autoResizeTitle]);
+
   // Handle field changes
   const handleFieldChange = (field: keyof FormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    const trimmedValue = field === "title" ? value.slice(0, 255) : value;
+    setFormData((prev) => ({ ...prev, [field]: trimmedValue }));
     // Clear error for this field
     if (formErrors[field as keyof FormErrors]) {
       setFormErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -410,18 +430,36 @@ export function AssignTaskSheet({
               >
                 Tên công việc <span className="text-red-500">*</span>
               </Label>
-              <Input
+              <Textarea
+                ref={titleRef}
                 id="task-name"
                 data-testid="task-title-input"
                 value={formData.title}
-                onChange={(e) => handleFieldChange("title", e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\n/g, "");
+                  handleFieldChange("title", val);
+                  autoResizeTitle();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.preventDefault();
+                }}
                 placeholder="Nhập tên công việc"
                 maxLength={255}
-                className={formErrors.title ? "border-red-500" : ""}
+                rows={1}
+                className={`resize-none overflow-hidden ${formErrors.title ? "border-red-500" : ""}`}
               />
-              {formErrors.title && (
-                <p className="text-xs text-red-500">{formErrors.title}</p>
-              )}
+              <div className="flex justify-between items-center">
+                {formErrors.title ? (
+                  <p className="text-xs text-red-500">{formErrors.title}</p>
+                ) : (
+                  <span />
+                )}
+                <span
+                  className={`text-xs ${formData.title.length >= 255 ? "text-red-500" : "text-gray-400"}`}
+                >
+                  {formData.title.length}/255
+                </span>
+              </div>
             </div>
 
             {/* Assign To */}

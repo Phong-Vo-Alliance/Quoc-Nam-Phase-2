@@ -1163,7 +1163,7 @@ export const MentionInputInline = forwardRef<
             "bg-white border border-gray-200",
             "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent",
             "text-sm text-gray-900",
-            "whitespace-pre-wrap break-words",
+            "whitespace-pre-wrap break-all",
             "empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 empty:before:pointer-events-none",
             disabled && "opacity-50 cursor-not-allowed bg-gray-50",
           )}

@@ -9,6 +9,7 @@ import { initializeViewMode } from "./stores/uiStore";
 import { getCurrentUser } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
 import { getAccessToken } from "./lib/auth/tokenStorage";
+import { ConnectionStatusBanner } from "./components/ConnectionStatusBanner";
 
 export default function App() {
   // Initialize client-side security protections
@@ -69,6 +70,8 @@ export default function App() {
 
   return (
     <SignalRProvider>
+      <ConnectionStatusBanner />
+
       {/* Dev mode indicator for whitelisted users */}
       {isWhitelisted && (
         <div className="fixed top-0 left-0 bg-yellow-500 text-black px-2 py-1 text-xs z-50 font-mono">

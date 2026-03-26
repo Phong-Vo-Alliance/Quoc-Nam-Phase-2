@@ -528,7 +528,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
 
                           {/* Tin nhắn text thuần */}
                           {msg.type === "text" && (
-                            <div className="mt-1 text-[13px] text-gray-700">
+                            <div className="mt-1 text-[13px] text-gray-700 break-all">
                               <HighlightText
                                 text={
                                   (msg.content?.slice(0, 100) || "") +
