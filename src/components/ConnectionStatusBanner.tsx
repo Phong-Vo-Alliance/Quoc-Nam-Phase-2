@@ -1,14 +1,17 @@
 import { useSignalRConnection } from "@/providers/SignalRProvider";
+import { useAuthStore } from "@/stores/authStore";
 import { Loader2, WifiOff, RefreshCw } from "lucide-react";
 
 export function ConnectionStatusBanner() {
   const signalR = useSignalRConnection();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   if (!signalR) return null;
 
   const { connectionState, isConnected, connect } = signalR;
 
-  if (isConnected) return null;
+  // Don't show disconnection banner when user is not authenticated (e.g. during logout)
+  if (!isAuthenticated || isConnected) return null;
 
   const isReconnecting =
     connectionState === "Reconnecting" || connectionState === "Connecting";
