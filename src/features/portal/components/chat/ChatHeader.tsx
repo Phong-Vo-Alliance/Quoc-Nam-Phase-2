@@ -34,7 +34,6 @@ interface ChatHeaderProps {
   conversationCategory?: string;
   onlineCount?: number;
   status?: "Active" | "Archived" | "Muted";
-  avatarUrl?: string;
   isMobile?: boolean;
   onBack?: () => void;
   // [PHASE2-REMOVED] Desktop pin feature removed
@@ -83,7 +82,6 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversationCategory,
   onlineCount = 0,
   status = "Active",
-  avatarUrl,
   isMobile = false,
   onBack,
   onOpenPinnedModal,
@@ -158,7 +156,6 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         ) : (
           <Avatar
             name={headerDisplayName}
-            avatarUrl={avatarUrl}
             conversationType={conversationType}
           />
         )}

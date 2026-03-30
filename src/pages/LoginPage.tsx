@@ -4,12 +4,12 @@
  * Centered login page with logo and form
  */
 
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LoginForm } from '@/components/auth';
-import { useAuthStore } from '@/stores/authStore';
-import { AUTH_CONFIG } from '@/lib/auth/config';
-import logoImage from '@/assets/Quocnam_logo.png';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { LoginForm } from "@/components/auth";
+import { useAuthStore } from "@/stores/authStore";
+import { AUTH_CONFIG } from "@/lib/auth/config";
+import logoImage from "@/assets/Quocnam_logo.png";
 
 /**
  * Login page - centered layout with branding
@@ -17,6 +17,11 @@ import logoImage from '@/assets/Quocnam_logo.png';
 export function LoginPage() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  // Set page title
+  useEffect(() => {
+    document.title = "Login - Quốc Nam";
+  }, []);
 
   // Redirect to portal if already authenticated
   useEffect(() => {

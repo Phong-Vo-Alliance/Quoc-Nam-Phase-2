@@ -436,7 +436,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
             <span className="font-medium text-gray-900">{categoryName}</span>
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
-            Chọn một loại công việc để quản lý dạng checklist
+            Chọn một loại việc để quản lý dạng checklist
           </p>
         </div>
 
@@ -448,7 +448,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm loại công việc..."
+                placeholder="Tìm loại việc..."
                 className="pl-9 pr-9"
               />
               {searchQuery && (
@@ -487,7 +487,7 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
                 data-testid="conversation-list-loading"
               >
                 <p className="text-sm text-gray-400">
-                  Đang tải conversations...
+                  Đang tải danh sách loại việc...
                 </p>
               </div>
             ) : filteredConversations.length === 0 ? (

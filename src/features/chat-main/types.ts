@@ -12,7 +12,6 @@ export interface ChatMainContainerProps {
   memberCount?: number;
   onlineCount?: number;
   status?: "Active" | "Archived" | "Muted";
-  avatarUrl?: string;
   isMobile?: boolean;
   onBack?: () => void;
   onToggleStar?: (messageId: string, isStarred: boolean) => void;

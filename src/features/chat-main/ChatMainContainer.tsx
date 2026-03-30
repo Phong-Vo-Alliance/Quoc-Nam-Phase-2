@@ -48,7 +48,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   memberCount,
   onlineCount = 0,
   status = "Active",
-  avatarUrl,
   isMobile = false,
   onBack,
   onToggleStar,
@@ -295,7 +294,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         conversationType={conversationType}
         onlineCount={onlineCount}
         status={status}
-        avatarUrl={avatarUrl}
         isMobile={isMobile}
         onBack={onBack}
         showRightPanel={showRightPanel}
@@ -314,7 +312,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         conversationCategory={conversationCategory}
         onlineCount={onlineCount}
         status={status}
-        avatarUrl={avatarUrl}
         isMobile={isMobile}
         onBack={onBack}
         showRightPanel={showRightPanel}
@@ -348,7 +345,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         conversationCategory={conversationCategory}
         onlineCount={onlineCount}
         status={status}
-        avatarUrl={avatarUrl}
         isMobile={isMobile}
         onBack={onBack}
         showRightPanel={showRightPanel}
@@ -376,7 +372,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         conversationCategory={conversationCategory}
         onlineCount={onlineCount}
         status={status}
-        avatarUrl={avatarUrl}
         isMobile={isMobile}
         onBack={onBack}
         onOpenConversationStarredModal={() =>

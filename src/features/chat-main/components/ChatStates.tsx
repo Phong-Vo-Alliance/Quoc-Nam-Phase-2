@@ -12,7 +12,6 @@ interface ChatLoadingStateProps {
   conversationType?: "GRP" | "DM";
   onlineCount?: number;
   status?: "Active" | "Archived" | "Muted";
-  avatarUrl?: string;
   isMobile?: boolean;
   onBack?: () => void;
   showRightPanel?: boolean;
@@ -26,7 +25,6 @@ export const ChatLoadingState: React.FC<ChatLoadingStateProps> = ({
   conversationType,
   onlineCount,
   status,
-  avatarUrl,
   isMobile,
   onBack,
   showRightPanel,
@@ -41,7 +39,6 @@ export const ChatLoadingState: React.FC<ChatLoadingStateProps> = ({
         conversationCategory={undefined}
         onlineCount={onlineCount}
         status={status}
-        avatarUrl={avatarUrl}
         isMobile={isMobile}
         onBack={onBack}
         showRightPanel={showRightPanel}
@@ -67,7 +64,6 @@ interface ChatErrorStateProps {
   conversationCategory?: string;
   onlineCount?: number;
   status?: "Active" | "Archived" | "Muted";
-  avatarUrl?: string;
   isMobile?: boolean;
   onBack?: () => void;
   showRightPanel?: boolean;
@@ -86,7 +82,6 @@ export const ChatErrorState: React.FC<ChatErrorStateProps> = ({
   conversationCategory,
   onlineCount,
   status,
-  avatarUrl,
   isMobile,
   onBack,
   showRightPanel,
@@ -122,7 +117,6 @@ export const ChatErrorState: React.FC<ChatErrorStateProps> = ({
         }
         onlineCount={onlineCount}
         status={status}
-        avatarUrl={avatarUrl}
         isMobile={isMobile}
         onBack={onBack}
         showRightPanel={showRightPanel}

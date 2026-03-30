@@ -131,11 +131,7 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
             data-testid={`mention-item-${member.userId}`}
           >
             {/* Avatar */}
-            <Avatar
-              avatarUrl={member.userInfo.avatarUrl || undefined}
-              name={fullName}
-              small={true}
-            />
+            <Avatar name={fullName} small={true} conversationType="DM" />
 
             {/* User info */}
             <div className="flex-1 min-w-0">
