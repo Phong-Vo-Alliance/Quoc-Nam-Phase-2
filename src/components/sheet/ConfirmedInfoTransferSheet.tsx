@@ -33,6 +33,8 @@ import {
   Users,
   User,
   AlertCircle,
+  ClipboardList,
+  CheckCircle2,
 } from "lucide-react";
 import axios from "axios";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -44,6 +46,7 @@ import { useCreateTask } from "@/hooks/mutations/useCreateTask";
 import { useLinkTaskToMessage } from "@/hooks/mutations/useLinkTaskToMessage";
 import { useAuthStore } from "@/stores/authStore";
 import { useConversationStore } from "@/stores/conversationStore";
+import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
 import { taskKeys } from "@/hooks/queries/keys/taskKeys";
 import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
@@ -98,6 +101,8 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   const [selectedConversationId, setSelectedConversationId] =
     React.useState("");
   const [selectedAssigneeId, setSelectedAssigneeId] = React.useState("");
+  const [selectedChecklistTemplateId, setSelectedChecklistTemplateId] =
+    React.useState("");
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [inlineError, setInlineError] = React.useState<string | null>(null);
   const pendingMessageIdRef = React.useRef<string | null>(null);
@@ -127,6 +132,15 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   });
 
   const members = membersData || [];
+
+  // Fetch checklist templates for selected conversation
+  const { data: checklistTemplatesData, isLoading: checklistTemplatesLoading } =
+    useChecklistTemplates(selectedConversationId || undefined);
+
+  const checklistTemplates = checklistTemplatesData || [];
+  const selectedTemplate = checklistTemplates.find(
+    (t) => t.id === selectedChecklistTemplateId,
+  );
 
   // Filter members by department (including leader/self)
   // Use departmentId from UserDepartmentDto, not id (user-dept relationship ID)
@@ -324,6 +338,20 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     }
   }, [filteredMembers, selectedAssigneeId, membersLoading]);
 
+  // Reset checklist template when conversation changes
+  React.useEffect(() => {
+    setSelectedChecklistTemplateId("");
+  }, [selectedConversationId]);
+
+  // Auto-select default template when templates load
+  React.useEffect(() => {
+    if (checklistTemplatesLoading || checklistTemplates.length === 0) return;
+    const defaultTemplate = checklistTemplates.find((t) => t.isDefault);
+    if (defaultTemplate) {
+      setSelectedChecklistTemplateId(defaultTemplate.id);
+    }
+  }, [checklistTemplates, checklistTemplatesLoading]);
+
   const handleSubmit = async () => {
     if (
       !confirmedInfo ||
@@ -390,6 +418,7 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
         assignTo: selectedAssigneeId,
         conversationId: selectedConversationId,
         messageId: messageId,
+        checklistTemplateId: selectedChecklistTemplateId || null,
       });
     } catch (error) {
       const msg = sendMessageMutation.isError
@@ -508,13 +537,17 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
           )}
 
           {/* Assignee Selection */}
-          {selectedConversationId && (
+          {selectedCategoryId && (
             <div>
               <Label className="text-sm text-gray-600 flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Giao cho
               </Label>
-              {membersLoading ? (
+              {!selectedConversationId ? (
+                <div className="mt-1 p-2 rounded-md bg-gray-50 border border-gray-200 text-sm text-gray-400 italic">
+                  Vui lòng chọn Loại việc trước
+                </div>
+              ) : membersLoading ? (
                 <div className="mt-1 p-2 rounded-md bg-gray-100 border text-sm text-gray-700 flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Đang tải danh sách...
@@ -545,6 +578,68 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
                     ))}
                   </SelectContent>
                 </Select>
+              )}
+            </div>
+          )}
+
+          {/* Checklist Template Selection */}
+          {selectedCategoryId && (
+            <div>
+              <Label className="text-sm text-gray-600 flex items-center gap-2">
+                <ClipboardList className="h-4 w-4" />
+                Mẫu checklist
+              </Label>
+              {!selectedConversationId ? (
+                <div className="mt-1 p-2 rounded-md bg-gray-50 border border-gray-200 text-sm text-gray-400 italic">
+                  Vui lòng chọn Loại việc trước
+                </div>
+              ) : checklistTemplatesLoading ? (
+                <div className="mt-1 p-2 rounded-md bg-gray-100 border text-sm text-gray-700 flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Đang tải mẫu checklist...
+                </div>
+              ) : checklistTemplates.length === 0 ? (
+                <div className="mt-1 p-2 rounded-md bg-gray-50 border border-gray-200 text-sm text-gray-500">
+                  Không có mẫu checklist
+                </div>
+              ) : (
+                <>
+                  <Select
+                    value={selectedChecklistTemplateId}
+                    onValueChange={setSelectedChecklistTemplateId}
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Chọn mẫu checklist..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {checklistTemplates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                          {template.isDefault && " (Mặc định)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedTemplate && selectedTemplate.items.length > 0 && (
+                    <div className="mt-2 p-3 rounded-md bg-gray-50 border border-gray-200">
+                      <p className="text-xs text-gray-500 font-medium mb-2">
+                        Các mục checklist ({selectedTemplate.items.length})
+                      </p>
+                      <ul className="space-y-1">
+                        {selectedTemplate.items.map((item) => (
+                          <li
+                            key={item.id}
+                            className="flex items-center gap-2 text-sm text-gray-700"
+                          >
+                            <CheckCircle2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                            {item.content}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

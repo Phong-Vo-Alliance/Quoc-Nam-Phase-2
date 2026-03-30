@@ -496,7 +496,7 @@ export const TaskCard: React.FC<{
                 className="inline-flex items-center gap-1"
                 data-testid="task-group-name"
               >
-                <span>Nhóm:</span>
+                <span>Loại việc:</span>
                 <span className="font-medium text-gray-700">
                   {displayLabel}
                 </span>
