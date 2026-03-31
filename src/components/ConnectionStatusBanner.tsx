@@ -1,20 +1,37 @@
+import { useEffect, useRef } from "react";
 import { useSignalRConnection } from "@/providers/SignalRProvider";
 import { useAuthStore } from "@/stores/authStore";
-import { Loader2, WifiOff, RefreshCw } from "lucide-react";
+import { Loader2, WifiOff, RotateCcw } from "lucide-react";
 
 export function ConnectionStatusBanner() {
   const signalR = useSignalRConnection();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const wasConnectedRef = useRef(false);
 
-  if (!signalR) return null;
+  const connectionState = signalR?.connectionState ?? "Disconnected";
+  const isConnected = signalR?.isConnected ?? false;
 
-  const { connectionState, isConnected, connect } = signalR;
+  // Track whether we were ever successfully connected this session
+  useEffect(() => {
+    if (connectionState === "Connected") {
+      wasConnectedRef.current = true;
+    }
+    // Reset on logout so banner doesn't flash on next login
+    if (!isAuthenticated) {
+      wasConnectedRef.current = false;
+    }
+  }, [connectionState, isAuthenticated]);
 
-  // Don't show disconnection banner when user is not authenticated (e.g. during logout)
-  if (!isAuthenticated || isConnected) return null;
+  if (!signalR || !isAuthenticated || isConnected) return null;
 
   const isReconnecting =
     connectionState === "Reconnecting" || connectionState === "Connecting";
+
+  // Only show "permanently lost" banner if we had a real connection before
+  const isPermanentlyLost =
+    connectionState === "Disconnected" && wasConnectedRef.current;
+
+  if (!isReconnecting && !isPermanentlyLost) return null;
 
   return (
     <div
@@ -33,14 +50,14 @@ export function ConnectionStatusBanner() {
       ) : (
         <>
           <WifiOff className="h-4 w-4" />
-          <span>Mất kết nối máy chủ</span>
+          <span>Mất kết nối máy chủ. Vui lòng tải lại trang.</span>
           <button
-            data-testid="connection-retry-button"
-            onClick={() => connect()}
+            data-testid="connection-reload-button"
+            onClick={() => window.location.reload()}
             className="ml-2 inline-flex items-center gap-1 rounded bg-white/20 px-2.5 py-0.5 text-xs font-semibold hover:bg-white/30 transition-colors"
           >
-            <RefreshCw className="h-3 w-3" />
-            Thử lại
+            <RotateCcw className="h-3 w-3" />
+            Tải lại trang
           </button>
         </>
       )}

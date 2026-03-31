@@ -136,6 +136,9 @@ class ChatHubConnection {
   private maxReconnectAttempts = 5;
   private queryClient: QueryClient | null = null;
   private currentConversationId: string | null = null;
+  private stateChangeListeners = new Set<
+    (state: "Connected" | "Reconnecting" | "Disconnected") => void
+  >();
 
   get state(): SignalRConnectionState {
     if (!this.connection) return "Disconnected";
@@ -200,11 +203,13 @@ class ChatHubConnection {
           error,
         );
         this.reconnectAttempts++;
+        this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
       });
 
       this.connection.onreconnected((connectionId) => {
         const timestamp = new Date().toISOString();
         this.reconnectAttempts = 0;
+        this.stateChangeListeners.forEach((cb) => cb("Connected"));
 
         // AUTO REFETCH: Invalidate messages to sync after reconnection
         // ✅ FIX (Bug 6): Use correct 3-element key to match messageKeys.conversation()
@@ -218,16 +223,17 @@ class ChatHubConnection {
 
       this.connection.onclose((error) => {
         const timestamp = new Date().toISOString();
+        this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
           console.error(
             `[SignalR] ${timestamp} | Max reconnect attempts reached | Attempts: ${this.reconnectAttempts}`,
           );
-        } else {
         }
       });
 
       await this.connection.start();
       this.reconnectAttempts = 0;
+      this.stateChangeListeners.forEach((cb) => cb("Connected"));
       const timestamp = new Date().toISOString();
     } catch (error) {
       const timestamp = new Date().toISOString();
@@ -354,11 +360,16 @@ class ChatHubConnection {
   onStateChange(
     callback: (state: "Connected" | "Reconnecting" | "Disconnected") => void,
   ): () => void {
-    if (!this.connection) return () => {};
-    this.connection.onreconnecting(() => callback("Reconnecting"));
-    this.connection.onreconnected(() => callback("Connected"));
-    this.connection.onclose(() => callback("Disconnected"));
-    return () => {}; // SignalR JS doesn't support removing lifecycle callbacks
+    this.stateChangeListeners.add(callback);
+
+    // Notify immediately if already connected
+    if (this.connection?.state === signalR.HubConnectionState.Connected) {
+      callback("Connected");
+    }
+
+    return () => {
+      this.stateChangeListeners.delete(callback);
+    };
   }
 
   // Generic event unsubscription
