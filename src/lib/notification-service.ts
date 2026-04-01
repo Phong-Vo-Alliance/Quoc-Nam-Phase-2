@@ -132,6 +132,15 @@ export function notify(
   activeConversationId: string | undefined,
 ): void {
   try {
+    // Sound plays for all incoming messages (not own), regardless of active conversation
+    const isOwnMessage = !currentUserId || message.senderId === currentUserId;
+    if (!isOwnMessage) {
+      const store = useNotificationStore.getState();
+      if (store.soundEnabled) {
+        playThrottledSound();
+      }
+    }
+
     if (!shouldNotify(message, currentUserId, activeConversationId)) {
       return;
     }
@@ -143,10 +152,6 @@ export function notify(
       "Tin nhắn mới";
     const body =
       typeof message.content === "string" ? message.content : "Tin nhắn mới";
-
-    if (store.soundEnabled) {
-      playThrottledSound();
-    }
 
     if (store.systemNotificationEnabled) {
       showSystemNotification(senderName, body, message.conversationId);
