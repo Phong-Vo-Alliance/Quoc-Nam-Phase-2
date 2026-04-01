@@ -4,7 +4,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { sendMessage } from "@/api/messages.api";
-import { retryWithBackoff, MESSAGE_RETRY_CONFIG } from "@/utils/retryLogic";
 import { classifyError } from "@/utils/errorHandling";
 import { addFailedMessage, deleteDraft } from "@/utils/storage";
 import { useSendTimeout } from "@/hooks/useSendTimeout";
@@ -91,35 +90,7 @@ export function useSendMessage({
       // Start timeout and get AbortSignal
       const signal = startTimeout();
 
-      // Retry with exponential backoff + onRetry callback
-      return retryWithBackoff(() => sendMessage(data, { signal }), {
-        ...MESSAGE_RETRY_CONFIG,
-        onRetry: (retryCount) => {
-          // Update temp message to 'retrying' state with retry counter
-          queryClient.setQueryData<{
-            pages: GetMessagesResponse[];
-            pageParams: (string | undefined)[];
-          }>(messageKeys.conversation(conversationId), (old) => {
-            if (!old) return old;
-
-            return {
-              ...old,
-              pages: old.pages.map((page) => ({
-                ...page,
-                items: page.items.map((msg) =>
-                  msg.sendStatus === "sending" || msg.sendStatus === "retrying"
-                    ? {
-                        ...msg,
-                        sendStatus: "retrying" as const,
-                        retryCount,
-                      }
-                    : msg,
-                ),
-              })),
-            };
-          });
-        },
-      });
+      return sendMessage(data, { signal });
     },
 
     onMutate: async (data) => {
@@ -221,16 +192,42 @@ export function useSendMessage({
         error,
         classified,
         conversationId,
-        retryCount: MESSAGE_RETRY_CONFIG.maxRetries,
+        retryCount: 0,
       });
 
       // Update temp message to 'failed' state
+      // BUT: if a real message with same content already arrived via SignalR, just remove the temp
       if (context?.tempMessageId) {
         queryClient.setQueryData<{
           pages: GetMessagesResponse[];
           pageParams: (string | undefined)[];
         }>(messageKeys.conversation(conversationId), (old) => {
           if (!old) return old;
+
+          // Check if a real (non-temp) message with same content already exists in cache
+          // This happens when SignalR delivers the real message before onError fires
+          const realMessageExists = old.pages.some((page) =>
+            page.items.some(
+              (msg) =>
+                !msg.id.startsWith("temp-") &&
+                msg.senderId === (currentUser?.id || "") &&
+                msg.content === (variables.content || null) &&
+                msg.conversationId === conversationId,
+            ),
+          );
+
+          if (realMessageExists) {
+            // Server actually sent it — just remove the orphaned temp message
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                items: page.items.filter(
+                  (msg) => msg.id !== context.tempMessageId,
+                ),
+              })),
+            };
+          }
 
           return {
             ...old,
@@ -259,7 +256,7 @@ export function useSendMessage({
           : [],
         workspaceId,
         conversationId,
-        retryCount: MESSAGE_RETRY_CONFIG.maxRetries,
+        retryCount: 0,
         lastError: classified.message,
         timestamp: Date.now(),
       };

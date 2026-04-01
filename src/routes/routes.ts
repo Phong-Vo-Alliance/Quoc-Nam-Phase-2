@@ -20,6 +20,9 @@ export const ROUTES = {
   MOBILE_CHAT_DETAIL: "/mobile/chat/:groupId",
   MOBILE_TASK_LOG: "/mobile/task-log/:taskId",
 
+  // Account settings
+  ACCOUNT: "/account",
+
   // Security
   BLOCKED: "/blocked",
 

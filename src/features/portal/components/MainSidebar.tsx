@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
 import {
   MessageSquareText,
@@ -14,7 +15,9 @@ import {
   Settings,
   Building2,
   BookOpen,
+  UserCog,
 } from "lucide-react";
+import { ROUTES } from "@/routes/routes";
 import { cn } from "@/lib/utils";
 import { openGuideWithToken } from "@/lib/auth/guideToken";
 import QuocnamLogo from "@/assets/Quocnam_logo.png";
@@ -79,6 +82,7 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
 
   // NEW: Profile popover open state
   const [openProfile, setOpenProfile] = React.useState(false);
+  const navigate = useNavigate();
 
   const isShowPhasedFeatures = false;
 
@@ -360,16 +364,27 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
               </div>
             )}
 
-            <div className="mt-1">
+            <div className="mt-1 border-t border-gray-100 pt-1">
+              <button
+                onClick={() => {
+                  setOpenProfile(false);
+                  navigate(ROUTES.ACCOUNT);
+                }}
+                data-testid="profile-account-button"
+                className="w-full flex items-center gap-2 px-2 py-2 text-sm rounded-md hover:bg-brand-50 text-gray-700"
+              >
+                <UserCog className="h-4 w-4 text-gray-600" />
+                <span>Tài khoản</span>
+              </button>
               <button
                 onClick={() => {
                   setOpenProfile(false);
                   onSelect("logout");
                 }}
                 data-testid="profile-logout-button"
-                className="w-full flex items-center gap-2 px-2 py-2 text-sm rounded-md hover:bg-brand-50 text-gray-700"
+                className="w-full flex items-center gap-2 px-2 py-2 text-sm rounded-md hover:bg-red-50 text-red-600"
               >
-                <LogOut className="h-4 w-4 text-gray-600" />
+                <LogOut className="h-4 w-4" />
                 <span>Đăng xuất</span>
               </button>
             </div>

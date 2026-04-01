@@ -115,7 +115,22 @@ export function handleMessageSent(
     );
     if (exists) return old;
 
-    const newPages = [...old.pages];
+    // Remove any failed temp messages with same sender + content (orphaned after server success)
+    const pagesWithoutFailedTemp = old.pages.map((page) => ({
+      ...page,
+      items: page.items.filter(
+        (item) =>
+          !(
+            item.id.startsWith("temp-") &&
+            item.sendStatus === "failed" &&
+            item.senderId === message.senderId &&
+            item.content === message.content &&
+            item.conversationId === message.conversationId
+          ),
+      ),
+    }));
+
+    const newPages = [...pagesWithoutFailedTemp];
     newPages[0] = {
       ...newPages[0],
       items: [message, ...newPages[0].items],

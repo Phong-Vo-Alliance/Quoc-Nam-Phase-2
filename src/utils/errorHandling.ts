@@ -104,6 +104,24 @@ export function classifyError(error: unknown): ClassifiedError {
       };
     }
 
+    if (status === 403) {
+      return {
+        type: "BAD_REQUEST",
+        message: "Bạn không có quyền thực hiện thao tác này.",
+        isRetryable: false,
+        statusCode: status,
+      };
+    }
+
+    if (status === 404) {
+      return {
+        type: "BAD_REQUEST",
+        message: "Cuộc trò chuyện không tồn tại hoặc đã bị xóa.",
+        isRetryable: false,
+        statusCode: status,
+      };
+    }
+
     if (status === 400) {
       const serverMessage = error.response.data?.message;
 

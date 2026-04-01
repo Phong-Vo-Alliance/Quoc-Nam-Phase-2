@@ -8,6 +8,7 @@ import * as messageCache from "@/lib/cache-updaters/message-cache";
 import * as categoryCache from "@/lib/cache-updaters/category-cache";
 import * as directCache from "@/lib/cache-updaters/direct-cache";
 import * as conversationCache from "@/lib/cache-updaters/conversation-cache";
+import * as notificationService from "@/lib/notification-service";
 import type { ChatMessage, ChatMessageContentType } from "@/types/messages";
 
 const CONTENT_TYPE_MAP: Record<number, ChatMessageContentType> = {
@@ -82,6 +83,15 @@ export function registerAllEventHandlers(
       messageCache.handleMessageSent(messageCacheCtx, message);
       categoryCache.handleMessageSent(categoryCacheCtx, message);
       directCache.handleMessageSent(directCacheCtx, message);
+      try {
+        notificationService.notify(
+          message,
+          getCurrentUserId(),
+          getActiveConversationId(),
+        );
+      } catch (err) {
+        console.warn("[dispatcher] notification error (non-fatal):", err);
+      }
     },
   );
 

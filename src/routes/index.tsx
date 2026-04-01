@@ -7,7 +7,13 @@ import { ROUTES } from "./routes";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 // Import pages/components
-import { AuthSsoPage, BlockedPage, LoginPage, PortalPage } from "@/pages";
+import {
+  AuthSsoPage,
+  AccountPage,
+  BlockedPage,
+  LoginPage,
+  PortalPage,
+} from "@/pages";
 
 function NotFoundPage() {
   return (
@@ -51,6 +57,14 @@ const router = createBrowserRouter([
         element: null, // Handled by PortalPage internal state
       },
     ],
+  },
+  {
+    path: ROUTES.ACCOUNT,
+    element: (
+      <ProtectedRoute>
+        <AccountPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: ROUTES.NOT_FOUND,

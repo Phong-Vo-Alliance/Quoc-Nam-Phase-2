@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
 import { useUploadFiles } from "@/hooks/mutations/useUploadFiles";
@@ -9,7 +10,9 @@ import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useReplyStore } from "@/stores/replyStore";
 import { extractSuccessfulUploads } from "@/utils/fileHelpers";
 import { formatAttachment } from "@/utils/formatAttachment";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 import { toast } from "sonner";
+import type { GetMessagesResponse } from "@/types/messages";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
 
@@ -38,6 +41,7 @@ export function useSendChatMessage({
   bottomRef,
   inputRef,
 }: UseSendChatMessageOptions) {
+  const queryClient = useQueryClient();
   const replyTarget = useReplyStore((state) => state.replyTarget);
   const clearReply = useReplyStore((state) => state.clearReply);
 
@@ -225,23 +229,7 @@ export function useSendChatMessage({
         }, 100);
       } catch (error: any) {
         console.error("Send message error:", error);
-
-        if (error.response?.status === 401) {
-          toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", {
-            duration: 5000,
-          });
-        } else if (error.response?.status === 403) {
-          toast.error(
-            "Bạn không có quyền gửi tin nhắn trong cuộc trò chuyện này.",
-          );
-        } else if (error.response?.status === 404) {
-          toast.error("Cuộc trò chuyện không tồn tại hoặc đã bị xóa.");
-        } else if (error.response?.status >= 500) {
-          toast.error("Lỗi hệ thống. Vui lòng thử lại sau.");
-        } else {
-          toast.error("Lỗi gửi tin nhắn. Vui lòng thử lại.");
-        }
-
+        // Toast errors are already handled by useSendMessage.onError
         setIsUploading(false);
       }
     },
@@ -288,13 +276,28 @@ export function useSendChatMessage({
         return;
       }
 
+      // Remove failed message from cache before retrying
+      queryClient.setQueryData<{
+        pages: GetMessagesResponse[];
+        pageParams: (string | undefined)[];
+      }>(messageKeys.conversation(conversationId), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            items: page.items.filter((msg) => msg.id !== messageId),
+          })),
+        };
+      });
+
       sendMessageMutation.mutate({
         conversationId,
         content: message.content || "",
         parentMessageId: message.parentMessageId || undefined,
       });
     },
-    [conversationId, sendMessageMutation, isOnline],
+    [conversationId, sendMessageMutation, isOnline, queryClient],
   );
 
   return {

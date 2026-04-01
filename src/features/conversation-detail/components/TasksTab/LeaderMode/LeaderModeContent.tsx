@@ -203,7 +203,7 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
             "
           >
             <Users className="h-4 w-4" />
-            Team
+            Nhóm
           </ToggleGroupItem>
           <ToggleGroupItem
             value="mine"

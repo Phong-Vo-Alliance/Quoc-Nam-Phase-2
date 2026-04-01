@@ -206,7 +206,13 @@ export const getMessageThread = async (params: {
   afterMessageId?: string;
   aroundMessageId?: string;
 }): Promise<ThreadDto> => {
-  const { messageId, limit = 50, beforeMessageId, afterMessageId, aroundMessageId } = params;
+  const {
+    messageId,
+    limit = 50,
+    beforeMessageId,
+    afterMessageId,
+    aroundMessageId,
+  } = params;
 
   const queryParams: Record<string, unknown> = { limit };
   if (beforeMessageId) queryParams.beforeMessageId = beforeMessageId;
