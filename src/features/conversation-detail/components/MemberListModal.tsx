@@ -170,7 +170,7 @@ export const MemberListModal: React.FC<MemberListModalProps> = ({
                       className="text-[11px] text-gray-400 line-clamp-2"
                       title={member.departments.join(". ")}
                     >
-                      {member.departments.join(". ")}
+                      {member.departments.join(" • ")}
                     </div>
                   )}
                 </div>
