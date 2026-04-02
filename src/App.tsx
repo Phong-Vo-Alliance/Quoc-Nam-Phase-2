@@ -10,6 +10,7 @@ import { getCurrentUser } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
 import { getAccessToken } from "./lib/auth/tokenStorage";
 import { ConnectionStatusBanner } from "./components/ConnectionStatusBanner";
+import { ScreenSizeGuard } from "./components/ScreenSizeGuard";
 
 export default function App() {
   // Initialize client-side security protections
@@ -69,21 +70,23 @@ export default function App() {
   }, [isAuthenticated, user?.id]); // Only run when auth status or user changes
 
   return (
-    <SignalRProvider>
-      <ConnectionStatusBanner />
+    <ScreenSizeGuard>
+      <SignalRProvider>
+        <ConnectionStatusBanner />
 
-      {/* Dev mode indicator for whitelisted users */}
-      {isWhitelisted && (
-        <div className="fixed top-0 left-0 bg-yellow-500 text-black px-2 py-1 text-xs z-50 font-mono">
-          DEV MODE - Protections Bypassed
-        </div>
-      )}
+        {/* Dev mode indicator for whitelisted users */}
+        {isWhitelisted && (
+          <div className="fixed top-0 left-0 bg-yellow-500 text-black px-2 py-1 text-xs z-50 font-mono">
+            DEV MODE - Protections Bypassed
+          </div>
+        )}
 
-      <AppRouter />
-      <Toaster position="top-center" richColors />
+        <AppRouter />
+        <Toaster position="top-center" richColors />
 
-      {/* Session expired / account disabled dialog */}
-      <SessionExpiredDialog />
-    </SignalRProvider>
+        {/* Session expired / account disabled dialog */}
+        <SessionExpiredDialog />
+      </SignalRProvider>
+    </ScreenSizeGuard>
   );
 }
