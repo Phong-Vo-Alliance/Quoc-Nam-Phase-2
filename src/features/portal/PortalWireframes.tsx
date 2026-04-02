@@ -329,7 +329,7 @@ export default function PortalWireframes({
         .filter((name): name is string => !!name);
 
       if (departmentNames.length > 0) {
-        return departmentNames.join(" . ");
+        return departmentNames.join(" • ");
       }
     }
     return "—";

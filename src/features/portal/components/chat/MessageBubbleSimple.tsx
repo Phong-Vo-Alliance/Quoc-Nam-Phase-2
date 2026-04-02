@@ -193,12 +193,21 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
         /* Show buttons when hovering the message bubble container */
         .message-bubble-container:hover .hover-action-button {
           opacity: 1;
+          pointer-events: none; /* Keep none on outer container - it has 40px paddingBottom that overlaps bubble */
+        }
+
+        /* Only enable pointer-events on the inner buttons container, not the phantom padding zone */
+        .message-bubble-container:hover .hover-action-button .hover-action-button-inner {
           pointer-events: auto;
         }
 
         /* Keep buttons visible when hovering the buttons themselves */
         .hover-action-button:hover {
           opacity: 1;
+          pointer-events: none;
+        }
+
+        .hover-action-button:hover .hover-action-button-inner {
           pointer-events: auto;
         }
 
@@ -334,7 +343,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                 }}
                 data-testid={`hover-actions-${message.id}`}
               >
-                <div className="rounded-lg border border-gray-200 px-2 py-1 bg-white hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
+                <div className="hover-action-button-inner rounded-lg border border-gray-200 px-2 py-1 bg-white hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
                   {/* Reply button - LEFTMOST (before other actions) */}
                   {message.contentType !== "SYS" && (
                     <button
