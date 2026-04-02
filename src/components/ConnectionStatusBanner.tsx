@@ -7,18 +7,26 @@ export function ConnectionStatusBanner() {
   const signalR = useSignalRConnection();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const wasConnectedRef = useRef(false);
+  const hasAttemptedRef = useRef(false);
 
   const connectionState = signalR?.connectionState ?? "Disconnected";
   const isConnected = signalR?.isConnected ?? false;
 
-  // Track whether we were ever successfully connected this session
+  // Track connection attempts and successful connections
   useEffect(() => {
+    if (
+      connectionState === "Connecting" ||
+      connectionState === "Reconnecting"
+    ) {
+      hasAttemptedRef.current = true;
+    }
     if (connectionState === "Connected") {
       wasConnectedRef.current = true;
     }
     // Reset on logout so banner doesn't flash on next login
     if (!isAuthenticated) {
       wasConnectedRef.current = false;
+      hasAttemptedRef.current = false;
     }
   }, [connectionState, isAuthenticated]);
 
@@ -27,11 +35,12 @@ export function ConnectionStatusBanner() {
   const isReconnecting =
     connectionState === "Reconnecting" || connectionState === "Connecting";
 
-  // Only show "permanently lost" banner if we had a real connection before
-  const isPermanentlyLost =
-    connectionState === "Disconnected" && wasConnectedRef.current;
+  // Show "lost" banner if we had a connection before OR if initial attempt failed
+  const isConnectionFailed =
+    connectionState === "Disconnected" &&
+    (wasConnectedRef.current || hasAttemptedRef.current);
 
-  if (!isReconnecting && !isPermanentlyLost) return null;
+  if (!isReconnecting && !isConnectionFailed) return null;
 
   return (
     <div
