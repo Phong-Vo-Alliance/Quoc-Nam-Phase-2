@@ -3,7 +3,7 @@
  * Supports message grouping with dynamic border-radius
  */
 
-import React, { useRef } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   Pin,
   Star,
@@ -175,6 +175,19 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
         !isLastInGroup && "rounded-bl-md",
       );
 
+  // Hover state management with delay timer for action menu
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleMouseEnter = useCallback(() => {
+    clearTimeout(hoverTimeoutRef.current);
+    setIsHovered(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    hoverTimeoutRef.current = setTimeout(() => setIsHovered(false), 200);
+  }, []);
+
   // Force immediate image load for sending/retrying messages (skip lazy loading)
   const forceImageLoad =
     message.sendStatus === "sending" || message.sendStatus === "retrying";
@@ -183,34 +196,6 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
     <>
       {/* Custom CSS for hover behavior */}
       <style>{`
-        /* Hide hover action buttons by default */
-        .hover-action-button {
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 200ms ease-in-out;
-        }
-
-        /* Show buttons when hovering the message bubble container */
-        .message-bubble-container:hover .hover-action-button {
-          opacity: 1;
-          pointer-events: none; /* Keep none on outer container - it has 40px paddingBottom that overlaps bubble */
-        }
-
-        /* Only enable pointer-events on the inner buttons container, not the phantom padding zone */
-        .message-bubble-container:hover .hover-action-button .hover-action-button-inner {
-          pointer-events: auto;
-        }
-
-        /* Keep buttons visible when hovering the buttons themselves */
-        .hover-action-button:hover {
-          opacity: 1;
-          pointer-events: none;
-        }
-
-        .hover-action-button:hover .hover-action-button-inner {
-          pointer-events: auto;
-        }
-
         /* Highlight effect for parent message scroll - CHỈ BUBBLE */
         .message-highlighted {
           background: transparent !important; /* Đảm bảo container không có nền */
@@ -252,6 +237,8 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           )}
           data-message-id={message.id}
           data-testid={`message-bubble-${message.id}`}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         >
           <div>
             {/* Sender name and pin indicator (only for received and first in group) */}
@@ -329,21 +316,20 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           </div>
           <div className="relative w-fit max-w-full">
             {/* Hover action buttons */}
-            {
+            {isHovered && (
               <div
                 className={cn(
-                  "hover-action-button absolute flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 z-10",
+                  "absolute flex items-center gap-1 z-20",
                   isOwn ? "right-0" : "left-0",
                 )}
                 style={{
-                  top: "-40px",
-                  paddingBottom: "40px",
-                  backgroundColor: "transparent",
-                  border: "none",
+                  top: "-36px",
                 }}
                 data-testid={`hover-actions-${message.id}`}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
               >
-                <div className="hover-action-button-inner rounded-lg border border-gray-200 px-2 py-1 bg-white hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
+                <div className="rounded-lg border border-gray-200 px-2 py-1 bg-white shadow-sm hover:shadow-md hover:border-gray-300 transition-all duration-200 flex items-center gap-1">
                   {/* Reply button - LEFTMOST (before other actions) */}
                   {message.contentType !== "SYS" && (
                     <button
@@ -452,7 +438,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     )}
                 </div>
               </div>
-            }
+            )}
 
             {/* Message bubble */}
             <div

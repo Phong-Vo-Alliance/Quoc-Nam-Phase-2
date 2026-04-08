@@ -160,17 +160,30 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
 };
 
 /**
- * Helper function to highlight matching text
+ * Remove Vietnamese diacritics for accent-insensitive comparison
+ */
+function removeDiacritics(str: string): string {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
+
+/**
+ * Helper function to highlight matching text (supports Vietnamese diacritics)
  */
 function highlightMatch(text: string, query: string): React.ReactNode {
   if (!query) return text;
 
-  const lowerText = text.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  const index = lowerText.indexOf(lowerQuery);
+  const normalizedText = removeDiacritics(text);
+  const normalizedQuery = removeDiacritics(query);
+  const index = normalizedText.indexOf(normalizedQuery);
 
   if (index === -1) return text;
 
+  // Use the index from normalized comparison but slice from original text
   const before = text.slice(0, index);
   const match = text.slice(index, index + query.length);
   const after = text.slice(index + query.length);
@@ -178,7 +191,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {before}
-      <span className="bg-yellow-200 font-semibold">{match}</span>
+      <span className="font-semibold">{match}</span>
       {after}
     </>
   );

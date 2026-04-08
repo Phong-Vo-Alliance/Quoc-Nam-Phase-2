@@ -8,7 +8,7 @@
  * - Total unread count badge
  */
 
-import { formatRelativeTime } from "@/utils/formatRelativeTime";
+import RelativeTime from "@/features/portal/components/RelativeTime";
 import { formatMessagePreview } from "@/utils/formatMessagePreview";
 import type { CategoryItemProps } from "../types";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,6 +49,18 @@ export function CategoryItem({
       0,
     ) || 0;
 
+  // Find conversations with unread messages (for displaying work type names)
+  const unreadConversations = useMemo(() => {
+    return (category.conversations ?? [])
+      .filter((conv) => conv.unreadCount > 0)
+      .sort((a, b) => {
+        // Sort by latest message time, most recent first
+        const timeA = a.lastMessage?.sentAt || "";
+        const timeB = b.lastMessage?.sentAt || "";
+        return new Date(timeB).getTime() - new Date(timeA).getTime();
+      });
+  }, [category.conversations]);
+
   // Get parent message content from cache if this is a thread reply
   const parentMessageContent = useMemo(() => {
     const lastMsg = latestConversation?.lastMessage;
@@ -63,15 +75,17 @@ export function CategoryItem({
     const conversationId = latestConversation?.conversationId;
     if (!conversationId) return null;
 
-    const messagesCache = queryClient.getQueryData<InfiniteData<GetMessagesResponse>>(
-      messageKeys.conversation(conversationId)
-    );
+    const messagesCache = queryClient.getQueryData<
+      InfiniteData<GetMessagesResponse>
+    >(messageKeys.conversation(conversationId));
 
     if (!messagesCache?.pages) return null;
 
     // Search through all pages for the parent message
     for (const page of messagesCache.pages) {
-      const parentMsg = page.items.find((msg: ChatMessage) => msg.id === lastMsg.parentMessageId);
+      const parentMsg = page.items.find(
+        (msg: ChatMessage) => msg.id === lastMsg.parentMessageId,
+      );
       if (parentMsg) {
         return parentMsg.content;
       }
@@ -101,15 +115,24 @@ export function CategoryItem({
         <div className="flex items-center justify-between">
           <p className="truncate text-sm font-medium">{category.name}</p>
           {latestConversation?.lastMessage && (
-            <span className="ml-2 text-xs text-gray-400 flex-shrink-0">
-              {formatRelativeTime(latestConversation.lastMessage.sentAt)}
-            </span>
+            <RelativeTime
+              timestamp={latestConversation.lastMessage.sentAt}
+              className="ml-2 text-xs text-gray-400 flex-shrink-0"
+            />
           )}
         </div>
 
         {/* Line 2: Message Preview + Unread Badge */}
         {latestConversation?.lastMessage?.parentMessageId ? (
           <>
+            {/* Conversation name tag (work type) */}
+            {latestConversation && category.conversations.length > 1 && (
+              <div className="mt-0.5">
+                <span className="text-[10px] font-medium text-brand-600 bg-brand-50 px-1 py-0.5 rounded">
+                  {latestConversation.conversationName}
+                </span>
+              </div>
+            )}
             {/* Parent message (tin gốc) - no curve */}
             <div className="mt-0.5 flex items-center gap-2">
               <span className="text-xs text-gray-500 truncate flex-1">
@@ -149,21 +172,69 @@ export function CategoryItem({
                 </span>
               )}
             </div>
+            {/* Other unread conversations (work types) */}
+            {unreadConversations.length > 1 && (
+              <div
+                className="mt-0.5 flex items-center gap-1 overflow-hidden"
+                data-testid={`category-unread-worktypes-${category.id}`}
+              >
+                <span className="text-[10px] text-gray-400 flex-shrink-0">
+                  +
+                </span>
+                <span className="text-[10px] text-brand-500 truncate">
+                  {unreadConversations
+                    .filter(
+                      (c) =>
+                        c.conversationId !== latestConversation?.conversationId,
+                    )
+                    .map((c) => `${c.conversationName} (${c.unreadCount})`)
+                    .join(" · ")}
+                </span>
+              </div>
+            )}
           </>
         ) : latestConversation?.lastMessage ? (
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-xs text-gray-500 truncate flex-1">
-              {formatMessagePreview(latestConversation.lastMessage)}
-            </span>
-            {totalUnread > 0 && (
-              <span
-                className="inline-flex justify-center items-center ml-2 px-1.5 py-0 text-[10px] font-semibold bg-brand-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
-                data-testid={`category-unread-badge-${category.id}`}
-              >
-                {totalUnread > 99 ? "99+" : totalUnread}
+          <>
+            <div className="mt-0.5 flex items-center gap-2">
+              {/* Conversation name tag when category has multiple conversations */}
+              {category.conversations.length > 1 && (
+                <span className="text-[10px] font-medium text-brand-600 bg-brand-50 px-1 py-0.5 rounded flex-shrink-0">
+                  {latestConversation.conversationName}
+                </span>
+              )}
+              <span className="text-xs text-gray-500 truncate flex-1">
+                {formatMessagePreview(latestConversation.lastMessage)}
               </span>
+              {totalUnread > 0 && (
+                <span
+                  className="inline-flex justify-center items-center ml-2 px-1.5 py-0 text-[10px] font-semibold bg-brand-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
+                  data-testid={`category-unread-badge-${category.id}`}
+                >
+                  {totalUnread > 99 ? "99+" : totalUnread}
+                </span>
+              )}
+            </div>
+            {/* Other unread conversations (work types) */}
+            {unreadConversations.length > 1 && (
+              <div
+                className="mt-0.5 flex items-center gap-1 overflow-hidden"
+                data-testid={`category-unread-worktypes-${category.id}`}
+              >
+                <span className="text-[10px] text-gray-400 flex-shrink-0">
+                  +
+                </span>
+                <span className="text-[10px] text-brand-500 truncate">
+                  {unreadConversations
+                    .filter(
+                      (c) =>
+                        c.conversationId !== latestConversation?.conversationId,
+                    )
+                    .map((c) => `${c.conversationName} (${c.unreadCount})`)
+                    .join(" · ")}
+                </span>
+              </div>
             )}
-          </div>
+          </>
         ) : (
           <p className="mt-0.5 truncate text-xs text-gray-400">
             Chưa có tin nhắn

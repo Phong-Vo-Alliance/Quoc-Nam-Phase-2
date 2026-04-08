@@ -11,7 +11,7 @@
  */
 
 import { Ban } from "lucide-react";
-import { formatRelativeTime } from "@/utils/formatRelativeTime";
+import RelativeTime from "@/features/portal/components/RelativeTime";
 import type { DirectMessageItemProps } from "../types";
 
 export function DirectMessageItem({
@@ -100,10 +100,11 @@ export function DirectMessageItem({
           </div>
 
           {/* Timestamp */}
-          {hasConversation && contact.conversation?.lastMessage && (
-            <span className="ml-2 text-xs text-gray-400 flex-shrink-0">
-              {formatRelativeTime(contact.conversation.lastMessage.sentAt)}
-            </span>
+          {hasConversation && contact?.conversation?.lastMessage && (
+            <RelativeTime
+              timestamp={contact.conversation.lastMessage.sentAt}
+              className="ml-2 text-xs text-gray-400 flex-shrink-0"
+            />
           )}
         </div>
 

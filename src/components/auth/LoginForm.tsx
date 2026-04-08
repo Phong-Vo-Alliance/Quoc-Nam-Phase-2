@@ -36,7 +36,7 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
     mode: "onBlur",
     defaultValues: import.meta.env.DEV
       ? {
-          password: "Admin@123",
+          password: "Password123!",
         }
       : undefined,
   });

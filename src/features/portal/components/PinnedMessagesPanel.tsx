@@ -75,10 +75,7 @@ function HighlightText({ text, query }: { text: string; query: string }) {
       result.push(remaining.slice(0, idx));
     }
     result.push(
-      <mark
-        key={key++}
-        className="bg-yellow-200 text-inherit rounded-sm px-0.5"
-      >
+      <mark key={key++} className="bg-yellow-200 text-inherit">
         {remaining.slice(idx, idx + normalizedQuery.length)}
       </mark>,
     );
@@ -528,7 +525,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
 
                           {/* Tin nhắn text thuần */}
                           {msg.type === "text" && (
-                            <div className="mt-1 text-[13px] text-gray-700 break-all">
+                            <div className="mt-1 text-[13px] text-gray-700 [word-break:break-word] [overflow-wrap:anywhere]">
                               <HighlightText
                                 text={
                                   (msg.content?.slice(0, 100) || "") +

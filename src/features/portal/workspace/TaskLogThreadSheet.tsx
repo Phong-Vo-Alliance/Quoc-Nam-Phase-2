@@ -31,13 +31,12 @@ import { chatHub } from "@/lib/signalr";
 import type { ThreadUpdatedEvent } from "@/lib/signalr";
 import { useUploadFiles } from "@/hooks/mutations/useUploadFiles";
 import { useUploadFilesBatch } from "@/hooks/mutations/useUploadFilesBatch";
-import { FILE_CATEGORIES, MAX_FILES_PER_MESSAGE } from "@/types/files";
-import type { SelectedFile, FileUploadProgressState } from "@/types/files";
+import { FILE_CATEGORIES } from "@/types/files";
+import type { SelectedFile } from "@/types/files";
 import { formatAttachment } from "@/utils/formatAttachment";
-import { useFileValidation } from "@/hooks/useFileValidation";
+import { useFileUpload } from "@/features/chat-main/hooks/useFileUpload";
 import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead"; // 🆕 NEW: Mark thread as read
 import {
-  validateBatchFileSelection,
   extractSuccessfulUploads,
   revokeFilePreview,
 } from "@/utils/fileHelpers";
@@ -156,12 +155,22 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [showGoToBottom, setShowGoToBottom] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0); // 🆕 NEW: Track unread messages count
-  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<
-    Map<string, FileUploadProgressState>
-  >(new Map());
-  const [isUploading, setIsUploading] = useState(false);
   const [currentMentions, setCurrentMentions] = useState<MentionInputDto[]>([]);
+
+  // ── File Upload (shared hook) ──
+  const {
+    selectedFiles,
+    uploadProgress,
+    isUploading,
+    setIsUploading,
+    fileInputRef,
+    imageInputRef,
+    isFileLimitReached,
+    handleFileSelect,
+    handlePaste,
+    handleRemoveFile,
+    clearFiles,
+  } = useFileUpload();
 
   // Gap-fill state: when around-block and latest-block don't overlap
   const [hasGapBelow, setHasGapBelow] = useState(false);
@@ -171,8 +180,6 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const gapRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const mentionInputRef = useRef<MentionInputHandle>(null);
 
   // ✅ FIX: Track if this is the initial load to prevent auto-scroll on load more
@@ -196,7 +203,9 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
 
   // ✅ NEW: Mark thread as read when opened (only if unreadReplyCount > 0)
   const markAsRead = useMarkConversationAsRead();
-  const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // 🆕 Helper function to scroll to and highlight a message
   const scrollToAndHighlight = useCallback((element: Element) => {
@@ -807,93 +816,6 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   // File upload mutations
   const uploadFilesMutation = useUploadFiles();
   const uploadBatchMutation = useUploadFilesBatch();
-  const { validateAndAdd } = useFileValidation();
-
-  // Compute file limit status
-  const totalSize = selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
-  const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100MB
-  const remainingSize = MAX_TOTAL_SIZE - totalSize;
-  const isFileLimitReached =
-    selectedFiles.length >= MAX_FILES_PER_MESSAGE || remainingSize < 1024;
-
-  // Handle file selection
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const fileArray = Array.from(files);
-    const currentCount = selectedFiles.length;
-    const remainingSlots = MAX_FILES_PER_MESSAGE - currentCount;
-
-    // Check total size
-    const currentTotalSize = selectedFiles.reduce(
-      (sum, f) => sum + f.file.size,
-      0,
-    );
-    const newFilesSize = fileArray.reduce((sum, f) => sum + f.size, 0);
-    const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
-    const remainingSize = MAX_TOTAL_SIZE - currentTotalSize;
-
-    if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
-      toast.error(
-        remainingSize <= 0
-          ? "Đã đạt giới hạn 100MB. Vui lòng xóa file cũ để chọn file mới."
-          : `Tổng dung lượng vượt quá 100MB.`,
-      );
-      e.target.value = "";
-      return;
-    }
-
-    // Check file count
-    if (remainingSlots === 0) {
-      toast.error(
-        `Đã đủ ${MAX_FILES_PER_MESSAGE} file. Vui lòng xóa file cũ để chọn file mới.`,
-      );
-      e.target.value = "";
-      return;
-    }
-
-    // Validate batch
-    const validationError = validateBatchFileSelection(
-      fileArray.slice(0, remainingSlots),
-      MAX_FILES_PER_MESSAGE,
-    );
-
-    if (validationError) {
-      toast.error(validationError.message);
-      e.target.value = "";
-      return;
-    }
-
-    // Add validated files
-    const validFiles = validateAndAdd(
-      fileArray.slice(0, remainingSlots),
-      currentCount,
-    );
-    if (validFiles.length > 0) {
-      setSelectedFiles((prev) => [...prev, ...validFiles]);
-    }
-
-    e.target.value = "";
-  };
-
-  // Remove selected file
-  const handleRemoveFile = (fileId: string) => {
-    setSelectedFiles((prev) => {
-      const file = prev.find((f) => f.id === fileId);
-      if (file) {
-        revokeFilePreview(file.preview);
-      }
-      return prev.filter((f) => f.id !== fileId);
-    });
-  };
-
-  // Cleanup file previews on unmount
-  useEffect(() => {
-    return () => {
-      selectedFiles.forEach((sf) => revokeFilePreview(sf.preview));
-    };
-  }, [selectedFiles]);
 
   const title = useMemo(
     () => getTaskLogTitle(task, threadData?.parentMessage),
@@ -1015,8 +937,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
       });
 
       setInputValue("");
-      selectedFiles.forEach((sf) => revokeFilePreview(sf.preview));
-      setSelectedFiles([]);
+      clearFiles();
       setThreadReplyTarget(null); // Clear reply target after sending
 
       // The ThreadUpdated event will trigger a refetch
@@ -1303,7 +1224,10 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
         )}
 
         {/* Composer */}
-        <div className="border-t border-gray-200 bg-white px-4 py-3">
+        <div
+          className="border-t border-gray-200 bg-white px-4 py-3"
+          onPaste={handlePaste}
+        >
           <div className="flex items-end gap-2">
             {/* File upload button */}
             <button
@@ -1361,7 +1285,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
               autoFocus
               disabled={sending || loading || isUploading}
               className="flex-1"
-              placeholder="Nhập nội dung để trao đổi về công việc này…"
+              placeholder="Nhập nội dung để trao đổi về công việc này"
               canSendWithoutText={selectedFiles.length > 0}
               data-testid="task-log-input"
             />

@@ -20,7 +20,7 @@ interface UseCreateInformationConfirmedOptions {
  * Hook to create a new confirmed information record
  */
 export function useCreateInformationConfirmed(
-  options?: UseCreateInformationConfirmedOptions
+  options?: UseCreateInformationConfirmedOptions,
 ) {
   const queryClient = useQueryClient();
 
@@ -40,12 +40,12 @@ export function useCreateInformationConfirmed(
         }),
       });
 
-      toast.success("Đã xác nhận thông tin");
+      toast.success("Đã tiếp nhận thông tin");
       options?.onSuccess?.(data);
     },
     onError: (error: Error) => {
       console.error("Failed to create confirmed information:", error);
-      toast.error("Không thể xác nhận thông tin");
+      toast.error("Không thể tiếp nhận thông tin");
       options?.onError?.(error);
     },
   });

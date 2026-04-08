@@ -220,6 +220,16 @@ export const MentionInputInline = forwardRef<
       [onMentionsChange, disabled, shortcuts.length, openShortcutDropdown],
     );
 
+    // Normalize Vietnamese text: remove diacritics for accent-insensitive search
+    const removeDiacritics = useCallback((str: string) => {
+      return str
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .toLowerCase();
+    }, []);
+
     // Filter members based on search query and exclude current user
     const filteredMembers = React.useMemo(() => {
       // Filter out current user first
@@ -229,15 +239,17 @@ export const MentionInputInline = forwardRef<
 
       if (!mentionSearchQuery) return otherMembers;
 
-      const query = mentionSearchQuery.toLowerCase();
+      const query = removeDiacritics(mentionSearchQuery);
       return otherMembers.filter((member) => {
-        const fullName = (
-          member.userInfo?.fullName || member.userName
-        ).toLowerCase();
-        const identifier = (member.userInfo?.identifier || "").toLowerCase();
+        const fullName = removeDiacritics(
+          member.userInfo?.fullName || member.userName,
+        );
+        const identifier = removeDiacritics(
+          member.userInfo?.identifier || "",
+        );
         return fullName.includes(query) || identifier.includes(query);
       });
-    }, [members, mentionSearchQuery, currentUser?.id]);
+    }, [members, mentionSearchQuery, currentUser?.id, removeDiacritics]);
 
     // Filter shortcuts based on search query (case-insensitive, contains matching)
     const filteredShortcuts = React.useMemo(() => {
@@ -374,9 +386,65 @@ export const MentionInputInline = forwardRef<
       };
     }, []);
 
+    // Update mention/shortcut dropdown search query from current text (used during IME composition)
+    const updateDropdownSearchQuery = useCallback(() => {
+      const text = getTextContent();
+      const cursorPos = getCursorPosition();
+      const textBeforeCursor = text.slice(0, cursorPos) || text;
+
+      // Check for @ mention trigger
+      const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+      if (lastAtIndex !== -1) {
+        const charBeforeAt = textBeforeCursor[lastAtIndex - 1];
+        const isValidAtPosition =
+          lastAtIndex === 0 ||
+          /[\s\n\r\t]/.test(charBeforeAt) ||
+          charBeforeAt === undefined;
+
+        if (isValidAtPosition) {
+          const searchQuery = textBeforeCursor.slice(lastAtIndex + 1);
+          if (!/[\s\n\r\t]/.test(searchQuery)) {
+            setMentionSearchQuery(searchQuery);
+            if (!showMentionDropdown) {
+              const coords = getCaretCoordinates();
+              setDropdownPosition(coords);
+              updateFixedPosition(coords);
+              setShowMentionDropdown(true);
+              setMentionStartIndex(lastAtIndex);
+              setSelectedMentionIndex(0);
+              setShowShortcutDropdown(false);
+            }
+            return;
+          }
+        }
+      }
+
+      // Check for / shortcut trigger
+      const lastSlashIndex = textBeforeCursor.lastIndexOf("/");
+      if (lastSlashIndex !== -1) {
+        const charBeforeSlash = textBeforeCursor[lastSlashIndex - 1];
+        const isValidSlashPosition =
+          lastSlashIndex === 0 ||
+          /[\s\n\r\t]/.test(charBeforeSlash) ||
+          charBeforeSlash === undefined;
+
+        if (isValidSlashPosition) {
+          const searchQuery = textBeforeCursor.slice(lastSlashIndex + 1);
+          if (!/[\s\n\r\t]/.test(searchQuery)) {
+            setShortcutSearchQuery(searchQuery);
+            return;
+          }
+        }
+      }
+    }, [getTextContent, getCursorPosition, getCaretCoordinates, showMentionDropdown, updateFixedPosition]);
+
     // Handle input changes
     const handleInput = useCallback(() => {
-      if (isComposingRef.current) return;
+      if (isComposingRef.current) {
+        // During IME composition, still update dropdown search query for real-time filtering
+        updateDropdownSearchQuery();
+        return;
+      }
 
       const text = getTextContent();
 
@@ -461,109 +529,136 @@ export const MentionInputInline = forwardRef<
         }
       }
 
-      const cursorPos = getCursorPosition();
+      // ─── Trigger Detection ───
+      // Use Selection.focusNode/focusOffset directly instead of getCursorPosition().
+      // getCursorPosition() (clone range + measure innerText) lags 1 char behind
+      // during onInput on contentEditable, causing search query to miss last typed char.
 
-      // 🆕 NEW: Check for / to trigger shortcut dropdown
-      let textBeforeCursor = replacedText.slice(0, cursorPos);
-      let lastSlashIndex = textBeforeCursor.lastIndexOf("/");
+      const sel = window.getSelection();
+      let textBeforeCursorInNode = "";
+      let cursorInTextNode = false;
 
-      // If / not found before cursor, check if text ends with / (cursor lag case)
-      if (
-        lastSlashIndex === -1 &&
-        replacedText.endsWith("/") &&
-        cursorPos >= replacedText.length - 1
-      ) {
-        textBeforeCursor = replacedText;
-        lastSlashIndex = textBeforeCursor.lastIndexOf("/");
-      }
-
-      if (lastSlashIndex !== -1) {
-        // Check if / is at valid position (start of line or after whitespace)
-        const charBeforeSlash = textBeforeCursor[lastSlashIndex - 1];
-        const isValidSlashPosition =
-          lastSlashIndex === 0 ||
-          /[\s\n\r\t]/.test(charBeforeSlash) ||
-          charBeforeSlash === undefined;
-
-        if (isValidSlashPosition) {
-          const searchQuery = textBeforeCursor.slice(lastSlashIndex + 1);
-
-          // Check if query contains whitespace (means / trigger is not current)
-          // If user typed "/xinchao " (with space), auto-replace will trigger instead
-          if (!/[\s\n\r\t]/.test(searchQuery)) {
-            const coords = getCaretCoordinates();
-            openShortcutDropdown(searchQuery, lastSlashIndex, coords);
-
-            onChange(replacedText);
-            return;
-          }
-        }
-      }
-
-      // 🔧 FIX: Check for @ at different positions to handle cursor lag
-      textBeforeCursor = replacedText.slice(0, cursorPos);
-      let lastAtIndex = textBeforeCursor.lastIndexOf("@");
-
-      // If @ not found before cursor, check if text ends with @ (cursor lag case)
-      if (
-        lastAtIndex === -1 &&
-        replacedText.endsWith("@") &&
-        cursorPos >= replacedText.length - 1
-      ) {
-        textBeforeCursor = replacedText;
-        lastAtIndex = replacedText.lastIndexOf("@");
-      }
-
-      if (lastAtIndex !== -1) {
-        // 🔧 FIX: Improved whitespace detection including newlines
-        const charBeforeAt = textBeforeCursor[lastAtIndex - 1];
-        const isValidAtPosition =
-          lastAtIndex === 0 ||
-          /[\s\n\r\t]/.test(charBeforeAt) ||
-          charBeforeAt === undefined;
-
-        if (isValidAtPosition) {
-          const searchQuery = textBeforeCursor.slice(lastAtIndex + 1);
-
-          // Check if query contains whitespace (means @ is not current)
-          if (!/[\s\n\r\t]/.test(searchQuery)) {
-            const coords = getCaretCoordinates();
-            setDropdownPosition(coords);
-
-            // 🔧 FIX: Calculate fixed position - follow cursor but constrain to viewport
-            if (editorRef.current) {
-              const editorRect = editorRef.current.getBoundingClientRect();
-              const dropdownWidth = 320; // w-80 = 320px
-              const margin = 10;
-
-              // Calculate left position following cursor
-              let leftPos = editorRect.left + coords.left;
-
-              // Constrain to not overflow right edge of viewport
-              const maxLeft = window.innerWidth - dropdownWidth - margin;
-              leftPos = Math.min(leftPos, maxLeft);
-
-              // Constrain to not go past left edge of editor
-              leftPos = Math.max(leftPos, editorRect.left);
-
-              setFixedPosition({
-                top: editorRect.top,
-                left: leftPos,
-              });
+      if (sel?.focusNode && editorRef.current) {
+        if (sel.focusNode.nodeType === Node.TEXT_NODE) {
+          // Verify cursor is not inside a mention span
+          let insideMention = false;
+          let parentEl = sel.focusNode.parentElement;
+          while (parentEl && parentEl !== editorRef.current) {
+            if (parentEl.hasAttribute("data-mention-id")) {
+              insideMention = true;
+              break;
             }
-
-            setShowMentionDropdown(true);
-            setMentionSearchQuery(searchQuery);
-            setMentionStartIndex(lastAtIndex);
-            setSelectedMentionIndex(0);
-
-            // Also close shortcut dropdown if open
-            setShowShortcutDropdown(false);
-
-            onChange(replacedText);
-            return;
+            parentEl = parentEl.parentElement;
+          }
+          if (!insideMention) {
+            textBeforeCursorInNode = (sel.focusNode.textContent || "").slice(
+              0,
+              sel.focusOffset,
+            );
+            cursorInTextNode = true;
           }
         }
+      }
+
+      // Helper: check trigger char at valid position and extract query
+      const detectTrigger = (
+        text: string,
+        triggerChar: string,
+      ): { query: string; index: number } | null => {
+        const idx = text.lastIndexOf(triggerChar);
+        if (idx === -1) return null;
+        const charBefore = text[idx - 1];
+        const isValid =
+          idx === 0 ||
+          /[\s\n\r\t]/.test(charBefore) ||
+          charBefore === undefined;
+        if (!isValid) return null;
+        const query = text.slice(idx + 1);
+        if (/[\s\n\r\t]/.test(query)) return null;
+        return { query, index: idx };
+      };
+
+      if (cursorInTextNode) {
+        // ── Primary path: reliable detection from cursor's text node ──
+
+        // Check / trigger first
+        const slashTrigger = detectTrigger(textBeforeCursorInNode, "/");
+        if (slashTrigger) {
+          const coords = getCaretCoordinates();
+          openShortcutDropdown(slashTrigger.query, slashTrigger.index, coords);
+          onChange(replacedText);
+          return;
+        }
+
+        // Check @ trigger
+        const atTrigger = detectTrigger(textBeforeCursorInNode, "@");
+        if (atTrigger) {
+          const coords = getCaretCoordinates();
+          setDropdownPosition(coords);
+
+          if (editorRef.current) {
+            const editorRect = editorRef.current.getBoundingClientRect();
+            const dropdownWidth = 320;
+            const margin = 10;
+            let leftPos = editorRect.left + coords.left;
+            const maxLeft = window.innerWidth - dropdownWidth - margin;
+            leftPos = Math.min(leftPos, maxLeft);
+            leftPos = Math.max(leftPos, editorRect.left);
+            setFixedPosition({ top: editorRect.top, left: leftPos });
+          }
+
+          setShowMentionDropdown(true);
+          setMentionSearchQuery(atTrigger.query);
+          setMentionStartIndex(atTrigger.index);
+          setSelectedMentionIndex(0);
+          setShowShortcutDropdown(false);
+          onChange(replacedText);
+          return;
+        }
+
+        // Cursor is in text node but no trigger found → close dropdowns
+        setShowMentionDropdown(false);
+        setShowShortcutDropdown(false);
+        onChange(replacedText);
+        return;
+      }
+
+      // ── Fallback: cursor not in text node (e.g. at element boundary) ──
+      // Use getCursorPosition() as best-effort
+      const cursorPos = getCursorPosition();
+      const textBeforeCursor = replacedText.slice(0, cursorPos);
+
+      const slashFallback = detectTrigger(textBeforeCursor, "/");
+      if (slashFallback) {
+        const coords = getCaretCoordinates();
+        openShortcutDropdown(slashFallback.query, slashFallback.index, coords);
+        onChange(replacedText);
+        return;
+      }
+
+      const atFallback = detectTrigger(textBeforeCursor, "@");
+      if (atFallback) {
+        const coords = getCaretCoordinates();
+        setDropdownPosition(coords);
+
+        if (editorRef.current) {
+          const editorRect = editorRef.current.getBoundingClientRect();
+          const dropdownWidth = 320;
+          const margin = 10;
+          let leftPos = editorRect.left + coords.left;
+          const maxLeft = window.innerWidth - dropdownWidth - margin;
+          leftPos = Math.min(leftPos, maxLeft);
+          leftPos = Math.max(leftPos, editorRect.left);
+          setFixedPosition({ top: editorRect.top, left: leftPos });
+        }
+
+        setShowMentionDropdown(true);
+        setMentionSearchQuery(atFallback.query);
+        setMentionStartIndex(atFallback.index);
+        setSelectedMentionIndex(0);
+        setShowShortcutDropdown(false);
+        onChange(replacedText);
+        return;
       }
 
       // No triggers detected - close both dropdowns
@@ -577,6 +672,7 @@ export const MentionInputInline = forwardRef<
       getCaretCoordinates,
       openShortcutDropdown,
       replaceQuickMessage,
+      updateDropdownSearchQuery,
     ]);
 
     // Handle mention selection
@@ -1107,7 +1203,7 @@ export const MentionInputInline = forwardRef<
     return (
       <div className={cn("relative", className)}>
         {/* Mention Dropdown - Fixed positioning to avoid clipping */}
-        {showMentionDropdown && filteredMembers.length > 0 && (
+        {showMentionDropdown && (
           <div
             ref={dropdownRef}
             className="fixed z-[9999] w-80"
@@ -1121,6 +1217,7 @@ export const MentionInputInline = forwardRef<
               members={filteredMembers}
               onSelect={handleMentionSelect}
               selectedIndex={selectedMentionIndex}
+              searchQuery={mentionSearchQuery}
             />
           </div>
         )}
@@ -1158,12 +1255,12 @@ export const MentionInputInline = forwardRef<
             handleInput();
           }}
           className={cn(
-            "min-h-[44px] max-h-[200px] overflow-y-auto",
+            "w-full min-h-[44px] max-h-[200px] overflow-y-auto overflow-x-hidden",
             "px-4 py-2.5 rounded-lg",
             "bg-white border border-gray-200",
             "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent",
             "text-sm text-gray-900",
-            "whitespace-pre-wrap break-all",
+            "whitespace-pre-wrap [word-break:break-word] [overflow-wrap:anywhere]",
             "empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 empty:before:pointer-events-none",
             disabled && "opacity-50 cursor-not-allowed bg-gray-50",
           )}
