@@ -30,13 +30,14 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     mode: "onBlur",
     defaultValues: import.meta.env.DEV
       ? {
-          password: "Password123!",
+          password: "Admin@123",
         }
       : undefined,
   });
@@ -55,8 +56,10 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
 
   const onSubmit = (data: LoginFormData) => {
     setApiError(null);
+    const trimmedIdentifier = data.identifier.trim();
+    setValue("identifier", trimmedIdentifier);
     login({
-      identifier: data.identifier,
+      identifier: trimmedIdentifier,
       password: data.password,
     });
   };

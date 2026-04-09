@@ -38,6 +38,7 @@ import { checklistTemplateKeys } from "@/hooks/queries/useChecklistTemplates";
 import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
 import type { ChecklistTemplateMap, ChecklistTemplateItem } from "./types";
 import { TaskLogThreadSheet } from "./workspace/TaskLogThreadSheet";
+import { useUIStore } from "@/stores/uiStore";
 import MessageSkeleton from "./components/MessageSkeleton";
 import {
   useStarMessage,
@@ -1281,6 +1282,7 @@ export default function PortalWireframes({
           ]}
           showPinnedToast={showPinnedToast}
           currentUserName={currentUser}
+          currentUserEmail={authUser?.identifier}
           currentUserDepartment={currentUserDepartment}
           onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
         />
@@ -1355,12 +1357,17 @@ export default function PortalWireframes({
               openTransferSheet={openTransferSheet}
               onOpenTaskLog={(taskId, targetMessageId) => {
                 const task = tasks.find((t) => t.id === taskId);
+                const messageId = task?.messageId ?? undefined;
                 setTaskLogSheet({
                   open: true,
                   taskId,
-                  messageId: task?.messageId ?? undefined, // ✅ Parent message ID for thread unread tracking
+                  messageId, // ✅ Parent message ID for thread unread tracking
                   targetMessageId, // 🆕 NEW: Target message to scroll to in thread
                 });
+                // ✅ FIX: Set open thread in store so SignalR won't increment unreadReplyCount
+                if (messageId) {
+                  useUIStore.getState().setOpenThreadMessageId(messageId);
+                }
                 setThreadUnreadCounts((prev) => ({
                   ...prev,
                   [taskId]: 0,
@@ -1474,6 +1481,8 @@ export default function PortalWireframes({
           onClose={() => {
             setTaskLogSheet({ open: false });
             setThreadIncomingMessage(null);
+            // ✅ FIX: Clear open thread in store
+            useUIStore.getState().setOpenThreadMessageId(null);
           }}
           task={activeTaskLogTask}
           incomingThreadMessage={threadIncomingMessage}

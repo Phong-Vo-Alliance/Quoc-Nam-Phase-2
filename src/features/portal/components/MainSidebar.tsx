@@ -44,6 +44,7 @@ interface MainSidebarProps {
   workspaceMode?: "default" | "pinned";
   viewMode?: "lead" | "staff";
   currentUserName?: string;
+  currentUserEmail?: string;
   currentUserDepartment?: string;
 
   pendingTasks?: {
@@ -65,6 +66,7 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   pendingTasks: initialPending = [],
   showPinnedToast,
   currentUserName = "",
+  currentUserEmail = "",
   currentUserDepartment = "",
   onOpenWorkTypeManager,
 }) => {
@@ -339,6 +341,11 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
               <div className="text-sm font-semibold text-gray-800">
                 Xin chào {currentUserName}
               </div>
+              {currentUserEmail && (
+                <div className="text-xs text-gray-500 mt-0.5 break-all">
+                  {currentUserEmail}
+                </div>
+              )}
             </div>
 
             <div className="mt-1">
@@ -355,9 +362,9 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
 
             {currentUserDepartment && (
               <div className="mt-2 px-2 py-1 text-xs text-gray-600">
-                <div className="flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-                  <span className="font-medium text-gray-700">
+                <div className="flex items-start gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-gray-500 mt-0.5" />
+                  <span className="font-medium text-gray-700 break-words line-clamp-3">
                     {currentUserDepartment}
                   </span>
                 </div>

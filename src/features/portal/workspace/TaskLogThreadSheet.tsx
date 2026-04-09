@@ -36,6 +36,7 @@ import type { SelectedFile } from "@/types/files";
 import { formatAttachment } from "@/utils/formatAttachment";
 import { useFileUpload } from "@/features/chat-main/hooks/useFileUpload";
 import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead"; // 🆕 NEW: Mark thread as read
+import { useUIStore } from "@/stores/uiStore"; // 🆕 FIX: Track open thread for SignalR
 import {
   extractSuccessfulUploads,
   revokeFilePreview,
@@ -297,38 +298,48 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     return () => clearTimeout(timer);
   }, [open, targetMessageId, threadData, loading, onConsumeTargetMessage]);
 
+  // Set openThreadMessageId in store so SignalR dispatcher won't increment unreadReplyCount
+  useEffect(() => {
+    if (open && parentMessageId) {
+      useUIStore.getState().setOpenThreadMessageId(parentMessageId);
+    }
+    return () => {
+      if (parentMessageId) {
+        useUIStore.getState().setOpenThreadMessageId(null);
+      }
+    };
+  }, [open, parentMessageId]);
+
   // Mark as read when thread FULLY LOADED (after messages are fetched)
   // Use the LAST (newest) message ID for mark-read API
+  // ALWAYS call mark-read to sync local cache even if API already cleared unreadReplyCount
+  // (e.g. conversation-level mark-read cleared backend counts but local cache still has stale values)
   useEffect(() => {
     // Wait for thread to fully load (not loading AND has data)
     if (!open || loading || !threadData?.parentMessage || !parentMessageId)
       return;
 
     const conversationId = threadData.parentMessage.conversationId;
-    const unreadCount = threadData.parentMessage.unreadReplyCount;
 
-    // Only call API if there are unread messages
-    if (unreadCount > 0) {
-      // Clear previous timeout
-      if (markAsReadTimeoutRef.current) {
-        clearTimeout(markAsReadTimeoutRef.current);
-      }
-
-      // Get the last (newest) message ID from thread
-      // Thread replies are already reversed (newest at the end)
-      const replies = threadData.replies ?? [];
-      const lastMessageId =
-        replies.length > 0 ? replies[replies.length - 1].id : parentMessageId; // Fallback to parentMessageId if no replies
-
-      // Debounce mark-read to avoid multiple calls
-      markAsReadTimeoutRef.current = setTimeout(() => {
-        markAsRead.mutate({
-          conversationId,
-          messageId: lastMessageId, // Use last message ID for API (mark-read position)
-          parentMessageId: parentMessageId, // Use parent message ID for cache update (unreadReplyCount)
-        });
-      }, 300); // Wait 300ms before marking as read
+    // Clear previous timeout
+    if (markAsReadTimeoutRef.current) {
+      clearTimeout(markAsReadTimeoutRef.current);
     }
+
+    // Get the last (newest) message ID from thread
+    // Thread replies are already reversed (newest at the end)
+    const replies = threadData.replies ?? [];
+    const lastMessageId =
+      replies.length > 0 ? replies[replies.length - 1].id : parentMessageId; // Fallback to parentMessageId if no replies
+
+    // Debounce mark-read to avoid multiple calls
+    markAsReadTimeoutRef.current = setTimeout(() => {
+      markAsRead.mutate({
+        conversationId,
+        messageId: lastMessageId, // Use last message ID for API (mark-read position)
+        parentMessageId: parentMessageId, // Use parent message ID for cache update (unreadReplyCount)
+      });
+    }, 300); // Wait 300ms before marking as read
 
     return () => {
       if (markAsReadTimeoutRef.current) {

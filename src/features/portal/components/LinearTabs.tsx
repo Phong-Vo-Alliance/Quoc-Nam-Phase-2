@@ -106,7 +106,7 @@ export const LinearTabs = ({
       {/* Tabs container */}
       <div
         ref={scrollContainerRef}
-        className="relative flex items-center gap-4 overflow-x-auto overflow-y-hidden select-none linear-tabs-scroll"
+        className="relative flex items-center gap-4 overflow-x-auto overflow-y-hidden select-none linear-tabs-scroll py-1 px-1"
         style={scrollContainerStyle}
       >
         {tabs.map((tab) => {

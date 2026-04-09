@@ -147,7 +147,14 @@ export function useSendMessage({
         isStarred: false,
         isPinned: false,
         threadPreview: null,
-        mentions: [],
+        mentions: data.mentions?.length
+          ? data.mentions.map((m) => ({
+              mentionedUserId: m.userId,
+              startIndex: m.startIndex,
+              length: m.length,
+              mentionText: m.mentionText,
+            }))
+          : [],
         // Client-side fields
         sendStatus: "sending",
         retryCount: 0,

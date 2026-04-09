@@ -291,10 +291,33 @@ export function useSendChatMessage({
         };
       });
 
+      // Rebuild mentions from cached MentionDto[] back to MentionInputDto[]
+      const retryMentions = message.mentions?.length
+        ? message.mentions.map((m) => ({
+            userId: m.mentionedUserId,
+            startIndex: m.startIndex,
+            length: m.length,
+            mentionText: m.mentionText,
+          }))
+        : undefined;
+
+      // Rebuild attachments from cached AttachmentDto[] back to AttachmentInputDto[]
+      const retryAttachments = message.attachments?.length
+        ? message.attachments.map((att) => ({
+            fileId: att.fileId,
+            fileName: att.fileName ?? null,
+            fileSize: att.fileSize ?? 0,
+            contentType: att.contentType ?? null,
+          }))
+        : undefined;
+
       sendMessageMutation.mutate({
         conversationId,
         content: message.content || "",
         parentMessageId: message.parentMessageId || undefined,
+        quoteMessageId: message.quoteMessageId || undefined,
+        mentions: retryMentions,
+        attachments: retryAttachments,
       });
     },
     [conversationId, sendMessageMutation, isOnline, queryClient],
