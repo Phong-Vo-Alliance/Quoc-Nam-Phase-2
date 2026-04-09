@@ -3,6 +3,9 @@ import {
   shouldNotify,
   _resetThrottleForTesting,
 } from "@/lib/notification-service";
+import { categoriesKeys } from "@/hooks/queries/useCategories";
+import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
+import { queryClient } from "@/lib/queryClient";
 import { useNotificationStore } from "@/stores/notificationStore";
 
 // ─── Mock helpers ─────────────────────────────────────────────────────────────
@@ -167,20 +170,11 @@ describe("playSound (via notify)", () => {
   });
 });
 
-// ─── Tab title ────────────────────────────────────────────────────────────────
-
-describe("updateTabTitle / restoreTabTitle", () => {
-  const originalTitle = document.title;
-
-  afterEach(() => {
-    document.title = originalTitle;
-  });
-});
-
 // ─── showSystemNotification — focused tab guard ───────────────────────────────
 
 describe("showSystemNotification (via notify)", () => {
   afterEach(() => {
+    queryClient.clear();
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
@@ -216,5 +210,155 @@ describe("showSystemNotification (via notify)", () => {
     );
 
     expect(NotificationSpy).not.toHaveBeenCalled();
+  });
+
+  it("formats group notifications as category > conversation and sender-prefixed body", async () => {
+    const NotificationSpy = vi.fn();
+    vi.stubGlobal(
+      "Notification",
+      Object.assign(NotificationSpy, { permission: "granted" }),
+    );
+    Object.defineProperty(document, "hasFocus", {
+      value: vi.fn(() => false),
+      configurable: true,
+    });
+
+    queryClient.setQueryData(categoriesKeys.list(), [
+      {
+        id: "cat-1",
+        userId: "user-me",
+        name: "Kho vận",
+        order: 0,
+        conversations: [
+          {
+            conversationId: "conv-group",
+            conversationName: "Nhận hàng",
+            memberCount: 3,
+            lastMessage: null,
+            unreadCount: 0,
+          },
+        ],
+        createdAt: "2026-04-09T00:00:00Z",
+        updatedAt: null,
+      },
+    ]);
+
+    useNotificationStore.setState({
+      soundEnabled: false,
+      systemNotificationEnabled: true,
+    });
+
+    const { notify } = await import("@/lib/notification-service");
+    notify(
+      {
+        id: "m-group-1",
+        conversationId: "conv-group",
+        senderId: "other",
+        senderName: "Ngọc Minh",
+        senderFullName: "Ngọc Minh",
+        senderIdentifier: null,
+        senderRoles: null,
+        parentMessageId: null,
+        quoteMessageId: null,
+        content: "Có tin nhắn mới",
+        contentType: "TXT",
+        sentAt: "2026-04-09T10:00:00Z",
+        editedAt: null,
+        linkedTaskId: null,
+        reactions: [],
+        attachments: [],
+        replyCount: 0,
+        unreadReplyCount: 0,
+        isStarred: false,
+        isPinned: false,
+        threadPreview: null,
+        mentions: [],
+      },
+      "user-me",
+      "conv-xyz",
+    );
+
+    expect(NotificationSpy).toHaveBeenCalledWith(
+      "Kho vận > Nhận hàng",
+      expect.objectContaining({ body: "Ngọc Minh: Có tin nhắn mới" }),
+    );
+  });
+
+  it("keeps direct message notification format unchanged", async () => {
+    const NotificationSpy = vi.fn();
+    vi.stubGlobal(
+      "Notification",
+      Object.assign(NotificationSpy, { permission: "granted" }),
+    );
+    Object.defineProperty(document, "hasFocus", {
+      value: vi.fn(() => false),
+      configurable: true,
+    });
+
+    queryClient.setQueryData(conversationKeys.directs(), {
+      pages: [
+        {
+          items: [
+            {
+              id: "conv-dm",
+              type: "DM",
+              name: "Chat riêng",
+              description: null,
+              avatarFileId: null,
+              createdBy: "other",
+              createdByName: "Ngọc Minh",
+              createdAt: "2026-04-09T00:00:00Z",
+              updatedAt: null,
+              memberCount: 2,
+              unreadCount: 0,
+              lastMessage: null,
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        },
+      ],
+      pageParams: [undefined],
+    });
+
+    useNotificationStore.setState({
+      soundEnabled: false,
+      systemNotificationEnabled: true,
+    });
+
+    const { notify } = await import("@/lib/notification-service");
+    notify(
+      {
+        id: "m-dm-1",
+        conversationId: "conv-dm",
+        senderId: "other",
+        senderName: "Ngọc Minh",
+        senderFullName: "Ngọc Minh",
+        senderIdentifier: null,
+        senderRoles: null,
+        parentMessageId: null,
+        quoteMessageId: null,
+        content: "Xin chào",
+        contentType: "TXT",
+        sentAt: "2026-04-09T10:00:00Z",
+        editedAt: null,
+        linkedTaskId: null,
+        reactions: [],
+        attachments: [],
+        replyCount: 0,
+        unreadReplyCount: 0,
+        isStarred: false,
+        isPinned: false,
+        threadPreview: null,
+        mentions: [],
+      },
+      "user-me",
+      "conv-xyz",
+    );
+
+    expect(NotificationSpy).toHaveBeenCalledWith(
+      "Ngọc Minh",
+      expect.objectContaining({ body: "Xin chào" }),
+    );
   });
 });

@@ -769,6 +769,65 @@ export const ConversationListSidebar: React.FC<
     }
   }, [tab, onClearSelectedChat, setActiveTabType, clearSelectedConversation]);
 
+  // Listen for notification click → navigate to the corresponding conversation
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const { conversationId } = (e as CustomEvent).detail as {
+        conversationId: string;
+      };
+      if (!conversationId) return;
+
+      // 1. Try to find in categories (group)
+      for (const category of apiCategories) {
+        const conv = category.conversations?.find(
+          (c) => c.conversationId === conversationId,
+        );
+        if (conv) {
+          if (tab !== "group") {
+            isAutoSwitchingTabRef.current = true;
+            setTab("group");
+            onTabChange?.("messages");
+          }
+          handleGroupSelect(
+            conv.conversationId,
+            conv.conversationName,
+            category.name,
+            category.id,
+            conv.unreadCount,
+          );
+          return;
+        }
+      }
+
+      // 2. Try to find in direct messages
+      const dm = apiDirects.find((d) => d.id === conversationId);
+      if (dm) {
+        if (tab !== "dm") {
+          isAutoSwitchingTabRef.current = true;
+          setTab("dm");
+          onTabChange?.("contacts");
+        }
+        handleDirectSelect(dm);
+        return;
+      }
+
+      console.warn(
+        "[notification-click] Conversation not found in sidebar:",
+        conversationId,
+      );
+    };
+
+    window.addEventListener("notification-click", handler);
+    return () => window.removeEventListener("notification-click", handler);
+  }, [
+    apiCategories,
+    apiDirects,
+    tab,
+    handleGroupSelect,
+    handleDirectSelect,
+    onTabChange,
+  ]);
+
   return (
     <aside
       className="rounded-2xl border border-gray-200 bg-white shadow-sm flex flex-col overflow-hidden h-full"

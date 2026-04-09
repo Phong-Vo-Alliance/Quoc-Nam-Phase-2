@@ -1,4 +1,10 @@
+import type { InfiniteData } from "@tanstack/react-query";
+import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
+import { categoriesKeys } from "@/hooks/queries/useCategories";
+import { queryClient } from "@/lib/queryClient";
 import { useNotificationStore } from "@/stores/notificationStore";
+import type { CategoryWithUnread } from "@/types/categories";
+import type { DirectConversation } from "@/types/conversations";
 import type { ChatMessage } from "@/types/messages";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -10,6 +16,19 @@ const BODY_MAX_LENGTH = 100;
 let lastSoundAt = 0;
 let unreadCount = 0;
 const recentNotifications = new Map<string, number>();
+
+type DirectsPage = {
+  items: DirectConversation[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+type NotificationMessageMeta = ChatMessage & {
+  type?: "DM" | "GRP";
+  conversationType?: "DM" | "GRP" | null;
+  categoryName?: string | null;
+  conversationName?: string | null;
+};
 
 /** Reset throttle state — only for use in tests */
 export function _resetThrottleForTesting(): void {
@@ -118,10 +137,93 @@ function showSystemNotification(
     notification.onclick = () => {
       window.focus();
       notification.close();
+      // Dispatch custom event to navigate sidebar to this conversation
+      window.dispatchEvent(
+        new CustomEvent("notification-click", {
+          detail: { conversationId },
+        }),
+      );
     };
   } catch {
     // Some browsers may block Notification constructor in certain contexts
   }
+}
+
+function getMessageContent(message: ChatMessage): string {
+  const content =
+    typeof message.content === "string" ? message.content.trim() : "";
+  return content || "Tin nhắn mới";
+}
+
+function isDirectNotification(message: NotificationMessageMeta): boolean {
+  if (message.type === "DM" || message.conversationType === "DM") return true;
+  if (message.type === "GRP" || message.conversationType === "GRP")
+    return false;
+
+  const directsData = queryClient.getQueryData<InfiniteData<DirectsPage>>(
+    conversationKeys.directs(),
+  );
+
+  return (
+    directsData?.pages.some((page) =>
+      page.items.some(
+        (conversation) => conversation.id === message.conversationId,
+      ),
+    ) ?? false
+  );
+}
+
+function getGroupNotificationTitle(
+  message: NotificationMessageMeta,
+): string | null {
+  const categoryName = message.categoryName?.trim() || "";
+  const conversationName = message.conversationName?.trim() || "";
+
+  if (categoryName || conversationName) {
+    return [categoryName, conversationName].filter(Boolean).join(" - ");
+  }
+
+  const categories =
+    queryClient.getQueryData<CategoryWithUnread[]>(categoriesKeys.list()) ?? [];
+
+  for (const category of categories) {
+    const conversation = category.conversations.find(
+      (item) => item.conversationId === message.conversationId,
+    );
+
+    if (conversation) {
+      return [category.name?.trim(), conversation.conversationName?.trim()]
+        .filter(Boolean)
+        .join(" > ");
+    }
+  }
+
+  return null;
+}
+
+function getNotificationContent(message: ChatMessage): {
+  title: string;
+  body: string;
+} {
+  const notificationMessage = message as NotificationMessageMeta;
+  const senderName =
+    message.senderFullName || message.senderName || "Tin nhắn mới";
+  const content = getMessageContent(message);
+  const groupTitle = getGroupNotificationTitle(notificationMessage);
+  const isGroupNotification =
+    !isDirectNotification(notificationMessage) && !!groupTitle;
+
+  if (isGroupNotification) {
+    return {
+      title: groupTitle,
+      body: `${senderName}: ${content}`,
+    };
+  }
+
+  return {
+    title: senderName,
+    body: content,
+  };
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
@@ -147,14 +249,10 @@ export function notify(
 
     const store = useNotificationStore.getState();
 
-    const senderName =
-      (message as unknown as { senderName?: string }).senderName ??
-      "Tin nhắn mới";
-    const body =
-      typeof message.content === "string" ? message.content : "Tin nhắn mới";
+    const { title, body } = getNotificationContent(message);
 
     if (store.systemNotificationEnabled) {
-      showSystemNotification(senderName, body, message.conversationId);
+      showSystemNotification(title, body, message.conversationId);
     }
 
     // Tab title unchanged — no unread count indicator

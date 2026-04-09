@@ -11,11 +11,7 @@
 import RelativeTime from "@/features/portal/components/RelativeTime";
 import { formatMessagePreview } from "@/utils/formatMessagePreview";
 import type { CategoryItemProps } from "../types";
-import { useQueryClient } from "@tanstack/react-query";
-import { messageKeys } from "@/hooks/queries/keys/messageKeys";
-import type { GetMessagesResponse, ChatMessage } from "@/types/messages";
 import { useMemo } from "react";
-import type { InfiniteData } from "@tanstack/react-query";
 
 // Get initials from name (max 2 chars)
 const getInitials = (name: string) =>
@@ -31,8 +27,6 @@ export function CategoryItem({
   isActive,
   onClick,
 }: CategoryItemProps) {
-  const queryClient = useQueryClient();
-
   // Find the latest conversation with a message
   const latestConversation = category.conversations
     ?.filter((conv) => conv.lastMessage !== null)
@@ -61,38 +55,8 @@ export function CategoryItem({
       });
   }, [category.conversations]);
 
-  // Get parent message content from cache if this is a thread reply
-  const parentMessageContent = useMemo(() => {
-    const lastMsg = latestConversation?.lastMessage;
-    if (!lastMsg?.parentMessageId) return null;
-
-    // If backend already provides parentMessageContent, use it
-    if (lastMsg.parentMessageContent) {
-      return lastMsg.parentMessageContent;
-    }
-
-    // Otherwise, try to get from React Query cache
-    const conversationId = latestConversation?.conversationId;
-    if (!conversationId) return null;
-
-    const messagesCache = queryClient.getQueryData<
-      InfiniteData<GetMessagesResponse>
-    >(messageKeys.conversation(conversationId));
-
-    if (!messagesCache?.pages) return null;
-
-    // Search through all pages for the parent message
-    for (const page of messagesCache.pages) {
-      const parentMsg = page.items.find(
-        (msg: ChatMessage) => msg.id === lastMsg.parentMessageId,
-      );
-      if (parentMsg) {
-        return parentMsg.content;
-      }
-    }
-
-    return null;
-  }, [latestConversation, queryClient]);
+  const parentMessagePreview =
+    latestConversation?.lastMessage?.parentMessagePreview ?? null;
 
   return (
     <button
@@ -136,8 +100,8 @@ export function CategoryItem({
             {/* Parent message (tin gốc) - no curve */}
             <div className="mt-0.5 flex items-center gap-2">
               <span className="text-xs text-gray-500 truncate flex-1">
-                {parentMessageContent
-                  ? `${parentMessageContent.slice(0, 30)}${parentMessageContent.length > 30 ? "..." : ""}`
+                {parentMessagePreview?.content
+                  ? `${parentMessagePreview.content.slice(0, 30)}${parentMessagePreview.content.length > 30 ? "..." : ""}`
                   : "Nhật ký công việc"}
               </span>
             </div>

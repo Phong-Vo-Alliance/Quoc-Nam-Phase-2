@@ -110,7 +110,7 @@ export function handleMessageSent(
             lastMessage: {
               messageId: message.id,
               senderId: message.senderId,
-              senderName: message.senderName,
+              senderName: message.senderFullName || message.senderName || "",
               content: message.content || "",
               sentAt: message.sentAt,
               attachments: message.attachments?.map((att) => ({
@@ -119,7 +119,15 @@ export function handleMessageSent(
                 contentType: att.contentType ?? undefined,
               })),
               parentMessageId: message.parentMessageId || null,
-              parentMessageContent: null,
+              parentMessagePreview:
+                message.parentMessagePreview?.id
+                  ? {
+                      id: message.parentMessagePreview.id,
+                      senderName:
+                        message.parentMessagePreview.senderName || "",
+                      content: message.parentMessagePreview.content || "",
+                    }
+                  : null,
             },
             unreadCount: shouldIncrement
               ? (conv.unreadCount || 0) + 1
