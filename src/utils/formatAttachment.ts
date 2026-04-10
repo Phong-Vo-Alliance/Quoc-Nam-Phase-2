@@ -10,6 +10,7 @@
 
 import type { UploadFileResult } from "@/types/files";
 import type { AttachmentInputDto } from "@/types/messages";
+import { guessMimeType } from "@/utils/fileHelpers";
 
 /**
  * Format a single file + upload result into AttachmentInputDto
@@ -34,7 +35,7 @@ export function formatAttachment(
     fileId: uploadResult.fileId,
     fileName: file.name || null,
     fileSize: file.size,
-    contentType: file.type || null, // MIME type, e.g., "application/pdf"
+    contentType: guessMimeType(file), // MIME type, inferred from extension if empty
   };
 }
 

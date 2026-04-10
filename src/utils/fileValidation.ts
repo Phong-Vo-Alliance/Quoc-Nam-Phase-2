@@ -4,7 +4,7 @@
 
 import type { FileValidationResult, FileValidationRules } from "@/types/files";
 import { getMaxSizeForFile } from "@/types/files";
-import { formatFileSize } from "./fileHelpers";
+import { formatFileSize, guessMimeType } from "./fileHelpers";
 
 /**
  * Validate file size
@@ -37,7 +37,8 @@ export function validateFileType(
   file: File,
   allowedTypes: string[],
 ): FileValidationResult {
-  if (!allowedTypes.includes(file.type)) {
+  const mime = guessMimeType(file);
+  if (!allowedTypes.includes(mime)) {
     return {
       isValid: false,
       error: `Định dạng file "${file.name}" không được hỗ trợ`,

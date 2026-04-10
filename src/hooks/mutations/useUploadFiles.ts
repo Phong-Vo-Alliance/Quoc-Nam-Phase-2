@@ -5,6 +5,7 @@ import { retryWithBackoff, FILE_RETRY_CONFIG } from "@/utils/retryLogic";
 import { classifyError } from "@/utils/errorHandling";
 import type { SelectedFile, UploadFileResult } from "@/types/files";
 import { DEFAULT_FILE_RULES, getMaxSizeForFile } from "@/types/files";
+import { guessMimeType } from "@/utils/fileHelpers";
 
 /**
  * Client-side file validation
@@ -17,7 +18,8 @@ function validateFile(file: File): void {
     throw new Error("FILE_TOO_LARGE");
   }
 
-  if (!DEFAULT_FILE_RULES.allowedTypes.includes(file.type)) {
+  const mime = guessMimeType(file);
+  if (!DEFAULT_FILE_RULES.allowedTypes.includes(mime)) {
     throw new Error("UNSUPPORTED_FILE_TYPE");
   }
 }

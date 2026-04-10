@@ -1,11 +1,12 @@
 {
   "name": "m1-portal-wireframe",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --mode development",
     "build": "vite build --mode production",
+    "build:test": "vite build --mode production",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -43,6 +44,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.24",
+    "heic2any": "^0.0.4",
     "jose": "^6.2.1",
     "lucide-react": "^0.552.0",
     "react": "^19.1.1",

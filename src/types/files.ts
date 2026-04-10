@@ -152,8 +152,14 @@ export const MAX_FILES_PER_MESSAGE = FILE_UPLOAD_LIMITS.maxFilesPerMessage;
  * Other: VITE_MAX_FILE_SIZE_MB (default 10MB)
  */
 export function getMaxSizeForFile(file: File): number {
-  if (file.type.startsWith("image/")) return FILE_UPLOAD_LIMITS.maxImageSize;
-  if (file.type.startsWith("video/")) return FILE_UPLOAD_LIMITS.maxVideoSize;
+  const ext = file.name.lastIndexOf(".") !== -1
+    ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase()
+    : "";
+  const mime = file.type || "";
+  const isImage = mime.startsWith("image/") || [".heic", ".heif", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
+  const isVideo = mime.startsWith("video/") || [".mp4", ".webm", ".ogg", ".mov"].includes(ext);
+  if (isImage) return FILE_UPLOAD_LIMITS.maxImageSize;
+  if (isVideo) return FILE_UPLOAD_LIMITS.maxVideoSize;
   return FILE_UPLOAD_LIMITS.maxFileSize;
 }
 

@@ -42,7 +42,15 @@ export async function uploadFile(
 
   // Create FormData
   const formData = new FormData();
-  formData.append("file", file);
+  // Ensure correct MIME type in multipart (HEIC on Windows has empty file.type)
+  const { guessMimeType } = await import("@/utils/fileHelpers");
+  const mime = guessMimeType(file);
+  if (file.type !== mime) {
+    const correctedFile = new File([file], file.name, { type: mime });
+    formData.append("file", correctedFile);
+  } else {
+    formData.append("file", file);
+  }
 
   // Build query params
   const queryParams = new URLSearchParams();
@@ -113,10 +121,16 @@ export async function uploadFilesBatch(
     );
   }
 
-  // Create FormData with multiple files
+  // Create FormData with multiple files (fix MIME for HEIC on Windows)
   const formData = new FormData();
+  const { guessMimeType } = await import("@/utils/fileHelpers");
   files.forEach((file) => {
-    formData.append("files", file);
+    const mime = guessMimeType(file);
+    if (file.type !== mime) {
+      formData.append("files", new File([file], file.name, { type: mime }));
+    } else {
+      formData.append("files", file);
+    }
   });
 
   // Build query params

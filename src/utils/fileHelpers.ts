@@ -2,8 +2,47 @@
  * File helper utilities for file upload feature
  */
 
-import type { SelectedFile, BatchUploadResult } from "@/types/files";
+import {
+  type SelectedFile,
+  type BatchUploadResult,
+  getMaxSizeForFile,
+} from "@/types/files";
 import type { AttachmentInputDto } from "@/types/messages";
+import heic2any from "heic2any";
+
+/**
+ * Extension-to-MIME-type mapping for files where browser returns empty type.
+ * Common on Windows for formats like .heic, .heif
+ */
+const EXT_MIME_MAP: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
+  ".mp4": "video/mp4",
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+/**
+ * Guess MIME type from file extension when browser returns empty type.
+ * Returns file.type if already set, otherwise infers from extension.
+ * Falls back to "application/octet-stream" if extension is unknown.
+ */
+export function guessMimeType(file: File): string {
+  if (file.type && file.type !== "application/octet-stream") return file.type;
+  const dotIdx = file.name.lastIndexOf(".");
+  if (dotIdx === -1) return "application/octet-stream";
+  const ext = file.name.slice(dotIdx).toLowerCase();
+  return EXT_MIME_MAP[ext] || "application/octet-stream";
+}
 
 /**
  * Format file size to human-readable string
@@ -13,11 +52,14 @@ import type { AttachmentInputDto } from "@/types/messages";
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 Bytes";
 
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const KB = 1024;
+  const MB = KB * 1024;
+  const GB = MB * 1024;
 
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  if (bytes >= GB) return `${parseFloat((bytes / GB).toFixed(2))} GB`;
+  if (bytes >= MB / 10) return `${parseFloat((bytes / MB).toFixed(2))} MB`;
+  if (bytes >= KB) return `${parseFloat((bytes / KB).toFixed(2))} KB`;
+  return `${bytes} Bytes`;
 }
 
 /**
@@ -102,12 +144,40 @@ export function isVideo(mimeType: string): boolean {
 }
 
 /**
+ * Check if a File is HEIC/HEIF (by extension or MIME type).
+ * Browsers cannot render HEIC natively, so these need conversion.
+ */
+export function isHeicFile(file: File): boolean {
+  const mime = guessMimeType(file);
+  if (mime === "image/heic" || mime === "image/heif") return true;
+  const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+  return ext === ".heic" || ext === ".heif";
+}
+
+/**
+ * Convert a HEIC/HEIF File to a JPEG Blob URL for browser preview.
+ * Returns undefined if conversion fails.
+ */
+export async function convertHeicToPreviewUrl(
+  file: File,
+): Promise<string | undefined> {
+  try {
+    const blob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.8 });
+    const resultBlob = Array.isArray(blob) ? blob[0] : blob;
+    return URL.createObjectURL(resultBlob);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Create File object preview URL (for images and videos)
  * @param file File object
  * @returns Object URL or undefined if not an image/video
  */
 export function createFilePreview(file: File): string | undefined {
-  if (!isImage(file.type) && !isVideo(file.type)) return undefined;
+  const mime = guessMimeType(file);
+  if (!isImage(mime) && !isVideo(mime)) return undefined;
   return URL.createObjectURL(file);
 }
 
@@ -204,15 +274,16 @@ export function validateBatchFileSelection(
     };
   }
 
-  // Check individual file size
+  // Check individual file size (use per-type limit)
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    if (file.size > maxSizePerFile) {
+    const fileSizeLimit = getMaxSizeForFile(file);
+    if (file.size > fileSizeLimit) {
       return {
         type: "file-too-large",
         message: `File "${file.name}" quá lớn (${formatFileSize(
           file.size,
-        )}). Kích thước tối đa ${formatFileSize(maxSizePerFile)}.`,
+        )}). Kích thước tối đa ${formatFileSize(fileSizeLimit)}.`,
         fileIndex: i,
         fileName: file.name,
       };

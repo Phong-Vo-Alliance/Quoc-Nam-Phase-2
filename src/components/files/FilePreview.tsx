@@ -4,12 +4,16 @@
  * Phase 2: Shows upload progress inline
  */
 
+import { useState, useEffect } from "react";
 import { X, RotateCw } from "lucide-react";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
 import {
   getFileIcon,
   formatFileSize,
   truncateFileName,
+  guessMimeType,
+  isHeicFile,
+  convertHeicToPreviewUrl,
 } from "@/utils/fileHelpers";
 import { Button } from "@/components/ui/button";
 
@@ -35,116 +39,148 @@ export default function FilePreview({
       role="list"
       aria-label="Selected files"
     >
-      {files.map((selectedFile) => {
-        const { file, id, preview } = selectedFile;
-        const icon = getFileIcon(file.type);
-        const displayName = truncateFileName(file.name);
-        const size = formatFileSize(file.size);
-        const isImage = file.type.startsWith("image/");
+      {files.map((selectedFile) => (
+        <FilePreviewItem
+          key={selectedFile.id}
+          selectedFile={selectedFile}
+          onRemove={onRemove}
+          uploadProgress={uploadProgress}
+          onRetry={onRetry}
+        />
+      ))}
+    </div>
+  );
+}
 
-        // Phase 2: Get upload progress if available
-        const progress = uploadProgress?.get(id);
-        const isUploading = progress?.status === "uploading";
-        const isSuccess = progress?.status === "success";
-        const isFailed = progress?.status === "error";
+function FilePreviewItem({
+  selectedFile,
+  onRemove,
+  uploadProgress,
+  onRetry,
+}: {
+  selectedFile: SelectedFile;
+  onRemove: (fileId: string) => void;
+  uploadProgress?: Map<string, FileUploadProgressState>;
+  onRetry?: (fileId: string) => void;
+}) {
+  const { file, id, preview } = selectedFile;
+  const [heicPreview, setHeicPreview] = useState<string | undefined>();
 
-        // Unified card layout for all files (image preview or icon)
-        return (
-          <div
-            key={id}
-            className="group relative flex flex-col gap-2 p-2 bg-background border border-border rounded-lg hover:border-primary/50 transition-colors w-full max-w-[200px]"
-            data-testid={`file-preview-item-${id}`}
-            role="listitem"
+  const mime = guessMimeType(file);
+  const icon = getFileIcon(mime);
+  const isImageFile = mime.startsWith("image/");
+  const needsHeicConvert = isHeicFile(file);
+
+  useEffect(() => {
+    if (!needsHeicConvert) return;
+    let revoked = false;
+    convertHeicToPreviewUrl(file).then((url) => {
+      if (!revoked && url) setHeicPreview(url);
+    });
+    return () => {
+      revoked = true;
+      if (heicPreview) URL.revokeObjectURL(heicPreview);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, needsHeicConvert]);
+
+  const effectivePreview = needsHeicConvert ? heicPreview : preview;
+  const displayName = truncateFileName(file.name);
+  const size = formatFileSize(file.size);
+
+  const progress = uploadProgress?.get(id);
+  const isUploading = progress?.status === "uploading";
+  const isSuccess = progress?.status === "success";
+  const isFailed = progress?.status === "error";
+
+  return (
+    <div
+      className="group relative flex flex-col gap-2 p-2 bg-background border border-border rounded-lg hover:border-primary/50 transition-colors w-full max-w-[200px]"
+      data-testid={`file-preview-item-${id}`}
+      role="listitem"
+    >
+      <div className="flex items-center gap-2">
+        {isImageFile && effectivePreview ? (
+          <img
+            src={effectivePreview}
+            alt={file.name}
+            className="w-10 h-10 object-cover rounded border border-border shrink-0"
+          />
+        ) : isImageFile && needsHeicConvert ? (
+          <div className="w-10 h-10 rounded border border-border shrink-0 bg-muted animate-pulse" />
+        ) : (
+          <span className="text-xl" aria-hidden="true">
+            {icon}
+          </span>
+        )}
+
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+          <span
+            className="text-sm font-medium text-foreground truncate"
+            title={file.name}
           >
-            <div className="flex items-center gap-2">
-              {/* Image preview or File Icon */}
-              {isImage ? (
-                <img
-                  src={preview}
-                  alt={file.name}
-                  className="w-10 h-10 object-cover rounded border border-border shrink-0"
-                />
-              ) : (
-                <span className="text-xl" aria-hidden="true">
-                  {icon}
-                </span>
-              )}
+            {displayName}
+          </span>
+          <span className="text-xs text-muted-foreground">{size}</span>
+        </div>
 
-              {/* File Info */}
-              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                <span
-                  className="text-sm font-medium text-foreground truncate"
-                  title={file.name}
-                >
-                  {displayName}
-                </span>
-                <span className="text-xs text-muted-foreground">{size}</span>
-              </div>
+        {!isUploading && !isSuccess && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 min-w-6 min-h-6 p-0 ml-2 flex items-center justify-center aspect-square hover:bg-destructive/10 hover:text-destructive shrink-0"
+            onClick={() => onRemove(id)}
+            aria-label={`Remove ${file.name}`}
+            data-testid={`file-preview-remove-${id}`}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
 
-              {/* Actions */}
-              {!isUploading && !isSuccess && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 min-w-6 min-h-6 p-0 ml-2 flex items-center justify-center aspect-square hover:bg-destructive/10 hover:text-destructive shrink-0"
-                  onClick={() => onRemove(id)}
-                  aria-label={`Remove ${file.name}`}
-                  data-testid={`file-preview-remove-${id}`}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
+        {isFailed && onRetry && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 ml-2 hover:bg-primary/10 hover:text-primary"
+            onClick={() => onRetry(id)}
+            aria-label={`Retry upload ${file.name}`}
+            data-testid={`file-preview-retry-${id}`}
+          >
+            <RotateCw className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
 
-              {/* Retry button for failed uploads */}
-              {isFailed && onRetry && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 ml-2 hover:bg-primary/10 hover:text-primary"
-                  onClick={() => onRetry(id)}
-                  aria-label={`Retry upload ${file.name}`}
-                  data-testid={`file-preview-retry-${id}`}
-                >
-                  <RotateCw className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* Progress bar */}
-            {progress && !isFailed && (
-              <div
-                className="flex items-center gap-2"
-                data-testid={`file-upload-progress-${id}`}
-              >
-                <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-300 ${
-                      isSuccess ? "bg-green-500" : "bg-blue-500"
-                    }`}
-                    style={{ width: `${progress.progress}%` }}
-                    data-testid={`file-upload-progress-bar-${id}`}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {isSuccess ? "✓" : `${Math.round(progress.progress)}%`}
-                </span>
-              </div>
-            )}
-
-            {/* Error message */}
-            {isFailed && progress.error && (
-              <span
-                className="text-xs text-red-500"
-                data-testid={`file-upload-error-${id}`}
-              >
-                {progress.error}
-              </span>
-            )}
+      {progress && !isFailed && (
+        <div
+          className="flex items-center gap-2"
+          data-testid={`file-upload-progress-${id}`}
+        >
+          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                isSuccess ? "bg-green-500" : "bg-blue-500"
+              }`}
+              style={{ width: `${progress.progress}%` }}
+              data-testid={`file-upload-progress-bar-${id}`}
+            />
           </div>
-        );
-      })}
+          <span className="text-xs text-muted-foreground shrink-0">
+            {isSuccess ? "✓" : `${Math.round(progress.progress)}%`}
+          </span>
+        </div>
+      )}
+
+      {isFailed && progress.error && (
+        <span
+          className="text-xs text-red-500"
+          data-testid={`file-upload-error-${id}`}
+        >
+          {progress.error}
+        </span>
+      )}
     </div>
   );
 }
