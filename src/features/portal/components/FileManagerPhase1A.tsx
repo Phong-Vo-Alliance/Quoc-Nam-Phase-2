@@ -14,6 +14,7 @@ import { API_ENDPOINTS } from "@/config/env.config";
 import { useAuthStore } from "@/stores/authStore";
 import { useImageCacheStore } from "@/stores/imageCacheStore";
 import { toast } from "sonner"; // Phase 2: For toast notifications
+import { getVideoThumbnail } from "@/api/files.api";
 import FilePreviewModal from "@/components/FilePreviewModal"; // Phase 2.2: Document preview
 import ImagePreviewModal from "@/components/ImagePreviewModal"; // Image preview modal
 
@@ -280,6 +281,60 @@ const BlobImage: React.FC<{
       className={className}
       draggable={draggable}
     />
+  );
+};
+
+/**
+ * BlobVideoThumbnail component - Fetches video thumbnail from API and displays
+ * Falls back to PlayCircle icon if fetch fails.
+ */
+const BlobVideoThumbnail: React.FC<{
+  fileId?: string;
+  alt: string;
+  className?: string;
+}> = ({ fileId, alt, className }) => {
+  const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!fileId) return;
+
+    let isMounted = true;
+    let localUrl: string | null = null;
+
+    const fetchThumbnail = async () => {
+      setIsLoading(true);
+      try {
+        const blob = await getVideoThumbnail(fileId, 320);
+        if (isMounted) {
+          localUrl = URL.createObjectURL(blob);
+          setObjectUrl(localUrl);
+        }
+      } catch {
+        // silently fall back to icon
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    void fetchThumbnail();
+
+    return () => {
+      isMounted = false;
+      if (localUrl) URL.revokeObjectURL(localUrl);
+    };
+  }, [fileId]);
+
+  if (isLoading || !objectUrl) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-slate-800">
+        <PlayCircle className="h-10 w-10 text-white drop-shadow" />
+      </div>
+    );
+  }
+
+  return (
+    <img src={objectUrl} alt={alt} className={className} draggable={false} />
   );
 };
 
@@ -708,9 +763,11 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
           draggable={false}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-slate-800">
-          <PlayCircle className="h-10 w-10 text-white drop-shadow" />
-        </div>
+        <BlobVideoThumbnail
+          fileId={f.fileId}
+          alt={f.name}
+          className="h-full w-full object-cover"
+        />
       )}
 
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
