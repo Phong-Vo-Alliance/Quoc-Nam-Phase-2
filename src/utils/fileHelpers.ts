@@ -162,7 +162,11 @@ export async function convertHeicToPreviewUrl(
   file: File,
 ): Promise<string | undefined> {
   try {
-    const blob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.8 });
+    const blob = await heic2any({
+      blob: file,
+      toType: "image/jpeg",
+      quality: 0.8,
+    });
     const resultBlob = Array.isArray(blob) ? blob[0] : blob;
     return URL.createObjectURL(resultBlob);
   } catch {
