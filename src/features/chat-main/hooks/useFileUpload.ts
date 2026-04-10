@@ -6,7 +6,8 @@ import {
 } from "@/utils/fileHelpers";
 import { toast } from "sonner";
 import type { FileUploadProgressState, SelectedFile } from "@/types/files";
-import { MAX_FILES_PER_MESSAGE } from "@/types/files";
+import { MAX_FILES_PER_MESSAGE, getMaxSizeForFile } from "@/types/files";
+import { FILE_UPLOAD_LIMITS } from "@/config/env.config";
 import { formatFileSize } from "../utils/chatHelpers";
 
 export function useFileUpload() {
@@ -23,7 +24,7 @@ export function useFileUpload() {
 
   // Compute file limit status
   const totalSize = selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
-  const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100MB
+  const MAX_TOTAL_SIZE = FILE_UPLOAD_LIMITS.maxTotalSize;
   const remainingSize = MAX_TOTAL_SIZE - totalSize;
 
   const isFileLimitReached =
@@ -45,7 +46,7 @@ export function useFileUpload() {
         0,
       );
       const newFilesSize = fileArray.reduce((sum, f) => sum + f.size, 0);
-      const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
+      const MAX_TOTAL_SIZE = FILE_UPLOAD_LIMITS.maxTotalSize;
       const remainingSize = MAX_TOTAL_SIZE - currentTotalSize;
 
       if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
@@ -85,8 +86,12 @@ export function useFileUpload() {
       const validationError = validateBatchFileSelection(
         filesToAdd,
         MAX_FILES_PER_MESSAGE,
-        10 * 1024 * 1024,
-        100 * 1024 * 1024,
+        Math.max(
+          FILE_UPLOAD_LIMITS.maxImageSize,
+          FILE_UPLOAD_LIMITS.maxVideoSize,
+          FILE_UPLOAD_LIMITS.maxFileSize,
+        ),
+        FILE_UPLOAD_LIMITS.maxTotalSize,
       );
 
       if (validationError) {
@@ -137,9 +142,11 @@ export function useFileUpload() {
         const file = item.getAsFile();
         if (!file) return;
 
-        const MAX_FILE_SIZE = 10 * 1024 * 1024;
-        if (file.size > MAX_FILE_SIZE) {
-          toast.error(`Ảnh vượt quá 10MB. Vui lòng chọn ảnh nhỏ hơn.`);
+        const maxSize = getMaxSizeForFile(file);
+        if (file.size > maxSize) {
+          toast.error(
+            `Ảnh vượt quá ${formatFileSize(maxSize)}. Vui lòng chọn ảnh nhỏ hơn.`,
+          );
           return;
         }
 

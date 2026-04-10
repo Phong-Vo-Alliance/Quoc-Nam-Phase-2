@@ -180,67 +180,85 @@ class ChatHubConnection {
     this.isConnecting = true;
 
     try {
+      const tokenFactory = () =>
+        accessToken || localStorage.getItem("accessToken") || "";
+
+      const setupHandlers = (conn: signalR.HubConnection) => {
+        conn.onreconnecting((error) => {
+          const timestamp = new Date().toISOString();
+          console.warn(
+            `[SignalR] ${timestamp} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
+            error,
+          );
+          this.reconnectAttempts++;
+          this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
+        });
+
+        conn.onreconnected((connectionId) => {
+          this.reconnectAttempts = 0;
+          this.stateChangeListeners.forEach((cb) => cb("Connected"));
+
+          if (this.queryClient && this.currentConversationId) {
+            this.queryClient.invalidateQueries({
+              queryKey: ["messages", "conversation", this.currentConversationId],
+              refetchType: "active",
+            });
+          }
+        });
+
+        conn.onclose((error) => {
+          this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error(
+              `[SignalR] Max reconnect attempts reached | Attempts: ${this.reconnectAttempts}`,
+            );
+          }
+        });
+      };
+
+      // Try WebSocket-only first (skip negotiate = fewer HTTP requests)
       this.connection = new signalR.HubConnectionBuilder()
         .withUrl(HUB_URL, {
-          accessTokenFactory: () =>
-            accessToken || localStorage.getItem("accessToken") || "",
-          // Enable detailed logs for debugging
-          skipNegotiation: false,
-          transport:
-            signalR.HttpTransportType.WebSockets |
-            signalR.HttpTransportType.ServerSentEvents |
-            signalR.HttpTransportType.LongPolling,
+          accessTokenFactory: tokenFactory,
+          skipNegotiation: true,
+          transport: signalR.HttpTransportType.WebSockets,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
         .configureLogging(signalR.LogLevel.Information)
         .build();
 
-      // Setup reconnection handlers
-      this.connection.onreconnecting((error) => {
-        const timestamp = new Date().toISOString();
-        console.warn(
-          `[SignalR] ${timestamp} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
-          error,
-        );
-        this.reconnectAttempts++;
-        this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
-      });
+      try {
+        await this.connection.start();
+      } catch (wsError) {
+        // WebSocket failed — fallback to negotiate + all transports
+        console.warn("[SignalR] WebSocket-only failed, falling back to negotiate", wsError);
+        this.connection = new signalR.HubConnectionBuilder()
+          .withUrl(HUB_URL, {
+            accessTokenFactory: tokenFactory,
+            skipNegotiation: false,
+            transport:
+              signalR.HttpTransportType.WebSockets |
+              signalR.HttpTransportType.ServerSentEvents |
+              signalR.HttpTransportType.LongPolling,
+          })
+          .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+          .configureLogging(signalR.LogLevel.Information)
+          .build();
 
-      this.connection.onreconnected((connectionId) => {
-        const timestamp = new Date().toISOString();
-        this.reconnectAttempts = 0;
-        this.stateChangeListeners.forEach((cb) => cb("Connected"));
+        await this.connection.start();
+      }
 
-        // AUTO REFETCH: Invalidate messages to sync after reconnection
-        // ✅ FIX (Bug 6): Use correct 3-element key to match messageKeys.conversation()
-        if (this.queryClient && this.currentConversationId) {
-          this.queryClient.invalidateQueries({
-            queryKey: ["messages", "conversation", this.currentConversationId],
-            refetchType: "active", // Only refetch if query is active
-          });
-        }
-      });
+      // Register handlers AFTER connection succeeds — avoids the failed
+      // WS-only attempt's onclose from briefly flashing "Disconnected"
+      setupHandlers(this.connection);
 
-      this.connection.onclose((error) => {
-        const timestamp = new Date().toISOString();
-        this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          console.error(
-            `[SignalR] ${timestamp} | Max reconnect attempts reached | Attempts: ${this.reconnectAttempts}`,
-          );
-        }
-      });
-
-      await this.connection.start();
       this.reconnectAttempts = 0;
       this.stateChangeListeners.forEach((cb) => cb("Connected"));
-      const timestamp = new Date().toISOString();
     } catch (error) {
-      const timestamp = new Date().toISOString();
       // Don't log AbortError as it's expected when connection is stopped during negotiation
       if (error instanceof Error && error.name === "AbortError") {
       } else {
-        console.error(`[SignalR] ${timestamp} | Connection failed`, error);
+        console.error(`[SignalR] Connection failed`, error);
       }
       throw error;
     } finally {
@@ -441,120 +459,105 @@ class TaskHubConnection {
     this.isConnecting = true;
 
     try {
+      const tokenFactory = () =>
+        taskAccessToken || localStorage.getItem("taskAccessToken") || "";
+
+      const setupHandlers = (conn: signalR.HubConnection) => {
+        conn.onreconnecting((error) => {
+          const ts = new Date().toISOString();
+          console.warn(
+            `[TaskHub] ${ts} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
+            error,
+          );
+          this.reconnectAttempts++;
+          this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
+        });
+
+        conn.onreconnected(() => {
+          this.reconnectAttempts = 0;
+          this.stateChangeListeners.forEach((cb) => cb("Connected"));
+
+          if (this.queryClient) {
+            this.queryClient.invalidateQueries({
+              queryKey: ["tasks"],
+              refetchType: "active",
+            });
+          }
+        });
+
+        conn.onclose((error) => {
+          this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
+
+          if (error) {
+            const msg = error.message || "";
+            if (msg.includes("401") || msg.includes("Unauthorized")) {
+              console.error("[TaskHub] Authentication failed - taskAccessToken may be invalid");
+            } else if (msg.includes("403") || msg.includes("Forbidden")) {
+              console.error("[TaskHub] Authorization failed - user lacks permission");
+            } else if (msg.includes("404")) {
+              console.error("[TaskHub] Hub not found - check TASK_HUB_URL:", TASK_HUB_URL);
+            } else if (!(error.name === "AbortError")) {
+              console.error("[TaskHub] Connection closed with error:", msg);
+            }
+          }
+
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error(
+              `[TaskHub] Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
+            );
+          }
+        });
+      };
+
+      // Try WebSocket-only first (skip negotiate = fewer HTTP requests)
       this.connection = new signalR.HubConnectionBuilder()
         .withUrl(TASK_HUB_URL, {
-          accessTokenFactory: () =>
-            taskAccessToken || localStorage.getItem("taskAccessToken") || "",
-          skipNegotiation: false,
-          transport:
-            signalR.HttpTransportType.WebSockets |
-            signalR.HttpTransportType.ServerSentEvents |
-            signalR.HttpTransportType.LongPolling,
+          accessTokenFactory: tokenFactory,
+          skipNegotiation: true,
+          transport: signalR.HttpTransportType.WebSockets,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
         .configureLogging(signalR.LogLevel.Information)
         .build();
 
-      // Connection lifecycle events
-      this.connection.onreconnecting((error) => {
-        const ts = new Date().toISOString();
-        console.warn(
-          `[TaskHub] ${ts} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
-          error,
-        );
-        this.reconnectAttempts++;
-      });
+      try {
+        await this.connection.start();
+      } catch (wsError) {
+        // WebSocket failed — fallback to negotiate + all transports
+        console.warn("[TaskHub] WebSocket-only failed, falling back to negotiate", wsError);
+        this.connection = new signalR.HubConnectionBuilder()
+          .withUrl(TASK_HUB_URL, {
+            accessTokenFactory: tokenFactory,
+            skipNegotiation: false,
+            transport:
+              signalR.HttpTransportType.WebSockets |
+              signalR.HttpTransportType.ServerSentEvents |
+              signalR.HttpTransportType.LongPolling,
+          })
+          .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+          .configureLogging(signalR.LogLevel.Information)
+          .build();
 
-      this.connection.onreconnected((connectionId) => {
-        this.reconnectAttempts = 0;
+        await this.connection.start();
+      }
 
-        // Refetch tasks on reconnection
-        if (this.queryClient) {
-          this.queryClient.invalidateQueries({
-            queryKey: ["tasks"],
-            refetchType: "active",
-          });
-        }
-      });
+      // Register handlers AFTER connection succeeds
+      setupHandlers(this.connection);
 
-      this.connection.onclose((error) => {
-        if (error) {
-          console.error("Close Error:", {
-            message: error.message || error,
-            name: error.name,
-            stack: error.stack,
-            fullError: error,
-          });
-
-          // Check for common close reasons
-          if (
-            error.message?.includes("401") ||
-            error.message?.includes("Unauthorized")
-          ) {
-            console.error(
-              "❌ CLOSE REASON: Authentication failed - taskAccessToken may be invalid",
-            );
-          } else if (
-            error.message?.includes("403") ||
-            error.message?.includes("Forbidden")
-          ) {
-            console.error(
-              "❌ CLOSE REASON: Authorization failed - user lacks permission",
-            );
-          } else if (error.message?.includes("404")) {
-            console.error(
-              "❌ CLOSE REASON: Hub not found - check TASK_HUB_URL:",
-              TASK_HUB_URL,
-            );
-          } else if (error.message?.includes("timeout")) {
-            console.error("❌ CLOSE REASON: Connection timeout");
-          } else if (error.message?.includes("abort")) {
-            console.warn("⚠️ CLOSE REASON: Connection aborted by client");
-          } else {
-            console.error("❌ CLOSE REASON: Unknown error");
-          }
-        } else {
-        }
-
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          console.error(
-            `❌ Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
-          );
-        }
-      });
-
-      // Register state change listeners on the new connection
-      this.connection.onreconnecting(() => {
-        this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
-      });
-      this.connection.onreconnected(() => {
-        this.stateChangeListeners.forEach((cb) => cb("Connected"));
-      });
-      this.connection.onclose(() => {
-        this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
-      });
-
-      await this.connection.start();
       this.reconnectAttempts = 0;
-
-      // Notify listeners of initial connection
       this.stateChangeListeners.forEach((cb) => cb("Connected"));
 
-      // After successful negotiation, save the task access token if it was provided
+      // Save the task access token if it was provided
       if (taskAccessToken) {
         try {
-          // Store task token in localStorage for persistence
           localStorage.setItem("taskAccessToken", taskAccessToken);
         } catch (error) {
           console.warn(`[TaskHub] Failed to save task access token:`, error);
         }
       }
     } catch (error) {
-      const ts = new Date().toISOString();
-
-      // ❌ FAILURE LOG
-      if (error instanceof Error && error.name === "AbortError") {
-      } else {
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        console.error("[TaskHub] Connection failed:", error);
       }
       throw error;
     } finally {
@@ -694,72 +697,90 @@ class IdentityHubConnection {
     this.isConnecting = true;
 
     try {
+      const tokenFactory = () =>
+        identityAccessToken || localStorage.getItem("accessToken") || "";
+
+      const setupHandlers = (conn: signalR.HubConnection) => {
+        conn.on(SIGNALR_EVENTS.DEPARTMENT_MEMBERS_ADDED, () => {
+          this.refreshDirectMessageRelatedQueries();
+        });
+
+        conn.on(SIGNALR_EVENTS.DEPARTMENT_MEMBERS_REMOVED, () => {
+          this.refreshDirectMessageRelatedQueries();
+        });
+
+        conn.onreconnecting((error) => {
+          const ts = new Date().toISOString();
+          console.warn(
+            `[IdentityHub] ${ts} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
+            error,
+          );
+          this.reconnectAttempts++;
+          this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
+        });
+
+        conn.onreconnected(() => {
+          this.reconnectAttempts = 0;
+          this.stateChangeListeners.forEach((cb) => cb("Connected"));
+
+          if (this.queryClient) {
+            this.queryClient.invalidateQueries({
+              queryKey: ["users"],
+              refetchType: "active",
+            });
+          }
+        });
+
+        conn.onclose((error) => {
+          this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
+
+          if (error) {
+            console.error("[IdentityHub] Connection closed with error:", error);
+          }
+
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error(
+              `[IdentityHub] Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
+            );
+          }
+        });
+      };
+
+      // Try WebSocket-only first (skip negotiate = fewer HTTP requests)
       this.connection = new signalR.HubConnectionBuilder()
         .withUrl(IDENTITY_HUB_URL, {
-          accessTokenFactory: () =>
-            identityAccessToken || localStorage.getItem("accessToken") || "",
-          skipNegotiation: false,
-          transport:
-            signalR.HttpTransportType.WebSockets |
-            signalR.HttpTransportType.ServerSentEvents |
-            signalR.HttpTransportType.LongPolling,
+          accessTokenFactory: tokenFactory,
+          skipNegotiation: true,
+          transport: signalR.HttpTransportType.WebSockets,
         })
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
         .configureLogging(signalR.LogLevel.Information)
         .build();
 
-      this.connection.on(SIGNALR_EVENTS.DEPARTMENT_MEMBERS_ADDED, () => {
-        this.refreshDirectMessageRelatedQueries();
-      });
+      try {
+        await this.connection.start();
+      } catch (wsError) {
+        // WebSocket failed — fallback to negotiate + all transports
+        console.warn("[IdentityHub] WebSocket-only failed, falling back to negotiate", wsError);
+        this.connection = new signalR.HubConnectionBuilder()
+          .withUrl(IDENTITY_HUB_URL, {
+            accessTokenFactory: tokenFactory,
+            skipNegotiation: false,
+            transport:
+              signalR.HttpTransportType.WebSockets |
+              signalR.HttpTransportType.ServerSentEvents |
+              signalR.HttpTransportType.LongPolling,
+          })
+          .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+          .configureLogging(signalR.LogLevel.Information)
+          .build();
 
-      this.connection.on(SIGNALR_EVENTS.DEPARTMENT_MEMBERS_REMOVED, () => {
-        this.refreshDirectMessageRelatedQueries();
-      });
+        await this.connection.start();
+      }
 
-      this.connection.onreconnecting((error) => {
-        const ts = new Date().toISOString();
-        console.warn(
-          `[IdentityHub] ${ts} | Reconnecting... | Attempt: ${this.reconnectAttempts + 1}`,
-          error,
-        );
-        this.reconnectAttempts++;
-      });
+      // Register handlers AFTER connection succeeds
+      setupHandlers(this.connection);
 
-      this.connection.onreconnected(() => {
-        this.reconnectAttempts = 0;
-
-        // Keep this generic for now; concrete query keys can be added when identity realtime events are wired.
-        if (this.queryClient) {
-          this.queryClient.invalidateQueries({
-            queryKey: ["users"],
-            refetchType: "active",
-          });
-        }
-      });
-
-      this.connection.onclose((error) => {
-        if (error) {
-          console.error("[IdentityHub] Connection closed with error:", error);
-        }
-
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          console.error(
-            `[IdentityHub] Max reconnect attempts reached (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
-          );
-        }
-      });
-
-      this.connection.onreconnecting(() => {
-        this.stateChangeListeners.forEach((cb) => cb("Reconnecting"));
-      });
-      this.connection.onreconnected(() => {
-        this.stateChangeListeners.forEach((cb) => cb("Connected"));
-      });
-      this.connection.onclose(() => {
-        this.stateChangeListeners.forEach((cb) => cb("Disconnected"));
-      });
-
-      await this.connection.start();
       this.reconnectAttempts = 0;
       this.stateChangeListeners.forEach((cb) => cb("Connected"));
     } catch (error) {

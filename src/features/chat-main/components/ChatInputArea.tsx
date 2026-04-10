@@ -14,6 +14,7 @@ import {
   type MentionInputHandle,
 } from "@/features/portal/components/chat/MentionInputInline";
 import { FILE_CATEGORIES } from "@/types/files";
+import { FILE_ALLOWED_EXTENSIONS } from "@/config/env.config";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 
@@ -147,7 +148,7 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             className="hidden"
             onChange={onFileSelect}
             disabled={isFileLimitReached}
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.mp4"
+            accept={FILE_ALLOWED_EXTENSIONS.all}
             multiple
             data-testid="file-input"
           />
@@ -157,7 +158,7 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             className="hidden"
             onChange={onFileSelect}
             disabled={isFileLimitReached}
-            accept={FILE_CATEGORIES.IMAGE.join(",")}
+            accept={FILE_ALLOWED_EXTENSIONS.image}
             multiple
             data-testid="image-input"
           />

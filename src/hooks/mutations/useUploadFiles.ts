@@ -4,35 +4,20 @@ import { uploadFile } from "@/api/files.api";
 import { retryWithBackoff, FILE_RETRY_CONFIG } from "@/utils/retryLogic";
 import { classifyError } from "@/utils/errorHandling";
 import type { SelectedFile, UploadFileResult } from "@/types/files";
-
-// Phase 6: File validation constants
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-const ALLOWED_FILE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/bmp",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/plain",
-  "text/csv",
-  "video/mp4",
-];
+import { DEFAULT_FILE_RULES, getMaxSizeForFile } from "@/types/files";
 
 /**
  * Client-side file validation
+ * Uses per-type size limits from env config
  * @throws Error with specific message if validation fails
  */
 function validateFile(file: File): void {
-  if (file.size > MAX_FILE_SIZE) {
+  const maxSize = getMaxSizeForFile(file);
+  if (file.size > maxSize) {
     throw new Error("FILE_TOO_LARGE");
   }
 
-  if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+  if (!DEFAULT_FILE_RULES.allowedTypes.includes(file.type)) {
     throw new Error("UNSUPPORTED_FILE_TYPE");
   }
 }

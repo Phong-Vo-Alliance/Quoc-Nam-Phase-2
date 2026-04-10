@@ -160,6 +160,128 @@ export const SECURITY_FLAGS: SecurityFlags = isProduction
   : DEV_SECURITY_FLAGS;
 
 // ==========================================
+// File Upload Limits (in MB, converted to bytes)
+// ==========================================
+
+const parseEnvMB = (value: string | undefined, defaultMB: number): number => {
+  const parsed = value ? Number(value) : NaN;
+  return (
+    (Number.isFinite(parsed) && parsed > 0 ? parsed : defaultMB) * 1024 * 1024
+  );
+};
+
+/**
+ * Parse comma-separated env string into array, fallback to defaults
+ * Example: VITE_ALLOWED_IMAGE_TYPES="image/jpeg,image/png" → ["image/jpeg", "image/png"]
+ */
+const parseEnvList = (
+  value: string | undefined,
+  defaults: string[],
+): string[] => {
+  if (!value || !value.trim()) return defaults;
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+};
+
+// ==========================================
+// Default Allowed File Types (MIME types)
+// ==========================================
+
+const DEFAULT_ALLOWED_DOCUMENT_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+const DEFAULT_ALLOWED_SPREADSHEET_TYPES = [
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
+
+const DEFAULT_ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+];
+
+const DEFAULT_ALLOWED_VIDEO_TYPES = ["video/mp4"];
+
+// ==========================================
+// File Allowed Types (configurable via env)
+// ==========================================
+
+export const FILE_ALLOWED_TYPES = {
+  /** Allowed document MIME types (env: VITE_ALLOWED_DOCUMENT_TYPES) */
+  document: parseEnvList(
+    import.meta.env.VITE_ALLOWED_DOCUMENT_TYPES,
+    DEFAULT_ALLOWED_DOCUMENT_TYPES,
+  ),
+  /** Allowed spreadsheet MIME types (env: VITE_ALLOWED_SPREADSHEET_TYPES) */
+  spreadsheet: parseEnvList(
+    import.meta.env.VITE_ALLOWED_SPREADSHEET_TYPES,
+    DEFAULT_ALLOWED_SPREADSHEET_TYPES,
+  ),
+  /** Allowed image MIME types (env: VITE_ALLOWED_IMAGE_TYPES) */
+  image: parseEnvList(
+    import.meta.env.VITE_ALLOWED_IMAGE_TYPES,
+    DEFAULT_ALLOWED_IMAGE_TYPES,
+  ),
+  /** Allowed video MIME types (env: VITE_ALLOWED_VIDEO_TYPES) */
+  video: parseEnvList(
+    import.meta.env.VITE_ALLOWED_VIDEO_TYPES,
+    DEFAULT_ALLOWED_VIDEO_TYPES,
+  ),
+  /** All allowed MIME types combined */
+  get all(): string[] {
+    return [
+      ...this.document,
+      ...this.spreadsheet,
+      ...this.image,
+      ...this.video,
+    ];
+  },
+};
+
+// ==========================================
+// Default Allowed File Extensions (for <input accept>)
+// ==========================================
+
+const DEFAULT_ALLOWED_FILE_EXTENSIONS =
+  ".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.mp4";
+
+const DEFAULT_ALLOWED_IMAGE_EXTENSIONS =
+  ".jpg,.jpeg,.png,.gif,.webp,.heic,.heif";
+
+export const FILE_ALLOWED_EXTENSIONS = {
+  /** File extensions for file input accept attribute (env: VITE_ALLOWED_FILE_EXTENSIONS) */
+  all:
+    import.meta.env.VITE_ALLOWED_FILE_EXTENSIONS ||
+    DEFAULT_ALLOWED_FILE_EXTENSIONS,
+  /** Image-only extensions for image input accept attribute (env: VITE_ALLOWED_IMAGE_EXTENSIONS) */
+  image:
+    import.meta.env.VITE_ALLOWED_IMAGE_EXTENSIONS ||
+    DEFAULT_ALLOWED_IMAGE_EXTENSIONS,
+};
+
+export const FILE_UPLOAD_LIMITS = {
+  /** Max image file size (default: 10MB) */
+  maxImageSize: parseEnvMB(import.meta.env.VITE_MAX_IMAGE_SIZE_MB, 10),
+  /** Max video file size (default: 20MB) */
+  maxVideoSize: parseEnvMB(import.meta.env.VITE_MAX_VIDEO_SIZE_MB, 20),
+  /** Max other file size - documents, etc. (default: 10MB) */
+  maxFileSize: parseEnvMB(import.meta.env.VITE_MAX_FILE_SIZE_MB, 10),
+  /** Max total batch size (default: 100MB) */
+  maxTotalSize: parseEnvMB(import.meta.env.VITE_MAX_TOTAL_SIZE_MB, 100),
+  /** Max files per message */
+  maxFilesPerMessage: 10,
+} as const;
+
+// ==========================================
 // Environment Info
 // ==========================================
 

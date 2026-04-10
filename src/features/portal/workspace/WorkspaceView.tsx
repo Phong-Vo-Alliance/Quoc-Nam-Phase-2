@@ -35,6 +35,7 @@ import {
   useDirectMessages,
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages";
+import { useDepartmentColleagues } from "@/hooks/queries/useDepartmentMembers";
 import { useUpdateTask } from "@/hooks/mutations";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useGroupSync } from "@/hooks/useGroupSync";
@@ -494,6 +495,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
   // DM conversations for starred message navigation
   const directMessagesQuery = useDirectMessages();
+  const departmentMembersQuery = useDepartmentColleagues();
   const directConversations = React.useMemo(
     () => flattenDirectMessages(directMessagesQuery.data),
     [directMessagesQuery.data],
@@ -512,7 +514,14 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   const activeTabType = selectedConversation?.type === "group" ? "group" : "dm";
   const isConversationListInitialLoading =
     (activeTabType === "group" && categoriesQuery.isLoading) ||
-    (activeTabType === "dm" && directMessagesQuery.isLoading);
+    (activeTabType === "dm" &&
+      (directMessagesQuery.isLoading || departmentMembersQuery.isLoading));
+
+  // Check if conversation list failed to load - hide chat & info panel when list errored
+  const isConversationListError =
+    (activeTabType === "group" && categoriesQuery.isError) ||
+    (activeTabType === "dm" &&
+      (directMessagesQuery.isError || departmentMembersQuery.isError));
 
   // Centralized group management (replaces join/leave in old hooks)
   useGroupSync();
@@ -848,7 +857,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 </div>
               ) : (
                 <div className="h-full min-h-0">
-                  {selectedConversation && !isConversationListInitialLoading ? (
+                  {selectedConversation &&
+                  !isConversationListInitialLoading &&
+                  !isConversationListError ? (
                     // API-based chat using ChatMainContainer (conversation-detail)
                     <ChatMainContainer
                       key={selectedConversation.id}
@@ -909,6 +920,47 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                       }}
                       isConversationDisabled={isConversationDisabled}
                     />
+                  ) : isConversationListError ? (
+                    <div
+                      className="flex h-full items-center justify-center bg-gray-50 p-6"
+                      data-testid="conversation-list-error-center"
+                    >
+                      <div className="text-center space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto">
+                          <svg
+                            className="w-6 h-6 text-red-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          Không thể tải danh sách cuộc trò chuyện
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Vui lòng thử lại từ bảng bên trái
+                        </p>
+                      </div>
+                    </div>
+                  ) : isConversationListInitialLoading ? (
+                    <div
+                      className="flex h-full items-center justify-center bg-gray-50"
+                      data-testid="conversation-list-loading-center"
+                    >
+                      <div className="text-center space-y-3">
+                        <div className="w-8 h-8 border-2 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto" />
+                        <p className="text-sm text-gray-500">
+                          Đang tải danh sách...
+                        </p>
+                      </div>
+                    </div>
                   ) : (
                     <EmptyChatState isMobile={true} />
                   )}
@@ -917,47 +969,51 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             </div>
           )}
 
-          {mobileTab === "work" && (
-            <div className="h-full min-h-0 overflow-hidden flex flex-col">
-              <ConversationDetailPanel
-                tab={tab}
-                setTab={setTab}
-                groupId={selectedConversation?.id}
-                workTypeName={
-                  workTypes?.find((w) => w.id === selectedWorkTypeId)?.name ??
-                  "—"
-                }
-                checklistVariants={conversationChecklistVariants}
-                viewMode={viewMode}
-                selectedWorkTypeId={selectedWorkTypeId}
-                currentUserId={currentUserId}
-                tasks={apiTasks}
-                members={apiGroupMembers}
-                onChangeTaskStatus={onChangeTaskStatus}
-                onReassignTask={handleReassignTask}
-                onToggleChecklist={onToggleChecklist}
-                onUpdateTaskChecklist={onUpdateTaskChecklist}
-                checklistTemplates={checklistTemplates}
-                setChecklistTemplates={setChecklistTemplates}
-                receivedInfos={receivedInfos}
-                onTransferInfo={onTransferInfo}
-                onAssignInfo={onAssignInfo}
-                onOpenGroupTransfer={openTransferSheet}
-                applyTemplateToTasks={applyTemplateToTasks}
-                taskLogs={taskLogs}
-                onOpenTaskLog={onOpenTaskLog}
-                onOpenSourceMessage={(messageDto) => {
-                  // Set the message to scroll to (same pattern as PinnedMessagesPanel)
-                  setScrollToMessage(messageDto);
-                }}
-                messages={chatMessages}
-                messagesQuery={messagesQuery}
-                isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
-                conversationAttachment={conversationAttachment}
-                forceLeaderMine={forceLeaderMine}
-              />
-            </div>
-          )}
+          {mobileTab === "work" &&
+            !isConversationListError &&
+            !isConversationListInitialLoading && (
+              <div className="h-full min-h-0 overflow-hidden flex flex-col">
+                <ConversationDetailPanel
+                  tab={tab}
+                  setTab={setTab}
+                  groupId={selectedConversation?.id}
+                  workTypeName={
+                    workTypes?.find((w) => w.id === selectedWorkTypeId)?.name ??
+                    "—"
+                  }
+                  checklistVariants={conversationChecklistVariants}
+                  viewMode={viewMode}
+                  selectedWorkTypeId={selectedWorkTypeId}
+                  currentUserId={currentUserId}
+                  tasks={apiTasks}
+                  members={apiGroupMembers}
+                  onChangeTaskStatus={onChangeTaskStatus}
+                  onReassignTask={handleReassignTask}
+                  onToggleChecklist={onToggleChecklist}
+                  onUpdateTaskChecklist={onUpdateTaskChecklist}
+                  checklistTemplates={checklistTemplates}
+                  setChecklistTemplates={setChecklistTemplates}
+                  receivedInfos={receivedInfos}
+                  onTransferInfo={onTransferInfo}
+                  onAssignInfo={onAssignInfo}
+                  onOpenGroupTransfer={openTransferSheet}
+                  applyTemplateToTasks={applyTemplateToTasks}
+                  taskLogs={taskLogs}
+                  onOpenTaskLog={onOpenTaskLog}
+                  onOpenSourceMessage={(messageDto) => {
+                    // Set the message to scroll to (same pattern as PinnedMessagesPanel)
+                    setScrollToMessage(messageDto);
+                  }}
+                  messages={chatMessages}
+                  messagesQuery={messagesQuery}
+                  isLoading={
+                    categoriesQuery.isLoading || messagesQuery.isLoading
+                  }
+                  conversationAttachment={conversationAttachment}
+                  forceLeaderMine={forceLeaderMine}
+                />
+              </div>
+            )}
 
           {mobileTab === "profile" && (
             <div className="p-4 space-y-4 text-sm">
@@ -1025,7 +1081,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     <div
       ref={containerRef}
       style={
-        showRight
+        showRight &&
+        !isConversationListError &&
+        !isConversationListInitialLoading
           ? {
               gridTemplateColumns: `360px 1fr ${DIVIDER_WIDTH}px ${rightPanelWidth}px`,
             }
@@ -1128,7 +1186,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
       {/* Center (Chat Container) — IMPORTANT: allow shrinking by setting min-w-0 */}
       <div className="h-full min-h-0 min-w-0 relative">
-        {selectedConversation && !isConversationListInitialLoading ? (
+        {selectedConversation &&
+        !isConversationListInitialLoading &&
+        !isConversationListError ? (
           // API-based chat using ChatMainContainer (conversation-detail)
           <ChatMainContainer
             key={selectedConversation.id}
@@ -1186,71 +1246,116 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             }}
             isConversationDisabled={isConversationDisabled}
           />
+        ) : isConversationListError ? (
+          <div
+            className="flex h-full items-center justify-center bg-gray-50"
+            data-testid="conversation-list-error-center"
+          >
+            <div className="text-center space-y-4 px-6">
+              <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto">
+                <svg
+                  className="w-8 h-8 text-red-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-medium text-gray-700">
+                  Không thể tải danh sách cuộc trò chuyện
+                </h3>
+                <p className="text-sm text-gray-500 max-w-md">
+                  Vui lòng nhấn "Thử lại" từ danh sách bên trái để tải lại
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : isConversationListInitialLoading ? (
+          <div
+            className="flex h-full items-center justify-center bg-gray-50"
+            data-testid="conversation-list-loading-center"
+          >
+            <div className="text-center space-y-4 px-6">
+              <div className="w-10 h-10 border-3 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto" />
+              <p className="text-sm text-gray-500">Đang tải danh sách...</p>
+            </div>
+          </div>
         ) : (
           <EmptyChatState isMobile={false} />
         )}
       </div>
 
       {/* Divider (draggable) */}
-      {showRight && (
-        <div className="relative h-full">
-          <div
-            className="absolute left-1/2 top-1/2
+      {showRight &&
+        !isConversationListError &&
+        !isConversationListInitialLoading && (
+          <div className="relative h-full">
+            <div
+              className="absolute left-1/2 top-1/2
                -translate-x-1/2 -translate-y-1/2
                w-2 h-32 rounded-full
                cursor-col-resize
                bg-brand-100 hover:bg-brand-200 active:bg-brand-400"
-            onMouseDown={onDividerMouseDown}
-            title="Kéo để thay đổi độ rộng panel phải"
-            data-testid="right-panel-resize"
-          />
-        </div>
-      )}
+              onMouseDown={onDividerMouseDown}
+              title="Kéo để thay đổi độ rộng panel phải"
+              data-testid="right-panel-resize"
+            />
+          </div>
+        )}
 
       {/* Right */}
-      {showRight && (
-        <div
-          className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col rounded-2xl border border-gray-300 bg-white"
-          data-testid="conversation-detail-panel-container"
-        >
-          <ConversationDetailPanel
-            tab={tab}
-            setTab={setTab}
-            groupId={selectedConversation?.id}
-            workTypeName={
-              workTypes?.find((w) => w.id === selectedWorkTypeId)?.name ?? "—"
-            }
-            checklistVariants={conversationChecklistVariants}
-            viewMode={viewMode}
-            selectedWorkTypeId={selectedWorkTypeId}
-            currentUserId={currentUserId}
-            tasks={apiTasks}
-            members={apiGroupMembers}
-            onChangeTaskStatus={onChangeTaskStatus}
-            onReassignTask={handleReassignTask}
-            onToggleChecklist={onToggleChecklist}
-            onUpdateTaskChecklist={onUpdateTaskChecklist}
-            checklistTemplates={checklistTemplates}
-            setChecklistTemplates={setChecklistTemplates}
-            receivedInfos={receivedInfos}
-            onTransferInfo={onTransferInfo}
-            onAssignInfo={onAssignInfo}
-            onOpenGroupTransfer={openTransferSheet}
-            applyTemplateToTasks={applyTemplateToTasks}
-            taskLogs={taskLogs}
-            onOpenTaskLog={onOpenTaskLog}
-            onOpenSourceMessage={(messageDto) => {
-              // Set the message to scroll to (same pattern as PinnedMessagesPanel)
-              setScrollToMessage(messageDto);
-            }}
-            messages={chatMessages}
-            messagesQuery={messagesQuery}
-            isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
-            conversationAttachment={conversationAttachment}
-            forceLeaderMine={forceLeaderMine}
-          />
-        </div>
-      )}
+      {showRight &&
+        !isConversationListError &&
+        !isConversationListInitialLoading && (
+          <div
+            className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col rounded-2xl border border-gray-300 bg-white"
+            data-testid="conversation-detail-panel-container"
+          >
+            <ConversationDetailPanel
+              tab={tab}
+              setTab={setTab}
+              groupId={selectedConversation?.id}
+              workTypeName={
+                workTypes?.find((w) => w.id === selectedWorkTypeId)?.name ?? "—"
+              }
+              checklistVariants={conversationChecklistVariants}
+              viewMode={viewMode}
+              selectedWorkTypeId={selectedWorkTypeId}
+              currentUserId={currentUserId}
+              tasks={apiTasks}
+              members={apiGroupMembers}
+              onChangeTaskStatus={onChangeTaskStatus}
+              onReassignTask={handleReassignTask}
+              onToggleChecklist={onToggleChecklist}
+              onUpdateTaskChecklist={onUpdateTaskChecklist}
+              checklistTemplates={checklistTemplates}
+              setChecklistTemplates={setChecklistTemplates}
+              receivedInfos={receivedInfos}
+              onTransferInfo={onTransferInfo}
+              onAssignInfo={onAssignInfo}
+              onOpenGroupTransfer={openTransferSheet}
+              applyTemplateToTasks={applyTemplateToTasks}
+              taskLogs={taskLogs}
+              onOpenTaskLog={onOpenTaskLog}
+              onOpenSourceMessage={(messageDto) => {
+                // Set the message to scroll to (same pattern as PinnedMessagesPanel)
+                setScrollToMessage(messageDto);
+              }}
+              messages={chatMessages}
+              messagesQuery={messagesQuery}
+              isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
+              conversationAttachment={conversationAttachment}
+              forceLeaderMine={forceLeaderMine}
+            />
+          </div>
+        )}
     </div>
   );
 };

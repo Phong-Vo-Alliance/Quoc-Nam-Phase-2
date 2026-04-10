@@ -59,6 +59,32 @@ interface ImportMetaEnv {
   // Security - Other configs
   readonly VITE_CONTENT_PROTECTION_FILE_TYPES: string;
 
+  // File Upload Limits (in MB)
+  /** Max image size, default 10MB */
+  readonly VITE_MAX_IMAGE_SIZE_MB: string;
+  /** Max video size, default 20MB */
+  readonly VITE_MAX_VIDEO_SIZE_MB: string;
+  /** Max other file size, default 10MB */
+  readonly VITE_MAX_FILE_SIZE_MB: string;
+  /** Max total batch size, default 100MB */
+  readonly VITE_MAX_TOTAL_SIZE_MB: string;
+
+  // File Allowed Types (comma-separated MIME types)
+  /** Allowed document MIME types, e.g. "application/pdf,application/msword" */
+  readonly VITE_ALLOWED_DOCUMENT_TYPES: string;
+  /** Allowed spreadsheet MIME types */
+  readonly VITE_ALLOWED_SPREADSHEET_TYPES: string;
+  /** Allowed image MIME types, e.g. "image/jpeg,image/png,image/webp" */
+  readonly VITE_ALLOWED_IMAGE_TYPES: string;
+  /** Allowed video MIME types, e.g. "video/mp4" */
+  readonly VITE_ALLOWED_VIDEO_TYPES: string;
+
+  // File Allowed Extensions (comma-separated, for <input accept>)
+  /** All file extensions, e.g. ".pdf,.doc,.docx,.jpg,.png,.mp4" */
+  readonly VITE_ALLOWED_FILE_EXTENSIONS: string;
+  /** Image-only extensions, e.g. ".jpg,.jpeg,.png,.gif,.webp" */
+  readonly VITE_ALLOWED_IMAGE_EXTENSIONS: string;
+
   // External Links
   readonly VITE_GUIDE_URL: string;
   readonly VITE_GUIDE_JWT_SECRET: string;

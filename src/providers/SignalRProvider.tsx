@@ -60,29 +60,31 @@ export function SignalRProvider({ children }: SignalRProviderProps) {
     try {
       setConnectionState("Connecting");
 
-      // Connect Chat Hub
-      await chatHub.start(accessToken || undefined);
+      // Connect all hubs in parallel — only Chat Hub is required
+      const [chatResult, taskResult, identityResult] =
+        await Promise.allSettled([
+          chatHub.start(accessToken || undefined),
+          taskHub.start(taskAccessToken || undefined),
+          identityHub.start(accessToken || undefined),
+        ]);
 
-      // Connect Task Hub (parallel)
-      try {
-        await taskHub.start(taskAccessToken || undefined);
-      } catch (taskError) {
-        console.warn(
-          "[SignalRProvider] Task hub connection failed (non-critical):",
-          taskError,
-        );
-        // Task hub failure is non-critical, continue with chat hub only
+      // Chat Hub is critical — if it fails, throw to trigger error state
+      if (chatResult.status === "rejected") {
+        throw chatResult.reason;
       }
 
-      // Connect Identity Hub (parallel)
-      try {
-        await identityHub.start(accessToken || undefined);
-      } catch (identityError) {
+      // Log non-critical hub failures
+      if (taskResult.status === "rejected") {
+        console.warn(
+          "[SignalRProvider] Task hub connection failed (non-critical):",
+          taskResult.reason,
+        );
+      }
+      if (identityResult.status === "rejected") {
         console.warn(
           "[SignalRProvider] Identity hub connection failed (non-critical):",
-          identityError,
+          identityResult.reason,
         );
-        // Identity hub failure is non-critical, continue with chat hub only
       }
 
       if (mountedRef.current && shouldConnectRef.current) {

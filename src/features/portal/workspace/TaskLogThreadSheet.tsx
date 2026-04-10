@@ -32,6 +32,7 @@ import type { ThreadUpdatedEvent } from "@/lib/signalr";
 import { useUploadFiles } from "@/hooks/mutations/useUploadFiles";
 import { useUploadFilesBatch } from "@/hooks/mutations/useUploadFilesBatch";
 import { FILE_CATEGORIES } from "@/types/files";
+import { FILE_ALLOWED_EXTENSIONS } from "@/config/env.config";
 import type { SelectedFile } from "@/types/files";
 import { formatAttachment } from "@/utils/formatAttachment";
 import { useFileUpload } from "@/features/chat-main/hooks/useFileUpload";
@@ -1271,7 +1272,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
               className="hidden"
               onChange={handleFileSelect}
               disabled={isFileLimitReached}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.mp4"
+              accept={FILE_ALLOWED_EXTENSIONS.all}
               multiple
               data-testid="task-log-file-input"
             />
@@ -1281,7 +1282,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
               className="hidden"
               onChange={handleFileSelect}
               disabled={isFileLimitReached}
-              accept={FILE_CATEGORIES.IMAGE.join(",")}
+              accept={FILE_ALLOWED_EXTENSIONS.image}
               multiple
               data-testid="task-log-image-input"
             />

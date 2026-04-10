@@ -143,8 +143,8 @@ export function fileToSelectedFile(file: File): SelectedFile {
  */
 export const BATCH_UPLOAD_LIMITS = {
   MAX_FILES: 10,
-  MAX_SIZE_PER_FILE: 1000 * 1024 * 1024, // 1000MB
-  MAX_TOTAL_SIZE: 5000 * 1024 * 1024, // 5000MB
+  MAX_SIZE_PER_FILE: 1000 * 1024 * 1024, // 1000MB (fallback, actual limits per type in FILE_UPLOAD_LIMITS)
+  MAX_TOTAL_SIZE: 5000 * 1024 * 1024, // 5000MB (fallback, actual limit in FILE_UPLOAD_LIMITS)
 } as const;
 
 /**

@@ -2,6 +2,7 @@
 
 import type { ID, Timestamps } from "./common";
 import type { User } from "./auth";
+import { FILE_UPLOAD_LIMITS, FILE_ALLOWED_TYPES } from "@/config/env.config";
 
 export interface FileAttachment extends Timestamps {
   id: ID;
@@ -47,7 +48,7 @@ export const SUPPORTED_FILE_EXTENSIONS: Record<
   powerpoint: [".ppt", ".pptx"],
   text: [".txt", ".rtf"],
   video: [".mp4", ".webm", ".ogg", ".mov"],
-  image: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
+  image: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"],
 } as const;
 
 export const FILE_TYPE_ICONS: Record<SupportedPreviewFileType, string> = {
@@ -142,43 +143,34 @@ export interface FileValidationRules {
  * Applies to both images and other file types combined
  * API limit: 10 files, 100MB total
  */
-export const MAX_FILES_PER_MESSAGE = 10;
+export const MAX_FILES_PER_MESSAGE = FILE_UPLOAD_LIMITS.maxFilesPerMessage;
+
+/**
+ * Get max file size based on MIME type
+ * Image: VITE_MAX_IMAGE_SIZE_MB (default 10MB)
+ * Video: VITE_MAX_VIDEO_SIZE_MB (default 20MB)
+ * Other: VITE_MAX_FILE_SIZE_MB (default 10MB)
+ */
+export function getMaxSizeForFile(file: File): number {
+  if (file.type.startsWith("image/")) return FILE_UPLOAD_LIMITS.maxImageSize;
+  if (file.type.startsWith("video/")) return FILE_UPLOAD_LIMITS.maxVideoSize;
+  return FILE_UPLOAD_LIMITS.maxFileSize;
+}
 
 // Default validation rules for client-side validation
 export const DEFAULT_FILE_RULES: FileValidationRules = {
-  maxSize: 10 * 1024 * 1024, // 10MB per file
-  maxFiles: MAX_FILES_PER_MESSAGE, // 10 files (API limit)
-  allowedTypes: [
-    // Documents
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    // Images
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    // Videos
-    "video/mp4",
-  ],
+  maxSize: FILE_UPLOAD_LIMITS.maxFileSize,
+  maxFiles: MAX_FILES_PER_MESSAGE,
+  allowedTypes: FILE_ALLOWED_TYPES.all,
 };
 
-// File type categories
+// File type categories (configurable via env)
 export const FILE_CATEGORIES = {
-  DOCUMENT: [
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ],
-  SPREADSHEET: [
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ],
-  IMAGE: ["image/jpeg", "image/png", "image/gif", "image/webp"],
-  VIDEO: ["video/mp4"],
-} as const;
+  DOCUMENT: FILE_ALLOWED_TYPES.document,
+  SPREADSHEET: FILE_ALLOWED_TYPES.spreadsheet,
+  IMAGE: FILE_ALLOWED_TYPES.image,
+  VIDEO: FILE_ALLOWED_TYPES.video,
+};
 
 // Phase 2: API Integration types
 

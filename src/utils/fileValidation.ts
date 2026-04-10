@@ -3,6 +3,7 @@
  */
 
 import type { FileValidationResult, FileValidationRules } from "@/types/files";
+import { getMaxSizeForFile } from "@/types/files";
 import { formatFileSize } from "./fileHelpers";
 
 /**
@@ -13,7 +14,7 @@ import { formatFileSize } from "./fileHelpers";
  */
 export function validateFileSize(
   file: File,
-  maxSize: number
+  maxSize: number,
 ): FileValidationResult {
   // if (file.size > maxSize) {
   //   return {
@@ -34,7 +35,7 @@ export function validateFileSize(
  */
 export function validateFileType(
   file: File,
-  allowedTypes: string[]
+  allowedTypes: string[],
 ): FileValidationResult {
   if (!allowedTypes.includes(file.type)) {
     return {
@@ -55,7 +56,7 @@ export function validateFileType(
 export function validateFileCount(
   currentCount: number,
   newFilesCount: number,
-  maxFiles: number
+  maxFiles: number,
 ): FileValidationResult {
   const totalCount = currentCount + newFilesCount;
   if (totalCount > maxFiles) {
@@ -75,10 +76,11 @@ export function validateFileCount(
  */
 export function validateFile(
   file: File,
-  rules: FileValidationRules
+  rules: FileValidationRules,
 ): FileValidationResult {
-  // Validate file size
-  const sizeResult = validateFileSize(file, rules.maxSize);
+  // Validate file size using per-type limits
+  const maxSize = getMaxSizeForFile(file);
+  const sizeResult = validateFileSize(file, maxSize);
   if (!sizeResult.isValid) return sizeResult;
 
   // Validate file type
@@ -98,7 +100,7 @@ export function validateFile(
 export function validateFiles(
   files: File[],
   currentCount: number,
-  rules: FileValidationRules
+  rules: FileValidationRules,
 ): {
   validFiles: File[];
   errors: string[];
@@ -110,7 +112,7 @@ export function validateFiles(
   const countResult = validateFileCount(
     currentCount,
     files.length,
-    rules.maxFiles
+    rules.maxFiles,
   );
   if (!countResult.isValid) {
     errors.push(countResult.error!);
