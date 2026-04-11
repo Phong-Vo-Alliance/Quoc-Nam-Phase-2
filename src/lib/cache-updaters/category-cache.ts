@@ -119,15 +119,19 @@ export function handleMessageSent(
                 contentType: att.contentType ?? undefined,
               })),
               parentMessageId: message.parentMessageId || null,
-              parentMessagePreview:
-                message.parentMessagePreview?.id
-                  ? {
-                      id: message.parentMessagePreview.id,
-                      senderName:
-                        message.parentMessagePreview.senderName || "",
-                      content: message.parentMessagePreview.content || "",
-                    }
-                  : null,
+              parentMessage: message.parentMessagePreview?.id
+                ? {
+                    messageId: message.parentMessagePreview.id,
+                    senderId: "",
+                    senderName:
+                      message.parentMessagePreview.senderName || "",
+                    content:
+                      message.parentMessagePreview.contentPreview ||
+                      message.parentMessagePreview.content ||
+                      "",
+                    sentAt: message.parentMessagePreview.sentAt || "",
+                  }
+                : null,
             },
             unreadCount: shouldIncrement
               ? (conv.unreadCount || 0) + 1

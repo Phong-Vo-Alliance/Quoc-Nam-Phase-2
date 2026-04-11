@@ -68,11 +68,14 @@ export interface CategoryItemProps {
         senderName: string;
         content: string;
         sentAt: string;
+        isThreadMessage?: boolean;
         parentMessageId?: string | null;
-        parentMessagePreview?: {
-          id: string;
+        parentMessage?: {
+          messageId: string;
+          senderId: string;
           senderName: string;
           content: string;
+          sentAt: string;
         } | null;
       } | null;
     }>;

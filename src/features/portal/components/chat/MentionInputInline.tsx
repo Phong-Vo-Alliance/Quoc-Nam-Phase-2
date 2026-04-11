@@ -436,6 +436,11 @@ export const MentionInputInline = forwardRef<
           }
         }
       }
+
+      // No valid trigger detected → close any open dropdown
+      // (e.g. user deleted the "@" or "/" trigger character)
+      setShowMentionDropdown(false);
+      setShowShortcutDropdown(false);
     }, [getTextContent, getCursorPosition, getCaretCoordinates, showMentionDropdown, updateFixedPosition]);
 
     // Handle input changes

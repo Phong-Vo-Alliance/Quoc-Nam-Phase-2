@@ -52,6 +52,18 @@ export interface LastMessageDto {
     fileName?: string;
     contentType?: string;
   }>;
+  /** Whether this message is a thread reply */
+  isThreadMessage?: boolean;
+  /** Parent message ID if this is a thread reply */
+  parentMessageId?: string | null;
+  /** Parent message preview (for thread replies) */
+  parentMessage?: {
+    messageId: string;
+    senderId: string;
+    senderName: string;
+    content: string;
+    sentAt: string;
+  } | null;
 }
 
 /**

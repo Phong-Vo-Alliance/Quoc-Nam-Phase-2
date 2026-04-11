@@ -5,6 +5,7 @@ import {
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages";
 import { getSelectedCategory, saveSelectedCategory } from "@/utils/storage";
+import { useConversationStore } from "@/stores/conversationStore";
 import type { ConversationInfoDto } from "@/types/categories";
 
 interface UseCategoryNavigationOptions {
@@ -76,14 +77,37 @@ export function useCategoryNavigation({
   }, [activeCategoryId, categories]);
 
   // 🆕 NEW (CBN-002): Get category name for display
+  // Ưu tiên dữ liệu tươi từ /categories API để phản ánh realtime rename.
+  // Chỉ fallback về prop (snapshot từ Zustand store) khi categories data chưa có.
   const conversationCategory = useMemo(() => {
-    if (conversationCategoryProp) return conversationCategoryProp;
-    if (!activeCategoryId || !categories) return undefined;
-    const selectedCategory = categories.find(
-      (cat) => cat.id === activeCategoryId,
-    );
-    return selectedCategory?.name;
+    if (activeCategoryId && categories) {
+      const selectedCategory = categories.find(
+        (cat) => cat.id === activeCategoryId,
+      );
+      if (selectedCategory) return selectedCategory.name;
+    }
+    return conversationCategoryProp;
   }, [conversationCategoryProp, activeCategoryId, categories]);
+
+  // 🐛 FIX: Sync Zustand store khi category được rename từ API.
+  // Nếu không sync, `selectedConversation.category` vẫn giữ tên cũ và
+  // gây stale ở các chỗ khác đang đọc từ store.
+  useEffect(() => {
+    if (!conversationCategory) return;
+    const currentSelected =
+      useConversationStore.getState().selectedConversation;
+    if (
+      currentSelected &&
+      currentSelected.type === "group" &&
+      currentSelected.categoryId === activeCategoryId &&
+      currentSelected.category !== conversationCategory
+    ) {
+      useConversationStore.getState().setSelectedConversation({
+        ...currentSelected,
+        category: conversationCategory,
+      });
+    }
+  }, [conversationCategory, activeCategoryId]);
 
   // 🆕 NEW (CBN-002): Auto-select first conversation when category changes
   useEffect(() => {

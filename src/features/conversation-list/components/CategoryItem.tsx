@@ -55,8 +55,7 @@ export function CategoryItem({
       });
   }, [category.conversations]);
 
-  const parentMessagePreview =
-    latestConversation?.lastMessage?.parentMessagePreview ?? null;
+  const parentMessage = latestConversation?.lastMessage?.parentMessage ?? null;
 
   return (
     <button
@@ -100,9 +99,9 @@ export function CategoryItem({
             {/* Parent message (tin gốc) - no curve */}
             <div className="mt-0.5 flex items-center gap-2">
               <span className="text-xs text-gray-500 truncate flex-1">
-                {parentMessagePreview?.content
-                  ? `${parentMessagePreview.content.slice(0, 30)}${parentMessagePreview.content.length > 30 ? "..." : ""}`
-                  : "Nhật ký công việc"}
+                {parentMessage?.content
+                  ? `${parentMessage.senderName}: ${parentMessage.content.slice(0, 30)}${parentMessage.content.length > 30 ? "..." : ""}`
+                  : `Tin nhắn từ ${parentMessage?.senderName || latestConversation.lastMessage!.senderName}`}
               </span>
             </div>
             {/* Last message (tin mới) - with curve */}
