@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FileVideo } from "lucide-react";
-import { getVideoThumbnail } from "@/api/files.api";
+import { useImageCacheStore } from "@/stores/imageCacheStore";
 import { formatFileSize } from "@/utils/fileHelpers";
 
 export interface MessageVideoProps {
@@ -19,20 +19,17 @@ export default function MessageVideo({
   fileSize,
 }: MessageVideoProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const getVideoUrl = useImageCacheStore((state) => state.getVideoUrl);
 
   useEffect(() => {
     let isCancelled = false;
-    let objectUrl: string | null = null;
 
     async function loadThumbnail() {
       try {
-        const blob = await getVideoThumbnail(fileId, 640);
-        if (isCancelled) {
-          return;
+        const url = await getVideoUrl(fileId, 640);
+        if (!isCancelled) {
+          setThumbnailUrl(url);
         }
-
-        objectUrl = URL.createObjectURL(blob);
-        setThumbnailUrl(objectUrl);
       } catch {
         if (!isCancelled) {
           setThumbnailUrl(null);
@@ -44,11 +41,9 @@ export default function MessageVideo({
 
     return () => {
       isCancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
+      // Don't revoke - blob URL is managed by imageCacheStore
     };
-  }, [fileId]);
+  }, [fileId, getVideoUrl]);
 
   return (
     <div

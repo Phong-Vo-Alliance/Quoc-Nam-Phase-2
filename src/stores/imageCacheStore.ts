@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { getImageThumbnail } from "@/api/files.api";
+import { getImageThumbnail, getVideoThumbnail } from "@/api/files.api";
 
 /**
  * In-flight promise map — shared across all callers so duplicate
@@ -19,7 +19,16 @@ interface ImageCacheState {
    * Get cached blob URL or fetch if not exists.
    * Multiple callers with the same fileId+size share one in-flight request.
    */
-  getImageUrl: (fileId: string, size?: "small" | "medium" | "large") => Promise<string | null>;
+  getImageUrl: (
+    fileId: string,
+    size?: "small" | "medium" | "large",
+  ) => Promise<string | null>;
+
+  /**
+   * Get cached video thumbnail blob URL or fetch if not exists.
+   * Multiple callers with the same fileId+width share one in-flight request.
+   */
+  getVideoUrl: (fileId: string, width?: number) => Promise<string | null>;
 
   /**
    * Check if image is cached
@@ -43,7 +52,10 @@ interface ImageCacheState {
 export const useImageCacheStore = create<ImageCacheState>((set, get) => ({
   cache: new Map(),
 
-  getImageUrl: async (fileId: string, size: "small" | "medium" | "large" = "large") => {
+  getImageUrl: async (
+    fileId: string,
+    size: "small" | "medium" | "large" = "large",
+  ) => {
     const cacheKey = `${fileId}:${size}`;
 
     // Return cached if exists
@@ -81,6 +93,39 @@ export const useImageCacheStore = create<ImageCacheState>((set, get) => ({
 
   hasImage: (fileId: string, size: "small" | "medium" | "large" = "large") => {
     return get().cache.has(`${fileId}:${size}`);
+  },
+
+  getVideoUrl: async (fileId: string, width: number = 320) => {
+    const cacheKey = `video:${fileId}:${width}`;
+
+    const cached = get().cache.get(cacheKey);
+    if (cached) return cached;
+
+    const pending = pendingRequests.get(cacheKey);
+    if (pending) return pending;
+
+    const request = (async () => {
+      try {
+        const blob = await getVideoThumbnail(fileId, width);
+        const blobUrl = URL.createObjectURL(blob);
+
+        set((state) => {
+          const newCache = new Map(state.cache);
+          newCache.set(cacheKey, blobUrl);
+          return { cache: newCache };
+        });
+
+        return blobUrl;
+      } catch (err) {
+        console.warn(`Failed to load video thumbnail ${fileId}:`, err);
+        return null;
+      } finally {
+        pendingRequests.delete(cacheKey);
+      }
+    })();
+
+    pendingRequests.set(cacheKey, request);
+    return request;
   },
 
   clearCache: () => {

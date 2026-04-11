@@ -99,6 +99,12 @@ export interface ConversationDetailPanelProps {
   };
   /** Conversation attachments from API */
   conversationAttachment?: any;
+  /** Pagination query for loading more attachments */
+  conversationAttachmentsQuery?: {
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    fetchNextPage: () => Promise<unknown>;
+  };
 
   /** Trigger to force leader mode to "mine" (increment to trigger) */
   forceLeaderMine?: number;
@@ -137,6 +143,7 @@ export const ConversationDetailPanel: React.FC<
   messages = [],
   messagesQuery,
   conversationAttachment,
+  conversationAttachmentsQuery,
   forceLeaderMine,
 }) => {
   /* =============== Store Data =============== */
@@ -628,6 +635,7 @@ export const ConversationDetailPanel: React.FC<
               setShowAddMemberDialog={setShowAddMemberDialog}
               isLoading={isLoading}
               conversationAttachment={conversationAttachment}
+              conversationAttachmentsQuery={conversationAttachmentsQuery}
               onNavigateToChat={() => {}}
               onOpenTaskLogByMessageId={handleOpenTaskLogByMessageId}
             />

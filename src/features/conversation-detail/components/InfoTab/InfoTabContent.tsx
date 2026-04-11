@@ -25,6 +25,12 @@ interface InfoTabContentProps {
   /** When true, the info card is hidden (chat/categories loading) */
   isLoading?: boolean;
   conversationAttachment?: any;
+  /** Pagination query for loading more attachments */
+  conversationAttachmentsQuery?: {
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    fetchNextPage: () => Promise<unknown>;
+  };
   /** Callback to navigate to chat tab before scrolling to message */
   onNavigateToChat?: () => void;
   /** Callback to open "Nhật ký công việc" by parent message ID */
@@ -44,6 +50,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
   setShowAddMemberDialog,
   isLoading = false,
   conversationAttachment,
+  conversationAttachmentsQuery,
   onNavigateToChat,
   onOpenTaskLogByMessageId,
 }) => {
@@ -108,6 +115,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
               messages={messages}
               messagesQuery={messagesQuery}
               conversationAttachment={conversationAttachment}
+              conversationAttachmentsQuery={conversationAttachmentsQuery}
             />
           ) : (
             <div className="text-center py-2 text-sm text-gray-500">
@@ -147,6 +155,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
               messages={messages}
               messagesQuery={messagesQuery}
               conversationAttachment={conversationAttachment}
+              conversationAttachmentsQuery={conversationAttachmentsQuery}
             />
           ) : (
             <div className="text-center py-2 text-sm text-gray-500">

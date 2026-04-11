@@ -14,7 +14,6 @@ import { API_ENDPOINTS } from "@/config/env.config";
 import { useAuthStore } from "@/stores/authStore";
 import { useImageCacheStore } from "@/stores/imageCacheStore";
 import { toast } from "sonner"; // Phase 2: For toast notifications
-import { getVideoThumbnail } from "@/api/files.api";
 import FilePreviewModal from "@/components/FilePreviewModal"; // Phase 2.2: Document preview
 import ImagePreviewModal from "@/components/ImagePreviewModal"; // Image preview modal
 
@@ -97,6 +96,12 @@ export type FileManagerPhase1AProps = {
   };
   /** Conversation attachments from API */
   conversationAttachment?: any;
+  /** Pagination query for loading more attachments */
+  conversationAttachmentsQuery?: {
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    fetchNextPage: () => Promise<unknown>;
+  };
 
   /** Callback to open "Nhật ký công việc" by parent message ID with optional target message */
   onOpenTaskLogByMessageId?: (
@@ -295,20 +300,19 @@ const BlobVideoThumbnail: React.FC<{
 }> = ({ fileId, alt, className }) => {
   const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
+  const getVideoUrl = useImageCacheStore((state) => state.getVideoUrl);
 
   React.useEffect(() => {
     if (!fileId) return;
 
     let isMounted = true;
-    let localUrl: string | null = null;
 
     const fetchThumbnail = async () => {
       setIsLoading(true);
       try {
-        const blob = await getVideoThumbnail(fileId, 320);
+        const url = await getVideoUrl(fileId, 320);
         if (isMounted) {
-          localUrl = URL.createObjectURL(blob);
-          setObjectUrl(localUrl);
+          setObjectUrl(url);
         }
       } catch {
         // silently fall back to icon
@@ -321,9 +325,9 @@ const BlobVideoThumbnail: React.FC<{
 
     return () => {
       isMounted = false;
-      if (localUrl) URL.revokeObjectURL(localUrl);
+      // Don't revoke - blob URL is managed by imageCacheStore
     };
-  }, [fileId]);
+  }, [fileId, getVideoUrl]);
 
   if (isLoading || !objectUrl) {
     return (
@@ -444,6 +448,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
   messages,
   messagesQuery, // Phase 2: For auto-loading older messages
   conversationAttachment,
+  conversationAttachmentsQuery,
   onOpenTaskLogByMessageId,
 }) => {
   React.useEffect(() => {}, [conversationAttachment]);
@@ -560,11 +565,22 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
     const media: Phase1AFileItem[] = [];
     const docs: Phase1AFileItem[] = [];
 
-    // Use conversationAttachment.items if available
-    const attachments =
-      conversationAttachment && Array.isArray(conversationAttachment.items)
-        ? conversationAttachment.items
-        : [];
+    // Use conversationAttachment pages if available (useInfiniteQuery format)
+    const attachments: any[] = [];
+    if (conversationAttachment && conversationAttachment.pages) {
+      // useInfiniteQuery format: { pages: [...], pageParams: [...] }
+      for (const page of conversationAttachment.pages) {
+        if (Array.isArray(page.items)) {
+          attachments.push(...page.items);
+        }
+      }
+    } else if (
+      conversationAttachment &&
+      Array.isArray(conversationAttachment.items)
+    ) {
+      // Legacy single-page format
+      attachments.push(...conversationAttachment.items);
+    }
 
     attachments.forEach((att: any, index: any) => {
       const fileName = att.fileName || "unknown";
@@ -855,7 +871,8 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         </div>
       )}
 
-      {allFiles.length > visible.length && (
+      {(allFiles.length > visible.length ||
+        conversationAttachmentsQuery?.hasNextPage) && (
         <button
           type="button"
           className="mt-2 w-full rounded-md bg-gray-100 py-1.5 text-center text-xs text-gray-700 hover:bg-gray-200"
@@ -878,7 +895,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       <SimpleModal
         open={showAll}
         onClose={handleCloseShowAll}
-        title="Tất cả file trong nhóm chat"
+        title="Tất cả ảnh và file trong nhóm chat"
         maxWidth="max-w-5xl"
         testId="all-files-modal"
       >
@@ -989,6 +1006,17 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         <div
           className="mt-3 max-h-[60vh] overflow-y-auto"
           data-testid="all-files-modal-list"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            // Load more when scrolled near bottom (200px threshold)
+            if (
+              el.scrollHeight - el.scrollTop - el.clientHeight < 200 &&
+              conversationAttachmentsQuery?.hasNextPage &&
+              !conversationAttachmentsQuery?.isFetchingNextPage
+            ) {
+              conversationAttachmentsQuery.fetchNextPage();
+            }
+          }}
         >
           {(() => {
             let source = allTab === "media" ? mediaFiles : docFiles;
@@ -1085,6 +1113,18 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
               </div>
             );
           })()}
+          {/* Loading indicator for infinite scroll */}
+          {conversationAttachmentsQuery?.isFetchingNextPage && (
+            <div
+              className="flex items-center justify-center py-4"
+              data-testid="all-files-loading-more"
+            >
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-emerald-600" />
+              <span className="ml-2 text-xs text-gray-500">
+                Đang tải thêm...
+              </span>
+            </div>
+          )}
         </div>
       </SimpleModal>
 

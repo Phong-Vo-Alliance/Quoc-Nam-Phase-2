@@ -40,7 +40,7 @@ import { useUpdateTask } from "@/hooks/mutations";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useGroupSync } from "@/hooks/useGroupSync";
 import { useTaskNotifications } from "@/hooks/useTaskNotifications"; // 🆕 Task SignalR notifications
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { getConversationAttachments } from "@/api/attachments.api";
 import { useQueryClient } from "@tanstack/react-query";
 import { tasksKeys } from "@/hooks/queries/useTasks";
@@ -296,15 +296,25 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   const selectedConversation = useConversationStore(
     (state) => state.selectedConversation,
   );
-  const { data: conversationAttachment } = useQuery({
+  const conversationAttachmentsQuery = useInfiniteQuery({
     queryKey: ["conversation-attachments", selectedConversation?.id],
-    queryFn: async () =>
+    queryFn: async ({ pageParam }) =>
       selectedConversation?.id
-        ? await getConversationAttachments(selectedConversation.id)
-        : Promise.resolve({ items: [], hasMore: false }),
+        ? await getConversationAttachments(
+            selectedConversation.id,
+            30,
+            pageParam,
+          )
+        : Promise.resolve({ items: [], hasMore: false, nextCursor: undefined }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextCursor : undefined,
     enabled: !!selectedConversation?.id,
-    staleTime: 1000 * 60,
+    staleTime: 1000 * 60 * 5, // 5 minutes - cache attachments; SignalR invalidates when new files arrive
+    gcTime: 1000 * 60 * 10, // 10 minutes garbage collection
+    refetchOnMount: false, // Don't refetch on modal reopen - SignalR handles new attachments
   });
+  const conversationAttachment = conversationAttachmentsQuery.data;
   useEffect(() => {
     if (selectedConversation) {
       onSelectChat(selectedConversation);
@@ -1010,6 +1020,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                     categoriesQuery.isLoading || messagesQuery.isLoading
                   }
                   conversationAttachment={conversationAttachment}
+                  conversationAttachmentsQuery={conversationAttachmentsQuery}
                   forceLeaderMine={forceLeaderMine}
                 />
               </div>
@@ -1352,6 +1363,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
               messagesQuery={messagesQuery}
               isLoading={categoriesQuery.isLoading || messagesQuery.isLoading}
               conversationAttachment={conversationAttachment}
+              conversationAttachmentsQuery={conversationAttachmentsQuery}
               forceLeaderMine={forceLeaderMine}
             />
           </div>
