@@ -680,6 +680,48 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
     return Array.from(new Set(allFileSenders));
   }, [mediaFiles, docFiles]);
 
+  /** Filtered counts for tab labels – reflects sender + date filters */
+  const { filteredMediaCount, filteredDocCount } = React.useMemo(() => {
+    const applyFilters = (source: Phase1AFileItem[]) => {
+      let result = source;
+      if (senderFilter !== "all") {
+        result = result.filter((f) => f.senderName === senderFilter);
+      }
+      if (datePreset !== "all" && datePreset !== "custom") {
+        const days = parseInt(datePreset, 10);
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+        result = result.filter((f) => {
+          if (!f.createdAt) return false;
+          return new Date(f.createdAt) >= cutoffDate;
+        });
+      } else if (datePreset === "custom" && (dateRange.from || dateRange.to)) {
+        result = result.filter((f) => {
+          if (!f.createdAt) return false;
+          const fileDate = new Date(f.createdAt);
+          if (dateRange.from && dateRange.to) {
+            const fromDate = new Date(dateRange.from);
+            const toDate = new Date(dateRange.to);
+            toDate.setHours(23, 59, 59, 999);
+            return fileDate >= fromDate && fileDate <= toDate;
+          } else if (dateRange.from) {
+            return fileDate >= new Date(dateRange.from);
+          } else if (dateRange.to) {
+            const toDate = new Date(dateRange.to);
+            toDate.setHours(23, 59, 59, 999);
+            return fileDate <= toDate;
+          }
+          return true;
+        });
+      }
+      return result.length;
+    };
+    return {
+      filteredMediaCount: applyFilters(mediaFiles),
+      filteredDocCount: applyFilters(docFiles),
+    };
+  }, [mediaFiles, docFiles, senderFilter, datePreset, dateRange]);
+
   const handleOpenPreview = (f: Phase1AFileItem) => {
     // If image, open ImagePreviewModal
     if (f.kind === "image") {
@@ -987,7 +1029,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
             onClick={() => setAllTab("media")}
             data-testid="all-files-modal-tab-media"
           >
-            Ảnh / Video ({mediaFiles.length})
+            Ảnh / Video ({filteredMediaCount})
           </button>
           <button
             type="button"
@@ -999,7 +1041,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
             onClick={() => setAllTab("docs")}
             data-testid="all-files-modal-tab-docs"
           >
-            Tài liệu ({docFiles.length})
+            Tài liệu ({filteredDocCount})
           </button>
         </div>
 

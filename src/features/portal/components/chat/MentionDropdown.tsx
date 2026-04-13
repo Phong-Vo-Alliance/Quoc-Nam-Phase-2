@@ -2,9 +2,14 @@
 // Shows list of users when "@" is typed in chat input
 
 import React, { useEffect, useRef, useState } from "react";
+import { Users } from "lucide-react";
 import { Avatar } from "@/features/portal/components/Avatar";
 import { cn } from "@/lib/utils";
 import type { ConversationMember } from "@/types/conversations";
+import { ALL_MENTION_USER_ID } from "./mentionConstants";
+
+/** Threshold above which the @all row shows a "+N" badge. */
+const ALL_MENTION_PLUS_THRESHOLD = 5;
 
 export interface MentionDropdownProps {
   /**
@@ -116,6 +121,14 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
         const isSelected = index === selectedIndex;
         const fullName = member.userInfo?.fullName || member.userName;
         const identifier = member.userInfo?.identifier || "";
+        const isAllMention = member.userId === ALL_MENTION_USER_ID;
+
+        // Parse member count from identifier for the @all row ("Thông báo cho N thành viên")
+        const allMemberCount = isAllMention
+          ? Number(identifier.match(/\d+/)?.[0] ?? 0)
+          : 0;
+        const showPlusBadge =
+          isAllMention && allMemberCount > ALL_MENTION_PLUS_THRESHOLD;
 
         return (
           <div
@@ -126,24 +139,46 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
               isSelected
                 ? "bg-brand-50 border-l-2 border-brand-500"
                 : "hover:bg-gray-50",
+              isAllMention && "border-b border-gray-100",
             )}
             onClick={() => onSelect(member)}
-            data-testid={`mention-item-${member.userId}`}
+            data-testid={
+              isAllMention ? "mention-item-all" : `mention-item-${member.userId}`
+            }
           >
-            {/* Avatar */}
-            <Avatar name={fullName} small={true} conversationType="DM" />
+            {/* Avatar (or Users icon for @all) */}
+            {isAllMention ? (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">
+                <Users size={16} />
+              </div>
+            ) : (
+              <Avatar name={fullName} small={true} conversationType="DM" />
+            )}
 
             {/* User info */}
             <div className="flex-1 min-w-0">
               {/* Full name */}
-              <div className="text-sm font-medium text-gray-900 truncate">
-                {highlightMatch(fullName, searchQuery)}
-              </div>
+              {isAllMention ? (
+                <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900 truncate">
+                  <span>@all</span>
+                  {showPlusBadge && (
+                    <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+                      +{allMemberCount - ALL_MENTION_PLUS_THRESHOLD}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm font-medium text-gray-900 truncate">
+                  {highlightMatch(fullName, searchQuery)}
+                </div>
+              )}
 
-              {/* Identifier (email or phone) */}
+              {/* Identifier (email/phone or member count subtitle) */}
               {identifier && (
                 <div className="text-xs text-gray-500 truncate">
-                  {highlightMatch(identifier, searchQuery)}
+                  {isAllMention
+                    ? identifier
+                    : highlightMatch(identifier, searchQuery)}
                 </div>
               )}
             </div>

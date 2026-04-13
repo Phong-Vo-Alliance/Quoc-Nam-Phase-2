@@ -18,6 +18,32 @@ import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 import type { ConversationMember } from "@/types/conversations";
 import type { MentionInputDto } from "@/types/messages";
 import { cn } from "@/lib/utils";
+import { ALL_MENTION_NAME, ALL_MENTION_USER_ID } from "./mentionConstants";
+
+// Re-export so existing callers importing from this module keep working.
+export { ALL_MENTION_NAME, ALL_MENTION_USER_ID };
+
+/** Feature flag — flip to `true` to re-enable the @all dropdown entry. */
+const MENTION_ALL_ENABLED = false;
+
+/** Build the virtual ConversationMember used to render the @all dropdown row. */
+function createAllMember(memberCount: number): ConversationMember {
+  return {
+    userId: ALL_MENTION_USER_ID,
+    userName: ALL_MENTION_NAME,
+    role: "",
+    joinedAt: "",
+    isMuted: false,
+    userInfo: {
+      id: ALL_MENTION_USER_ID,
+      userName: ALL_MENTION_NAME,
+      fullName: ALL_MENTION_NAME,
+      identifier: `Thông báo cho ${memberCount} thành viên`,
+      roles: "",
+      avatarUrl: null,
+    },
+  };
+}
 
 export interface MentionData {
   userId: string;
@@ -90,7 +116,6 @@ export const MentionInputInline = forwardRef<
   ) => {
     const [showMentionDropdown, setShowMentionDropdown] = useState(false);
     const [mentionSearchQuery, setMentionSearchQuery] = useState("");
-    const [mentionStartIndex, setMentionStartIndex] = useState(-1);
     const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
     const [mentions, setMentionsState] = useState<MentionData[]>([]);
 
@@ -230,26 +255,58 @@ export const MentionInputInline = forwardRef<
         .toLowerCase();
     }, []);
 
-    // Filter members based on search query and exclude current user
+    // Filter members based on search query, exclude current user and already-mentioned users.
+    // Prepends the virtual "@all" entry when it matches the query and hasn't been selected yet.
     const filteredMembers = React.useMemo(() => {
-      // Filter out current user first
-      const otherMembers = members.filter(
-        (member) => member.userId !== currentUser?.id,
+      const mentionedUserIds = new Set(mentions.map((m) => m.userId));
+
+      // Filter out current user and already-mentioned users
+      const availableMembers = members.filter(
+        (member) =>
+          member.userId !== currentUser?.id &&
+          !mentionedUserIds.has(member.userId),
       );
 
-      if (!mentionSearchQuery) return otherMembers;
+      let userMatches: ConversationMember[];
+      if (!mentionSearchQuery) {
+        userMatches = availableMembers;
+      } else {
+        const query = removeDiacritics(mentionSearchQuery);
+        userMatches = availableMembers.filter((member) => {
+          const fullName = removeDiacritics(
+            member.userInfo?.fullName || member.userName,
+          );
+          const identifier = removeDiacritics(
+            member.userInfo?.identifier || "",
+          );
+          return fullName.includes(query) || identifier.includes(query);
+        });
+      }
 
-      const query = removeDiacritics(mentionSearchQuery);
-      return otherMembers.filter((member) => {
-        const fullName = removeDiacritics(
-          member.userInfo?.fullName || member.userName,
-        );
-        const identifier = removeDiacritics(
-          member.userInfo?.identifier || "",
-        );
-        return fullName.includes(query) || identifier.includes(query);
-      });
-    }, [members, mentionSearchQuery, currentUser?.id, removeDiacritics]);
+      // Prepend the virtual "@all" entry when enabled and the search query
+      // matches. The feature is currently gated behind MENTION_ALL_ENABLED.
+      if (MENTION_ALL_ENABLED) {
+        const targetCount = members.filter(
+          (member) => member.userId !== currentUser?.id,
+        ).length;
+        const allAlreadyMentioned = mentionedUserIds.has(ALL_MENTION_USER_ID);
+        const queryMatchesAll =
+          !mentionSearchQuery ||
+          ALL_MENTION_NAME.startsWith(removeDiacritics(mentionSearchQuery));
+
+        if (!allAlreadyMentioned && targetCount > 0 && queryMatchesAll) {
+          return [createAllMember(targetCount), ...userMatches];
+        }
+      }
+
+      return userMatches;
+    }, [
+      members,
+      mentionSearchQuery,
+      currentUser?.id,
+      mentions,
+      removeDiacritics,
+    ]);
 
     // Filter shortcuts based on search query (case-insensitive, contains matching)
     const filteredShortcuts = React.useMemo(() => {
@@ -261,13 +318,21 @@ export const MentionInputInline = forwardRef<
       );
     }, [shortcuts, shortcutSearchQuery]);
 
-    // Extract text content from editor (normalize \r\n to \n)
+    // Zero-width characters commonly inserted by contentEditable around
+    // inline-block elements (mention spans). Must be stripped before computing
+    // character indices, otherwise startIndex will be off by N invisible chars.
+    const ZERO_WIDTH_RE = /[\u200B\u200C\u200D\uFEFF]/g;
+
+    // Extract text content from editor.
+    // Strips zero-width chars + normalizes line endings + NFC
+    // so the string matches what the .NET backend stores.
     const getTextContent = useCallback(() => {
       if (!editorRef.current) return "";
-      // Normalize Windows line endings to Unix
       return (editorRef.current.innerText || "")
         .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n");
+        .replace(/\r/g, "\n")
+        .replace(ZERO_WIDTH_RE, "")
+        .normalize("NFC");
     }, []);
 
     // Get cursor position in text (accounting for <br> as newlines, normalized to \n)
@@ -410,7 +475,6 @@ export const MentionInputInline = forwardRef<
               setDropdownPosition(coords);
               updateFixedPosition(coords);
               setShowMentionDropdown(true);
-              setMentionStartIndex(lastAtIndex);
               setSelectedMentionIndex(0);
               setShowShortcutDropdown(false);
             }
@@ -441,7 +505,139 @@ export const MentionInputInline = forwardRef<
       // (e.g. user deleted the "@" or "/" trigger character)
       setShowMentionDropdown(false);
       setShowShortcutDropdown(false);
-    }, [getTextContent, getCursorPosition, getCaretCoordinates, showMentionDropdown, updateFixedPosition]);
+    }, [
+      getTextContent,
+      getCursorPosition,
+      getCaretCoordinates,
+      showMentionDropdown,
+      updateFixedPosition,
+    ]);
+
+    // Build API mentions by walking the DOM directly.
+    // This avoids indexOf on innerText which is unreliable because
+    // contentEditable inserts invisible zero-width chars around inline-block
+    // mention spans, causing startIndex to be off.
+    //
+    // The virtual "@all" mention is expanded into one MentionInputDto per real
+    // member (excluding the current user and anyone already tagged explicitly).
+    const buildMentionsForApi = (
+      _text: string, // kept for call-site compat; positions come from DOM walk
+      currentMentions: MentionData[],
+    ): MentionInputDto[] => {
+      if (!editorRef.current) return [];
+
+      // Walk DOM to compute the exact char offset of each mention span,
+      // stripping zero-width chars and normalizing to NFC — identical to
+      // the pipeline in getTextContent() so positions match the sent content.
+      const mentionPositions = new Map<
+        string,
+        { offset: number; length: number; text: string }
+      >();
+      let charOffset = 0;
+
+      const walkNode = (node: Node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const clean = (node.textContent || "")
+            .replace(ZERO_WIDTH_RE, "")
+            .normalize("NFC");
+          charOffset += clean.length;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const elem = node as HTMLElement;
+          if (elem.hasAttribute("data-mention-id")) {
+            const mentionId = elem.getAttribute("data-mention-id")!;
+            const mentionText = (elem.textContent || "")
+              .replace(ZERO_WIDTH_RE, "")
+              .normalize("NFC");
+            mentionPositions.set(mentionId, {
+              offset: charOffset,
+              length: mentionText.length,
+              text: mentionText,
+            });
+            charOffset += mentionText.length;
+          } else if (elem.tagName === "BR") {
+            charOffset += 1; // <br> → \n
+          } else {
+            elem.childNodes.forEach(walkNode);
+          }
+        }
+      };
+
+      editorRef.current.childNodes.forEach(walkNode);
+
+      const result: MentionInputDto[] = [];
+      const emittedUserIds = new Set<string>();
+
+      // Pass 1: emit explicit user mentions matched by their unique DOM id
+      for (const mention of currentMentions) {
+        if (mention.userId === ALL_MENTION_USER_ID) continue;
+
+        const pos = mentionPositions.get(mention.id);
+        if (!pos) continue;
+
+        result.push({
+          userId: mention.userId,
+          startIndex: pos.offset,
+          length: pos.length,
+          mentionText: pos.text,
+        });
+        emittedUserIds.add(mention.userId);
+      }
+
+      // Pass 2: expand @all into individual per-user entries
+      const allMention = currentMentions.find(
+        (m) => m.userId === ALL_MENTION_USER_ID,
+      );
+      if (allMention) {
+        const allPos = mentionPositions.get(allMention.id);
+        if (allPos) {
+          for (const member of members) {
+            if (member.userId === currentUser?.id) continue;
+            if (emittedUserIds.has(member.userId)) continue;
+
+            result.push({
+              userId: member.userId,
+              startIndex: allPos.offset,
+              length: allPos.length,
+              mentionText: allPos.text,
+            });
+            emittedUserIds.add(member.userId);
+          }
+        }
+      }
+
+      return result;
+    };
+
+    // Sync mentions state with DOM: drop any mention whose span was removed
+    // by the user (Delete key, selection delete, cut, etc.). Returns true if
+    // mentions state changed.
+    const syncMentionsWithDom = useCallback((): boolean => {
+      if (!editorRef.current) return false;
+      if (mentionsRef.current.length === 0) return false;
+
+      const liveIds = new Set<string>();
+      editorRef.current
+        .querySelectorAll<HTMLElement>("[data-mention-id]")
+        .forEach((el) => {
+          const id = el.getAttribute("data-mention-id");
+          if (id) liveIds.add(id);
+        });
+
+      const prev = mentionsRef.current;
+      const next = prev.filter((m) => liveIds.has(m.id));
+      if (next.length === prev.length) return false;
+
+      setMentions(next);
+
+      if (onMentionsChange) {
+        const newText = (editorRef.current.innerText || "")
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n");
+        onMentionsChange(buildMentionsForApi(newText, next));
+      }
+
+      return true;
+    }, [onMentionsChange, setMentions]);
 
     // Handle input changes
     const handleInput = useCallback(() => {
@@ -450,6 +646,10 @@ export const MentionInputInline = forwardRef<
         updateDropdownSearchQuery();
         return;
       }
+
+      // Reconcile mention state with DOM (in case a mention span was removed
+      // by something other than the Backspace handler).
+      syncMentionsWithDom();
 
       const text = getTextContent();
 
@@ -614,7 +814,6 @@ export const MentionInputInline = forwardRef<
 
           setShowMentionDropdown(true);
           setMentionSearchQuery(atTrigger.query);
-          setMentionStartIndex(atTrigger.index);
           setSelectedMentionIndex(0);
           setShowShortcutDropdown(false);
           onChange(replacedText);
@@ -659,7 +858,6 @@ export const MentionInputInline = forwardRef<
 
         setShowMentionDropdown(true);
         setMentionSearchQuery(atFallback.query);
-        setMentionStartIndex(atFallback.index);
         setSelectedMentionIndex(0);
         setShowShortcutDropdown(false);
         onChange(replacedText);
@@ -678,12 +876,13 @@ export const MentionInputInline = forwardRef<
       openShortcutDropdown,
       replaceQuickMessage,
       updateDropdownSearchQuery,
+      syncMentionsWithDom,
     ]);
 
     // Handle mention selection
     const handleMentionSelect = useCallback(
       (member: ConversationMember) => {
-        if (mentionStartIndex === -1 || !editorRef.current) return;
+        if (!editorRef.current) return;
 
         const fullName = member.userInfo?.fullName || member.userName;
         const mentionText = `@${fullName}`; // Include @ in display text for styling
@@ -693,84 +892,135 @@ export const MentionInputInline = forwardRef<
 
         const mentionId = `mention-${Date.now()}-${Math.random()}`;
 
-        // 🔧 FIX: Find @query by searching text nodes directly (no charOffset needed)
-        const queryToFind = `@${mentionSearchQuery}`;
-        let found = false;
+        // 🔧 FIX: Locate the active @trigger by reading the DOM directly from the
+        // current cursor position. This avoids relying on `mentionSearchQuery`
+        // state, which may be stale during Vietnamese IME composition.
+        let targetTextNode: Text | null = null;
+        let atOffset = -1;
+        let endOffset = -1;
 
-        // Walk through text nodes to find @query
-        // Use filter to SKIP text nodes inside existing mention spans
-        const walker = document.createTreeWalker(
-          editorRef.current,
-          NodeFilter.SHOW_TEXT,
-          {
-            acceptNode: (node) => {
-              // Skip text nodes that are inside mention spans
-              let parent = node.parentElement;
-              while (parent && parent !== editorRef.current) {
-                if (parent.hasAttribute("data-mention-id")) {
-                  return NodeFilter.FILTER_REJECT;
-                }
-                parent = parent.parentElement;
+        if (selection.rangeCount > 0) {
+          const currentRange = selection.getRangeAt(0);
+          let node: Node | null = currentRange.startContainer;
+          let offset = currentRange.startOffset;
+
+          // If cursor sits at element boundary (e.g. right after a mention span),
+          // walk back to the previous text node to find the @trigger.
+          if (node && node.nodeType === Node.ELEMENT_NODE) {
+            const childNodes = (node as HTMLElement).childNodes;
+            if (offset > 0 && childNodes[offset - 1]) {
+              const prev = childNodes[offset - 1];
+              if (prev.nodeType === Node.TEXT_NODE) {
+                node = prev;
+                offset = (prev.textContent || "").length;
               }
-              return NodeFilter.FILTER_ACCEPT;
-            },
-          },
-        );
+            }
+          }
 
-        while (walker.nextNode()) {
-          const textNode = walker.currentNode as Text;
-          const nodeText = textNode.textContent || "";
-
-          // Find @query in this text node using simple string search
-          const localIndex = nodeText.lastIndexOf(queryToFind);
-          if (localIndex !== -1) {
-            // Found it! Create range and replace
-            const range = document.createRange();
-            range.setStart(textNode, localIndex);
-            range.setEnd(textNode, localIndex + queryToFind.length);
-            range.deleteContents();
-
-            // Create mention span
-            const mentionSpan = document.createElement("span");
-            mentionSpan.contentEditable = "false";
-            mentionSpan.className =
-              "inline-block px-1.5 py-0.5 mx-0.5 bg-brand-100 text-brand-700 rounded font-medium cursor-default select-none";
-            mentionSpan.setAttribute("data-mention-id", mentionId);
-            mentionSpan.setAttribute("data-user-id", member.userId);
-            mentionSpan.textContent = mentionText;
-
-            // Insert mention span
-            range.insertNode(mentionSpan);
-
-            // Add space after mention
-            const spaceNode = document.createTextNode(" ");
-            if (mentionSpan.nextSibling) {
-              mentionSpan.parentNode?.insertBefore(
-                spaceNode,
-                mentionSpan.nextSibling,
-              );
-            } else {
-              mentionSpan.parentNode?.appendChild(spaceNode);
+          if (node && node.nodeType === Node.TEXT_NODE) {
+            // Make sure we are not inside a mention span
+            let insideMention = false;
+            let parent = (node as Text).parentElement;
+            while (parent && parent !== editorRef.current) {
+              if (parent.hasAttribute("data-mention-id")) {
+                insideMention = true;
+                break;
+              }
+              parent = parent.parentElement;
             }
 
-            // Set cursor after space
-            const newRange = document.createRange();
-            newRange.setStartAfter(spaceNode);
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-
-            found = true;
-            break;
+            if (!insideMention) {
+              const textNode = node as Text;
+              const textBefore = (textNode.textContent || "").slice(0, offset);
+              const lastAt = textBefore.lastIndexOf("@");
+              if (lastAt !== -1) {
+                const charBefore = textBefore[lastAt - 1];
+                const isValidAt =
+                  lastAt === 0 ||
+                  charBefore === undefined ||
+                  /[\s\n\r\t]/.test(charBefore);
+                if (isValidAt) {
+                  targetTextNode = textNode;
+                  atOffset = lastAt;
+                  endOffset = offset;
+                }
+              }
+            }
           }
         }
 
-        if (!found) {
-          // Fallback: couldn't find @query, just return
+        // Fallback: walk text nodes looking for `@<searchQuery>` (legacy path)
+        if (!targetTextNode) {
+          const queryToFind = `@${mentionSearchQuery}`;
+          const walker = document.createTreeWalker(
+            editorRef.current,
+            NodeFilter.SHOW_TEXT,
+            {
+              acceptNode: (node) => {
+                let parent = node.parentElement;
+                while (parent && parent !== editorRef.current) {
+                  if (parent.hasAttribute("data-mention-id")) {
+                    return NodeFilter.FILTER_REJECT;
+                  }
+                  parent = parent.parentElement;
+                }
+                return NodeFilter.FILTER_ACCEPT;
+              },
+            },
+          );
+
+          while (walker.nextNode()) {
+            const textNode = walker.currentNode as Text;
+            const nodeText = textNode.textContent || "";
+            const localIndex = nodeText.lastIndexOf(queryToFind);
+            if (localIndex !== -1) {
+              targetTextNode = textNode;
+              atOffset = localIndex;
+              endOffset = localIndex + queryToFind.length;
+              break;
+            }
+          }
+        }
+
+        if (!targetTextNode || atOffset === -1) {
           console.warn("Could not find @query to replace");
           setShowMentionDropdown(false);
           return;
         }
+
+        // Replace the @query range with the mention span
+        const range = document.createRange();
+        range.setStart(targetTextNode, atOffset);
+        range.setEnd(targetTextNode, endOffset);
+        range.deleteContents();
+
+        const mentionSpan = document.createElement("span");
+        mentionSpan.contentEditable = "false";
+        mentionSpan.className =
+          "inline-block px-1.5 py-0.5 mx-0.5 bg-brand-100 text-brand-700 rounded font-medium cursor-default select-none";
+        mentionSpan.setAttribute("data-mention-id", mentionId);
+        mentionSpan.setAttribute("data-user-id", member.userId);
+        mentionSpan.textContent = mentionText;
+
+        range.insertNode(mentionSpan);
+
+        // Add space after mention
+        const spaceNode = document.createTextNode(" ");
+        if (mentionSpan.nextSibling) {
+          mentionSpan.parentNode?.insertBefore(
+            spaceNode,
+            mentionSpan.nextSibling,
+          );
+        } else {
+          mentionSpan.parentNode?.appendChild(spaceNode);
+        }
+
+        // Set cursor after space
+        const newRange = document.createRange();
+        newRange.setStartAfter(spaceNode);
+        newRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
 
         // Create mention data
         const newMention: MentionData = {
@@ -785,7 +1035,6 @@ export const MentionInputInline = forwardRef<
         // Hide dropdown immediately
         setShowMentionDropdown(false);
         setMentionSearchQuery("");
-        setMentionStartIndex(-1);
 
         // 🔧 FIX: Use setTimeout to call onChange after DOM manipulation is complete
         setTimeout(() => {
@@ -808,11 +1057,11 @@ export const MentionInputInline = forwardRef<
         }, 10);
       },
       [
-        mentionStartIndex,
         mentionSearchQuery,
         getTextContent,
         onChange,
         onMentionsChange,
+        setMentions,
       ],
     );
 
@@ -933,33 +1182,14 @@ export const MentionInputInline = forwardRef<
       [shortcutStartIndex, shortcutSearchQuery, getTextContent, onChange],
     );
 
-    // Build API mentions from text and mention data
-    const buildMentionsForApi = (
-      text: string,
-      currentMentions: MentionData[],
-    ): MentionInputDto[] => {
-      const mentions = currentMentions
-        .map((mention) => {
-          const mentionText = `@${mention.displayName}`;
-          const startIndex = text.indexOf(mentionText);
-
-          if (startIndex === -1) return null;
-
-          return {
-            userId: mention.userId,
-            startIndex,
-            length: mentionText.length,
-            mentionText: mentionText as string | null,
-          };
-        })
-        .filter((m) => m !== null) as MentionInputDto[];
-
-      return mentions;
-    };
-
     // Handle keyboard events
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
+        // Ignore keys that are part of an ongoing IME composition.
+        // Without this, pressing Enter to finalize Vietnamese composition would
+        // accidentally send the message.
+        const isComposing = e.nativeEvent.isComposing || isComposingRef.current;
+
         // Handle shortcut dropdown navigation
         if (showShortcutDropdown) {
           if (e.key === "ArrowDown") {
@@ -974,12 +1204,13 @@ export const MentionInputInline = forwardRef<
             setSelectedShortcutIndex((prev) =>
               prev > 0 ? prev - 1 : filteredShortcuts.length - 1,
             );
-          } else if (
-            (e.key === "Enter" || e.key === "Tab") &&
-            filteredShortcuts.length > 0
-          ) {
+          } else if (e.key === "Enter" || e.key === "Tab") {
+            // Always consume Enter/Tab while the shortcut dropdown is open
+            // so we never accidentally send a message mid-selection.
             e.preventDefault();
-            handleShortcutSelect(filteredShortcuts[selectedShortcutIndex]);
+            if (!isComposing && filteredShortcuts.length > 0) {
+              handleShortcutSelect(filteredShortcuts[selectedShortcutIndex]);
+            }
           } else if (e.key === "Escape") {
             e.preventDefault();
             setShowShortcutDropdown(false);
@@ -1001,19 +1232,23 @@ export const MentionInputInline = forwardRef<
             setSelectedMentionIndex((prev) =>
               prev > 0 ? prev - 1 : filteredMembers.length - 1,
             );
-          } else if (
-            (e.key === "Enter" || e.key === "Tab") &&
-            filteredMembers.length > 0
-          ) {
-            // 🔧 ADD Tab support
+          } else if (e.key === "Enter" || e.key === "Tab") {
+            // Always consume Enter/Tab while the mention dropdown is open so
+            // we never fall through to the send handler — even when there are
+            // no filter matches or IME composition is still active.
             e.preventDefault();
-            handleMentionSelect(filteredMembers[selectedMentionIndex]);
+            if (!isComposing && filteredMembers.length > 0) {
+              handleMentionSelect(filteredMembers[selectedMentionIndex]);
+            }
           } else if (e.key === "Escape") {
             e.preventDefault();
             setShowMentionDropdown(false);
           }
           return;
         }
+
+        // Never send while IME composition is active
+        if (isComposing) return;
 
         // Handle send on Enter (without Shift)
         if (e.key === "Enter" && !e.shiftKey) {

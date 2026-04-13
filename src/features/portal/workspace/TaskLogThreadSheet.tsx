@@ -889,6 +889,28 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     if (!messageContent && selectedFiles.length === 0) return;
     if (!parentMessageId || !task?.conversationId) return;
 
+    // 🔧 FIX: Re-derive mention positions in the trimmed content.
+    // Original startIndex was computed on the raw contentEditable innerText
+    // which may include leading whitespace or zero-width chars that trim()
+    // removes, so we find each mentionText directly in messageContent.
+    const adjustedMentions = mentions?.length
+      ? (() => {
+          const nfcContent = messageContent.normalize("NFC");
+          const sorted = [...mentions].sort(
+            (a, b) => a.startIndex - b.startIndex,
+          );
+          let searchFrom = 0;
+          return sorted.map((m) => {
+            const mText = (m.mentionText ?? "").normalize("NFC");
+            if (!mText) return m;
+            const idx = nfcContent.indexOf(mText, searchFrom);
+            if (idx === -1) return m;
+            searchFrom = idx + mText.length;
+            return { ...m, startIndex: idx };
+          });
+        })()
+      : mentions;
+
     setSending(true);
     setIsUploading(selectedFiles.length > 0);
     try {
@@ -939,20 +961,41 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
       }
 
       // Send message
-      await sendMessage({
+      const sentMessage = await sendMessage({
         conversationId: task.conversationId,
         content: messageContent,
         parentMessageId,
-        mentions: mentions || null,
+        mentions: adjustedMentions || null,
         attachments: attachments.length > 0 ? attachments : undefined,
         quoteMessageId: threadReplyTarget?.id, // Include quoted message if replying
       });
 
+      // ✅ FIX: Optimistic update - immediately append sent message to thread
+      // Backend may not send ThreadUpdated event back to the sender,
+      // so we add the message to local state right away for instant feedback.
+      if (sentMessage) {
+        flushSync(() => {
+          setThreadData((prev) => {
+            if (!prev) return prev;
+            const replies = prev.replies ?? [];
+            // Avoid duplicate if SignalR event arrives before this update
+            if (replies.some((r) => r.id === sentMessage.id)) return prev;
+            return {
+              ...prev,
+              replies: [...replies, sentMessage],
+            };
+          });
+        });
+
+        // Scroll to bottom after adding the new message
+        requestAnimationFrame(() => {
+          bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        });
+      }
+
       setInputValue("");
       clearFiles();
       setThreadReplyTarget(null); // Clear reply target after sending
-
-      // The ThreadUpdated event will trigger a refetch
     } catch (err) {
       console.error("Failed to send thread message:", err);
       toast.error("Không thể gửi tin nhắn");

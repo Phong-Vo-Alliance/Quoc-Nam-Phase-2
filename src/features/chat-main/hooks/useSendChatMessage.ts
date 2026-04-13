@@ -132,6 +132,31 @@ export function useSendChatMessage({
       const messageContent = content.trim();
       if (!messageContent && selectedFiles.length === 0) return;
 
+      // 🔧 FIX: Re-derive mention positions directly in the trimmed content.
+      // Original startIndex may be off due to leading whitespace removal,
+      // zero-width chars, or Unicode normalization mismatches between
+      // contentEditable innerText and the cleaned/trimmed text we actually send.
+      // We find each mentionText sequentially in the trimmed string so
+      // positions are always correct relative to what the API receives.
+      const adjustedMentions = mentions?.length
+        ? (() => {
+            const sorted = [...mentions].sort(
+              (a, b) => a.startIndex - b.startIndex,
+            );
+            let searchFrom = 0;
+            return sorted.map((m) => {
+              const mText = (m.mentionText ?? "").normalize("NFC");
+              if (!mText) return m;
+              const idx = messageContent
+                .normalize("NFC")
+                .indexOf(mText, searchFrom);
+              if (idx === -1) return m;
+              searchFrom = idx + mText.length;
+              return { ...m, startIndex: idx };
+            });
+          })()
+        : mentions;
+
       stopTyping();
       setIsUploading(true);
 
@@ -141,7 +166,7 @@ export function useSendChatMessage({
           const requestPayload = {
             conversationId,
             content: messageContent,
-            mentions: mentions || null,
+            mentions: adjustedMentions || null,
             quoteMessageId: replyTarget?.id || null,
           };
 
@@ -181,7 +206,7 @@ export function useSendChatMessage({
           await sendMessageMutation.mutateAsync({
             conversationId,
             content: messageContent || "",
-            mentions: mentions || null,
+            mentions: adjustedMentions || null,
             attachments: [attachment],
             quoteMessageId: replyTarget?.id || null,
           });
@@ -210,7 +235,7 @@ export function useSendChatMessage({
           await sendMessageMutation.mutateAsync({
             conversationId,
             content: messageContent || "",
-            mentions: mentions || null,
+            mentions: adjustedMentions || null,
             attachments,
             quoteMessageId: replyTarget?.id || null,
           });

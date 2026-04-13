@@ -53,6 +53,10 @@ export function parseMentions(
     return [{ type: "text", content }];
   }
 
+  // 🔧 FIX: Normalize content to NFC so indices from the API (which stores
+  // NFC text) align correctly with the rendered string.
+  const nfcContent = content.normalize("NFC");
+
   const mentionList = mentions as MentionType[];
 
   // Sort mentions by startIndex to process them in order
@@ -64,19 +68,53 @@ export function parseMentions(
   let currentIndex = 0;
 
   sortedMentions.forEach((mention) => {
+    let mentionStartIndex = mention.startIndex;
+    let mentionLength = mention.length;
+
+    // 🔧 FIX: If the slice at the recorded position doesn't match mentionText,
+    // try to find the actual position in the content string. This handles
+    // cases where indices are slightly off due to normalization mismatches
+    // between client/server.
+    if (mention.mentionText) {
+      const nfcMentionText = mention.mentionText.normalize("NFC");
+      const expectedSlice = nfcContent.slice(
+        mentionStartIndex,
+        mentionStartIndex + mentionLength,
+      );
+      if (expectedSlice !== nfcMentionText) {
+        const correctedIndex = nfcContent.indexOf(
+          nfcMentionText,
+          Math.max(0, currentIndex),
+        );
+        if (correctedIndex !== -1) {
+          mentionStartIndex = correctedIndex;
+          mentionLength = nfcMentionText.length;
+        }
+      }
+    }
+
+    const mentionEndIndex = mentionStartIndex + mentionLength;
+
+    // Skip mentions whose range has already been emitted (or is behind the
+    // cursor). This happens for "@all", which expands into many MentionInputDto
+    // entries all pointing at the same "@all" substring — we only want to
+    // highlight it once.
+    if (mentionEndIndex <= currentIndex) {
+      return;
+    }
+
     // Add text segment before mention (if any)
-    if (mention.startIndex > currentIndex) {
+    if (mentionStartIndex > currentIndex) {
       segments.push({
         type: "text",
-        content: content.slice(currentIndex, mention.startIndex),
+        content: nfcContent.slice(currentIndex, mentionStartIndex),
       });
     }
 
     // Add mention segment
-    const mentionEndIndex = mention.startIndex + mention.length;
     segments.push({
       type: "mention",
-      content: content.slice(mention.startIndex, mentionEndIndex),
+      content: nfcContent.slice(mentionStartIndex, mentionEndIndex),
       mentionData: mention,
     });
 
@@ -84,10 +122,10 @@ export function parseMentions(
   });
 
   // Add remaining text after last mention (if any)
-  if (currentIndex < content.length) {
+  if (currentIndex < nfcContent.length) {
     segments.push({
       type: "text",
-      content: content.slice(currentIndex),
+      content: nfcContent.slice(currentIndex),
     });
   }
 
