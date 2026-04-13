@@ -311,32 +311,39 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     }
   }, [open, confirmedInfo, currentUser?.id]);
 
-  // Clear conversation if it's not in the new conversations list when category changes
+  // Auto-select first conversation if current selection is invalid or empty
   React.useEffect(() => {
-    if (selectedConversationId && conversations.length > 0) {
-      const conversationExists = conversations.some(
-        (c) => c.id === selectedConversationId,
-      );
-      if (!conversationExists) {
-        setSelectedConversationId("");
-        setSelectedAssigneeId("");
-      }
-    }
-  }, [conversations, selectedConversationId]);
+    if (conversationsLoading) return;
+    if (conversations.length === 0) return;
 
-  // Clear assignee if it's not in the new members list when conversation changes
+    const currentExists =
+      !!selectedConversationId &&
+      conversations.some((c) => c.id === selectedConversationId);
+
+    if (!currentExists) {
+      setSelectedConversationId(conversations[0].id);
+      setSelectedAssigneeId("");
+    }
+  }, [conversations, selectedConversationId, conversationsLoading]);
+
+  // Auto-select assignee: prefer self if in list, otherwise first member
   React.useEffect(() => {
     if (membersLoading) return;
+    if (filteredMembers.length === 0) return;
 
-    if (selectedAssigneeId && filteredMembers.length > 0) {
-      const assigneeExists = filteredMembers.some(
-        (m) => m.userId === selectedAssigneeId,
-      );
-      if (!assigneeExists) {
-        setSelectedAssigneeId("");
-      }
+    const selfInList = !!currentUser?.id
+      && filteredMembers.some((m) => m.userId === currentUser.id);
+    const currentInList = selectedAssigneeId
+      && filteredMembers.some((m) => m.userId === selectedAssigneeId);
+
+    if (currentInList) return;
+
+    if (selfInList) {
+      setSelectedAssigneeId(currentUser!.id);
+    } else {
+      setSelectedAssigneeId(filteredMembers[0].userId);
     }
-  }, [filteredMembers, selectedAssigneeId, membersLoading]);
+  }, [filteredMembers, selectedAssigneeId, membersLoading, currentUser?.id]);
 
   // Reset checklist template when conversation changes
   React.useEffect(() => {
@@ -436,10 +443,27 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     createTaskMutation.isPending ||
     linkTaskMutation.isPending;
 
+  const hasNoConversations =
+    !!selectedCategoryId && !conversationsLoading && conversations.length === 0;
+  const needsChecklistSelection =
+    !!selectedConversationId &&
+    !checklistTemplatesLoading &&
+    checklistTemplates.length > 0 &&
+    !selectedChecklistTemplateId;
+
+  const isLoadingLists =
+    categoriesLoading ||
+    conversationsLoading ||
+    membersLoading ||
+    checklistTemplatesLoading;
+
   const isSubmitDisabled =
     !selectedCategoryId ||
     !selectedConversationId ||
     !selectedAssigneeId ||
+    hasNoConversations ||
+    needsChecklistSelection ||
+    isLoadingLists ||
     isSubmitting;
 
   return (
@@ -473,7 +497,12 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
             </Label>
             <Select
               value={selectedCategoryId}
-              onValueChange={setSelectedCategoryId}
+              onValueChange={(value) => {
+                setSelectedCategoryId(value);
+                setSelectedConversationId("");
+                setSelectedAssigneeId("");
+                setSelectedChecklistTemplateId("");
+              }}
               disabled={categoriesLoading || isSubmitting}
             >
               <SelectTrigger className="mt-1">

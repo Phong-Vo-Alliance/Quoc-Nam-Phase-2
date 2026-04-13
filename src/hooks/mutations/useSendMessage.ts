@@ -84,7 +84,7 @@ export function useSendMessage({
     ChatMessage,
     Error,
     SendChatMessageRequest,
-    { tempMessageId: string }
+    { tempMessageId: string; tempSentAt: number }
   >({
     mutationFn: async (data) => {
       // Start timeout and get AbortSignal
@@ -184,7 +184,10 @@ export function useSendMessage({
         };
       });
 
-      return { tempMessageId: tempMessage.id };
+      return {
+        tempMessageId: tempMessage.id,
+        tempSentAt: new Date(tempMessage.sentAt).getTime(),
+      };
     },
 
     onError: (error, variables, context) => {
@@ -212,15 +215,21 @@ export function useSendMessage({
           if (!old) return old;
 
           // Check if a real (non-temp) message with same content already exists in cache
-          // This happens when SignalR delivers the real message before onError fires
+          // This happens when SignalR delivers the real message before onError fires.
+          // IMPORTANT: scope to the send window (sentAt >= temp's sentAt, with small
+          // clock-skew tolerance). Without this, any earlier message from the current
+          // user with the same content (e.g. "ok", "thanks") would falsely match and
+          // cause the failed temp to be silently removed — hiding the retry button.
+          const raceWindowStart = context.tempSentAt - 2000;
           const realMessageExists = old.pages.some((page) =>
-            page.items.some(
-              (msg) =>
-                !msg.id.startsWith("temp-") &&
-                msg.senderId === (currentUser?.id || "") &&
-                msg.content === (variables.content || null) &&
-                msg.conversationId === conversationId,
-            ),
+            page.items.some((msg) => {
+              if (msg.id.startsWith("temp-")) return false;
+              if (msg.senderId !== (currentUser?.id || "")) return false;
+              if (msg.content !== (variables.content || null)) return false;
+              if (msg.conversationId !== conversationId) return false;
+              const msgTime = new Date(msg.sentAt).getTime();
+              return msgTime >= raceWindowStart;
+            }),
           );
 
           if (realMessageExists) {
