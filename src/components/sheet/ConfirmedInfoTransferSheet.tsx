@@ -445,6 +445,11 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
 
   const hasNoConversations =
     !!selectedCategoryId && !conversationsLoading && conversations.length === 0;
+  const hasNoAssignableMembers =
+    !!selectedConversationId &&
+    !membersLoading &&
+    !membersError &&
+    filteredMembers.length === 0;
   const needsChecklistSelection =
     !!selectedConversationId &&
     !checklistTemplatesLoading &&
@@ -462,6 +467,8 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     !selectedConversationId ||
     !selectedAssigneeId ||
     hasNoConversations ||
+    hasNoAssignableMembers ||
+    !!membersError ||
     needsChecklistSelection ||
     isLoadingLists ||
     isSubmitting;
@@ -547,7 +554,10 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
               ) : (
                 <Select
                   value={selectedConversationId}
-                  onValueChange={setSelectedConversationId}
+                  onValueChange={(value) => {
+                    setSelectedConversationId(value);
+                    setSelectedAssigneeId("");
+                  }}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger className="mt-1">
