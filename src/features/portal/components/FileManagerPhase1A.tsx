@@ -974,8 +974,9 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         </div>
       )}
 
-      {(allFiles.length > visible.length ||
-        conversationAttachmentsQuery?.hasNextPage) && (
+      {allFiles.length > 0 &&
+        (allFiles.length > visible.length ||
+          conversationAttachmentsQuery?.hasNextPage) && (
         <button
           type="button"
           className="mt-2 w-full rounded-md bg-gray-100 py-1.5 text-center text-xs text-gray-700 hover:bg-gray-200"
