@@ -7,6 +7,7 @@ import {
   FileType2,
   MessageCircle,
   X,
+  Inbox,
 } from "lucide-react";
 // import { mockMessagesByWorkType } from "@/data/mockMessages";
 import { useQueryClient } from "@tanstack/react-query";
@@ -400,7 +401,7 @@ const SimpleModal: React.FC<{
 
       {/* Modal Content */}
       <div
-        className={`relative z-10 w-full ${maxWidth} max-h-[90vh] bg-white rounded-lg shadow-lg p-6 flex flex-col animate-in zoom-in-95`}
+        className={`relative z-10 w-full ${maxWidth} h-[90vh] bg-white rounded-lg shadow-lg p-6 flex flex-col animate-in zoom-in-95`}
         onContextMenu={(e) => e.preventDefault()}
         data-testid={testId ? `${testId}-content` : undefined}
       >
@@ -428,7 +429,7 @@ const SimpleModal: React.FC<{
 
         {/* Content */}
         <div
-          className="flex-1 overflow-y-auto mt-4"
+          className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col"
           data-testid={testId ? `${testId}-body` : undefined}
         >
           {children}
@@ -999,7 +1000,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       <SimpleModal
         open={showAll}
         onClose={handleCloseShowAll}
-        title="Tất cả ảnh và file trong nhóm chat"
+        title="Tất cả ảnh và tài liệu trong loại việc"
         maxWidth="max-w-5xl"
         testId="all-files-modal"
       >
@@ -1108,7 +1109,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         </div>
 
         <div
-          className="mt-3 max-h-[60vh] overflow-y-auto"
+          className="relative mt-3 flex-1 min-h-0 overflow-y-auto"
           data-testid="all-files-modal-list"
           onScroll={(e) => {
             const el = e.currentTarget;
@@ -1168,8 +1169,16 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
 
             if (source.length === 0) {
               return (
-                <div className="text-[12px] text-gray-400">
-                  Chưa có file nào trong nhóm chat cho tab này.
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pb-24 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+                    <Inbox className="h-8 w-8 text-emerald-600" />
+                  </div>
+                  <div className="text-sm font-medium text-gray-700">
+                    Chưa có {allTab === "media" ? "ảnh hoặc video" : "tài liệu"} nào
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Chưa có {allTab === "media" ? "ảnh/video" : "tài liệu"} nào trong loại việc này.
+                  </div>
                 </div>
               );
             }

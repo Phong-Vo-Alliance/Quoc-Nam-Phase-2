@@ -4,6 +4,9 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  FileVideo,
+  FileImage,
+  FileSpreadsheet,
   AlertCircle,
   Download,
   Loader2,
@@ -299,7 +302,15 @@ export default function FilePreviewModal({
           data-testid="file-preview-modal-header"
         >
           <div className="flex items-center gap-3 overflow-hidden">
-            <FileText className="h-6 w-6 flex-shrink-0 text-blue-600" />
+            {fileType === "video" ? (
+              <FileVideo className="h-6 w-6 flex-shrink-0 text-purple-600" />
+            ) : fileType === "image" ? (
+              <FileImage className="h-6 w-6 flex-shrink-0 text-green-600" />
+            ) : fileType === "excel" ? (
+              <FileSpreadsheet className="h-6 w-6 flex-shrink-0 text-emerald-600" />
+            ) : (
+              <FileText className="h-6 w-6 flex-shrink-0 text-blue-600" />
+            )}
             <h2
               className="truncate text-lg font-semibold text-gray-900"
               title={fileName}
@@ -380,7 +391,7 @@ export default function FilePreviewModal({
                             ? "Lỗi kết nối mạng"
                             : "Không thể tải tệp"}
                   </h3>
-                  <p className="text-sm text-gray-600">{error.message}</p>
+                  {/* <p className="text-sm text-gray-600">{error.message}</p> */}
                 </div>
                 <button
                   onClick={retry}
