@@ -320,10 +320,10 @@ export const QuickMessageManager: React.FC<{
             <Button
               variant="outline"
               onClick={resetForm}
-              disabled={isAnyLoading}
-              data-testid="quick-message-cancel-button"
+              disabled={isAnyLoading || (!key && !content && !editing)}
+              data-testid="quick-message-clear-button"
             >
-              Hủy
+              Đặt lại
             </Button>
             <Button
               onClick={handleSave}
