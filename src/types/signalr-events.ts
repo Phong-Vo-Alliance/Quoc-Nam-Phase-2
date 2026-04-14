@@ -143,7 +143,16 @@ export interface TaskUpdatePayload {
   };
   timestamp: string;
   changedByUserId: string;
-  metadata?: Record<string, any>;
+  metadata?: {
+    statusCode?: string;
+    statusName?: string;
+    statusConfigId?: string;
+    changedByRole?: string;
+    changedByUserFullName?: string;
+    assigneeFullName?: string;
+    createdByUserFullName?: string;
+    [key: string]: any;
+  };
   conversationId?: string; // Optional conversationId for easier handling in UI
   messageId?: string; // Optional messageId for easier handling in UI
 }

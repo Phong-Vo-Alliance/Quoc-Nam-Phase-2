@@ -219,8 +219,12 @@ export function useTaskNotifications() {
         case "status_changed": {
           const newStatus = payload.task.statusCode;
           const newStatusLabel =
-            STATUS_LABELS_VI[newStatus?.toLowerCase()] || newStatus;
-          const changedByUserName = getUserName(payload.changedByUserId);
+            payload.metadata?.statusName ||
+            STATUS_LABELS_VI[newStatus?.toLowerCase()] ||
+            newStatus;
+          const changedByUserName =
+            payload.metadata?.changedByUserFullName ||
+            getUserName(payload.changedByUserId);
 
           toast.info(
             `${changedByUserName} đã chuyển trạng thái công việc ${taskTitle} sang ${newStatusLabel}.`,
