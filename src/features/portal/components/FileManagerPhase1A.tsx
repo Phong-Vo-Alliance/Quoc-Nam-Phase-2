@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 // import { mockMessagesByWorkType } from "@/data/mockMessages";
+import { useQueryClient } from "@tanstack/react-query";
 import { IconButton } from "@/components/ui/icon-button";
 import { API_ENDPOINTS } from "@/config/env.config";
 import { useAuthStore } from "@/stores/authStore";
@@ -16,6 +17,8 @@ import { useImageCacheStore } from "@/stores/imageCacheStore";
 import { toast } from "sonner"; // Phase 2: For toast notifications
 import FilePreviewModal from "@/components/FilePreviewModal"; // Phase 2.2: Document preview
 import ImagePreviewModal from "@/components/ImagePreviewModal"; // Image preview modal
+import { getMessagesAround } from "@/api/messages.api";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 
 /**
  * Loại file Phase 1A – gom đơn giản thành 3 nhóm:
@@ -446,12 +449,12 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
   isMobile = false,
   onOpenAllFiles,
   messages,
-  messagesQuery, // Phase 2: For auto-loading older messages
   conversationAttachment,
   conversationAttachmentsQuery,
   onOpenTaskLogByMessageId,
 }) => {
   React.useEffect(() => {}, [conversationAttachment]);
+  const queryClient = useQueryClient();
   const [previewFile, setPreviewFile] = React.useState<Phase1AFileItem | null>(
     null,
   );
@@ -475,74 +478,132 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
       // Step 0: Navigate to chat tab first (close information panel)
       onNavigateToChat?.();
 
-      // Helper function to scroll and highlight message
+      const findEl = (): Element | null =>
+        document.querySelector(
+          `[data-testid="message-bubble-${messageId}"]`,
+        ) ||
+        document.querySelector(
+          `[data-testid="system-message-bubble-${messageId}"]`,
+        );
+
       const scrollAndHighlight = (element: Element) => {
-        element.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
+        const isSystem = element
+          .getAttribute("data-testid")
+          ?.startsWith("system-message-bubble-");
+        const target = (
+          isSystem ? (element.firstElementChild as HTMLElement) || element : element
+        ) as HTMLElement;
 
-        // Highlight message bubble (CHỈ bubble bên trong, KHÔNG tô container)
-        element.classList.add("message-highlighted");
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
 
-        setTimeout(() => {
-          element.classList.remove("message-highlighted");
-        }, 2500);
+        const cls = isSystem ? "system-message-highlighted" : "message-highlighted";
+        target.classList.add(cls);
+        setTimeout(() => target.classList.remove(cls), 2500);
       };
 
-      // Step 1: Try to find message in current DOM
-      let messageElement = document.querySelector(
-        `[data-testid="message-bubble-${messageId}"]`,
-      );
+      // Step 1: Wait for chat tab to render (if navigated), then try DOM
+      if (onNavigateToChat) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
 
-      if (messageElement) {
-        // ✅ Found immediately - scroll and highlight
-        scrollAndHighlight(messageElement);
+      const existing = findEl();
+      if (existing) {
+        scrollAndHighlight(existing);
         return true;
       }
 
-      // Step 2: Message not loaded - trigger auto-load
-      if (!messagesQuery) {
-        // No messagesQuery provided, show warning
-        toast.info("Tin nhắn có thể chưa được tải", { duration: 3000 });
+      // Step 2: Fetch via aroundMessageId API + merge cache
+      if (!groupId) {
+        toast.error("Không xác định được cuộc trò chuyện.", { duration: 3000 });
         return false;
       }
 
-      toast.info("Đang tải tin nhắn cũ hơn...", { duration: 3000 });
+      try {
+        const result = await getMessagesAround({
+          conversationId: groupId,
+          aroundMessageId: messageId,
+          limit: 50,
+        });
 
-      // Step 3: Retry loop - load older messages
-      const MAX_RETRIES = 5;
-      for (let i = 0; i < MAX_RETRIES; i++) {
-        if (messagesQuery.hasNextPage && !messagesQuery.isFetchingNextPage) {
-          await messagesQuery.fetchNextPage();
+        queryClient.setQueryData(
+          messageKeys.conversation(groupId),
+          (oldData: any) => {
+            if (!oldData) {
+              return {
+                pages: [
+                  {
+                    items: result.items,
+                    nextCursor: result.nextCursor,
+                    hasMore: result.hasMore,
+                  },
+                ],
+                pageParams: [undefined],
+              };
+            }
 
-          // Wait for DOM to update
-          await new Promise((resolve) => setTimeout(resolve, 300));
+            const existingIds = new Set(
+              oldData.pages.flatMap((p: any) =>
+                p.items.map((m: any) => m.id),
+              ),
+            );
+            const newMessages = result.items.filter(
+              (msg) => !existingIds.has(msg.id),
+            );
+            if (newMessages.length === 0) {
+              return oldData;
+            }
 
-          // Check again
-          messageElement = document.querySelector(
-            `[data-testid="message-bubble-${messageId}"]`,
-          );
+            const allMessages = [
+              ...oldData.pages.flatMap((p: any) => p.items),
+              ...newMessages,
+            ].sort(
+              (a, b) =>
+                new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(),
+            );
 
-          if (messageElement) {
-            // ✅ Found after loading!
-            scrollAndHighlight(messageElement);
-            toast.success("Đã tìm thấy tin nhắn!", { duration: 2000 });
-            return true;
-          }
-        } else {
-          // No more pages to load
-          break;
+            const hasMoreOlder = result.hasMore || !!result.nextCursor;
+            return {
+              pages: [
+                {
+                  items: allMessages,
+                  nextCursor: hasMoreOlder
+                    ? result.nextCursor ||
+                      allMessages[allMessages.length - 1]?.id
+                    : undefined,
+                  hasMore: hasMoreOlder,
+                },
+              ],
+              pageParams: [undefined],
+            };
+          },
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
+        const found = findEl();
+        if (found) {
+          scrollAndHighlight(found);
+          toast.success("Đã tìm thấy tin nhắn!", { duration: 2000 });
+          return true;
         }
-      }
 
-      // ❌ Still not found after all retries
-      toast.error("Không tìm thấy tin nhắn (có thể đã bị xóa)", {
-        duration: 3000,
-      });
-      return false;
+        toast.error("Không thể hiển thị tin nhắn. Vui lòng thử lại.", {
+          duration: 3000,
+        });
+        return false;
+      } catch (error: any) {
+        console.error("Error jumping to message:", error);
+        if (error?.response?.status === 404) {
+          toast.error("Tin nhắn không tồn tại hoặc đã bị xóa.");
+        } else if (error?.response?.status === 403) {
+          toast.error("Bạn không có quyền xem tin nhắn này.");
+        } else {
+          toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
+        }
+        return false;
+      }
     },
-    [messagesQuery, onNavigateToChat],
+    [groupId, queryClient, onNavigateToChat],
   );
 
   // ----- Lấy list message tương ứng group + workType từ API -----
@@ -749,7 +810,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         const threadMessageId = f.messageId;
 
         // Step 1: Scroll to parent message in chat session
-        if (messagesQuery) {
+        if (groupId) {
           handleJumpToMessage(parentMessageId)
             .then(() => {
               // Step 2: After scrolling, open thread with target message
@@ -777,7 +838,7 @@ export const FileManagerPhase1A: React.FC<FileManagerPhase1AProps> = ({
         // This is a main chat message - navigate to it in chat
         const targetMessageId = f.messageId;
 
-        if (messagesQuery) {
+        if (groupId) {
           handleJumpToMessage(targetMessageId).catch((error) => {
             console.error("Error scrolling to message:", error);
           });

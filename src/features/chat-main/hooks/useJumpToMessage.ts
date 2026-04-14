@@ -75,7 +75,9 @@ export function useJumpToMessage({
 
   // Core function: Fetch messages around target and merge into cache
   const jumpToMessageCore = useCallback(
-    async (targetMessageId: string): Promise<boolean> => {
+    async (
+      targetMessageId: string,
+    ): Promise<"found" | "not-found" | "error"> => {
       setIsLoadingNewer(true);
 
       try {
@@ -148,10 +150,10 @@ export function useJumpToMessage({
         if (updatedMessageElement) {
           scrollToAndHighlight(updatedMessageElement);
           setHasUnloadedNewerMessages(true);
-          return true;
+          return "found";
         }
 
-        return false;
+        return "not-found";
       } catch (error: any) {
         console.error("Error jumping to message:", error);
 
@@ -163,7 +165,7 @@ export function useJumpToMessage({
           toast.error("Lỗi khi tải tin nhắn. Vui lòng thử lại.");
         }
 
-        return false;
+        return "error";
       } finally {
         setIsLoadingNewer(false);
       }
@@ -225,10 +227,10 @@ export function useJumpToMessage({
       }
 
       // Step 3: Fetch messages around target
-      const found = await jumpToMessageCore(targetMessageId);
-      if (found) {
+      const result = await jumpToMessageCore(targetMessageId);
+      if (result === "found") {
         toast.success("Đã tìm thấy tin nhắn!");
-      } else {
+      } else if (result === "not-found") {
         toast.error("Không thể hiển thị tin nhắn. Vui lòng thử lại.");
       }
     },
@@ -256,10 +258,10 @@ export function useJumpToMessage({
       }
 
       // Step 2: Fetch messages around target
-      const found = await jumpToMessageCore(targetMessageId);
-      if (found) {
+      const result = await jumpToMessageCore(targetMessageId);
+      if (result === "found") {
         toast.success("Đã tìm thấy tin nhắn!");
-      } else {
+      } else if (result === "not-found") {
         toast.error("Không thể hiển thị tin nhắn. Vui lòng thử lại.");
       }
     },
@@ -278,10 +280,10 @@ export function useJumpToMessage({
       }
 
       // Step 2: Fetch messages around target
-      const found = await jumpToMessageCore(quotedMessageId);
-      if (found) {
+      const result = await jumpToMessageCore(quotedMessageId);
+      if (result === "found") {
         toast.success("Đã tìm thấy tin nhắn gốc!");
-      } else {
+      } else if (result === "not-found") {
         toast.error("Không thể hiển thị tin nhắn. Vui lòng thử lại.");
       }
     },

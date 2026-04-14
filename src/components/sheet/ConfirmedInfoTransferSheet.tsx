@@ -666,15 +666,17 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
                         Các mục checklist ({selectedTemplate.items.length})
                       </p>
                       <ul className="space-y-1">
-                        {selectedTemplate.items.map((item) => (
-                          <li
-                            key={item.id}
-                            className="flex items-center gap-2 text-sm text-gray-700"
-                          >
-                            <CheckCircle2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                            {item.content}
-                          </li>
-                        ))}
+                        {[...selectedTemplate.items]
+                          .sort((a, b) => a.order - b.order)
+                          .map((item) => (
+                            <li
+                              key={item.id}
+                              className="flex items-center gap-2 text-sm text-gray-700"
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              {item.content}
+                            </li>
+                          ))}
                       </ul>
                     </div>
                   )}

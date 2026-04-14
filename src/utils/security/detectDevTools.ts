@@ -10,8 +10,14 @@
 export function detectDevTools(): boolean {
   try {
     // Method 1: Window size difference
-    const widthThreshold = window.outerWidth - window.innerWidth > 160;
-    const heightThreshold = window.outerHeight - window.innerHeight > 160;
+    // Normalize innerWidth/Height by devicePixelRatio so browser zoom (Ctrl +/-)
+    // doesn't produce a false positive. When zoomed, innerWidth shrinks in CSS pixels
+    // while outerWidth stays constant, which previously tripped the threshold.
+    const zoom = window.devicePixelRatio || 1;
+    const widthDiff = window.outerWidth - window.innerWidth * zoom;
+    const heightDiff = window.outerHeight - window.innerHeight * zoom;
+    const widthThreshold = widthDiff > 200;
+    const heightThreshold = heightDiff > 200;
 
     if (widthThreshold || heightThreshold) {
       return true;
