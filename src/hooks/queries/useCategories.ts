@@ -61,13 +61,20 @@ export function useCategories() {
       if (existingData) {
         existingData.forEach((category) => {
           category.conversations.forEach((conv) => {
-            existingUnreadCounts.set(conv.conversationId, conv.unreadCount || 0);
+            existingUnreadCounts.set(
+              conv.conversationId,
+              conv.unreadCount || 0,
+            );
           });
         });
       }
 
       // Fetch fresh data from API
       const data = await categoriesApi.getCategories();
+
+      // TODO(TEST): remove — forcing empty categories for EmptyChatState testing
+      // await categoriesApi.getCategories();
+      // const data: Awaited<ReturnType<typeof categoriesApi.getCategories>> = [];
 
       // Transform: Merge with existing unread counts OR initialize to 0
       return data.map((category) => ({
@@ -76,7 +83,10 @@ export function useCategories() {
           (conv): ConversationWithUnread => ({
             ...conv,
             // ✅ Preserve existing unread count, or initialize to 0 for new conversations
-            unreadCount: existingUnreadCounts.get(conv.conversationId) ?? conv.unreadCount ?? 0,
+            unreadCount:
+              existingUnreadCounts.get(conv.conversationId) ??
+              conv.unreadCount ??
+              0,
           }),
         ),
       }));

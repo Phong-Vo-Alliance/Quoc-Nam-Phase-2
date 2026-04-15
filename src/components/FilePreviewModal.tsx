@@ -88,6 +88,7 @@ export default function FilePreviewModal({
         onClick={(e) => {
           if (e.target === backdropRef.current) onClose();
         }}
+        onContextMenu={(e) => e.preventDefault()}
         data-testid="file-preview-backdrop"
       >
         <div className="relative h-[90vh] w-[90vw] max-w-7xl overflow-hidden rounded-xl bg-white shadow-2xl">
@@ -290,6 +291,7 @@ export default function FilePreviewModal({
       ref={backdropRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={handleBackdropClick}
+      onContextMenu={(e) => e.preventDefault()}
       data-testid="file-preview-backdrop"
     >
       <div

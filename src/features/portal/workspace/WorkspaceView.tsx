@@ -533,6 +533,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     (activeTabType === "dm" &&
       (directMessagesQuery.isError || departmentMembersQuery.isError));
 
+  // Hide chat & info panel when categories list is empty on group tab
+  const isGroupTabCategoriesEmpty =
+    leftTab === "messages" &&
+    categoriesQuery.isSuccess &&
+    (categoriesQuery.data?.length ?? 0) === 0;
+
   // Centralized group management (replaces join/leave in old hooks)
   useGroupSync();
 
@@ -867,9 +873,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                 </div>
               ) : (
                 <div className="h-full min-h-0">
-                  {selectedConversation &&
-                  !isConversationListInitialLoading &&
-                  !isConversationListError ? (
+                  {isGroupTabCategoriesEmpty ? (
+                    <EmptyChatState isMobile={true} variant="no-groups" />
+                  ) : selectedConversation &&
+                    !isConversationListInitialLoading &&
+                    !isConversationListError ? (
                     // API-based chat using ChatMainContainer (conversation-detail)
                     <ChatMainContainer
                       key={selectedConversation.id}
@@ -1197,9 +1205,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
       {/* Center (Chat Container) — IMPORTANT: allow shrinking by setting min-w-0 */}
       <div className="h-full min-h-0 min-w-0 relative">
-        {selectedConversation &&
-        !isConversationListInitialLoading &&
-        !isConversationListError ? (
+        {isGroupTabCategoriesEmpty ? (
+          <EmptyChatState isMobile={false} variant="no-groups" />
+        ) : selectedConversation &&
+          !isConversationListInitialLoading &&
+          !isConversationListError ? (
           // API-based chat using ChatMainContainer (conversation-detail)
           <ChatMainContainer
             key={selectedConversation.id}
@@ -1306,7 +1316,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       {/* Divider (draggable) */}
       {showRight &&
         !isConversationListError &&
-        !isConversationListInitialLoading && (
+        !isConversationListInitialLoading &&
+        !isGroupTabCategoriesEmpty && (
           <div className="relative h-full">
             <div
               className="absolute left-1/2 top-1/2
@@ -1324,7 +1335,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       {/* Right */}
       {showRight &&
         !isConversationListError &&
-        !isConversationListInitialLoading && (
+        !isConversationListInitialLoading &&
+        !isGroupTabCategoriesEmpty && (
           <div
             className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col rounded-2xl border border-gray-300 bg-white"
             data-testid="conversation-detail-panel-container"

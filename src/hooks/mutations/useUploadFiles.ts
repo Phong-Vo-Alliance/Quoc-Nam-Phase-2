@@ -149,7 +149,7 @@ export function useUploadFiles() {
           });
 
           // Show error toast
-          toast.error(`Lỗi upload ${selectedFile.file.name}`, {
+          toast.error(`Lỗi tải lên ${selectedFile.file.name}`, {
             description: classified.message,
           });
         }

@@ -283,6 +283,7 @@ export default function ImagePreviewModal({
       ref={backdropRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={handleBackdropClick}
+      onContextMenu={(e) => e.preventDefault()}
       data-testid="image-preview-backdrop"
     >
       <div
