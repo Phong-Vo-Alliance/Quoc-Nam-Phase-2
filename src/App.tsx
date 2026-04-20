@@ -10,6 +10,7 @@ import { getCurrentUser } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
 import { getAccessToken } from "./lib/auth/tokenStorage";
 import { ConnectionStatusBanner } from "./components/ConnectionStatusBanner";
+import { NotificationPermissionBanner } from "./components/NotificationPermissionBanner";
 import { ScreenSizeGuard } from "./components/ScreenSizeGuard";
 
 export default function App() {
@@ -73,6 +74,7 @@ export default function App() {
     <ScreenSizeGuard>
       <SignalRProvider>
         <ConnectionStatusBanner />
+        <NotificationPermissionBanner />
 
         {/* Dev mode indicator for whitelisted users */}
         {isWhitelisted && (

@@ -40,11 +40,63 @@ export interface LoginCredentials {
 }
 
 /**
+ * Device fingerprint payload returned by the local fingerprint agent
+ * (http://localhost:52100/fingerprint) and forwarded to the identity API.
+ */
+export interface DeviceFingerprint {
+  fingerprintType?: string;
+  machineId?: string;
+  cpuId?: string;
+  cpuModel?: string;
+  cpuCores?: number;
+  ramSize?: number;
+  diskSerial?: string;
+  macAddress?: string;
+  windowsProductId?: string;
+  hostname?: string;
+  osVersion?: string;
+  collectedAt?: string;
+  visitorId?: string;
+  userAgent?: string;
+  platform?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  colorDepth?: number;
+  timezone?: string;
+  language?: string;
+  hardwareConcurrency?: number;
+  webGlVendor?: string;
+  webGlRenderer?: string;
+  browserName?: string;
+  browserVersion?: string;
+  osName?: string;
+  componentsHash?: string;
+  touchSupport?: boolean;
+  plugins?: string;
+  fonts?: string[];
+  AppId?: string;
+  AppVersion?: string;
+  AppVersionBuild?: string;
+  DeviceNumber?: string;
+  DeviceName?: string;
+  BrandName?: string;
+  BrandModel?: string;
+  OSVer?: string;
+  FCMTokenKey?: string;
+  [key: string]: unknown;
+}
+
+/**
  * Login Request - matches API contract
  */
 export interface LoginRequest {
   identifier: string;
   password: string;
+  clientIp?: string;
+  clientPlatform?: string;
+  clientType?: number;
+  platformResolutionSource?: number;
+  deviceFingerprint?: DeviceFingerprint;
 }
 
 /**

@@ -7,6 +7,7 @@
 import axios, { type AxiosError } from "axios";
 import { AUTH_CONFIG } from "@/lib/auth/config";
 import type {
+  DeviceFingerprint,
   LoginRequest,
   LoginResponse,
   LoginErrorResponse,
@@ -25,6 +26,26 @@ const identityClient = axios.create({
   timeout: 30000,
 });
 
+// Local fingerprint agent (desktop helper) exposes device info for login.
+const FINGERPRINT_URL =
+  import.meta.env.VITE_FINGERPRINT_URL || "http://localhost:52100/fingerprint";
+
+/**
+ * Fetch device fingerprint from the local agent.
+ * Returns null if the agent is unreachable so login can still proceed.
+ */
+export async function getDeviceFingerprint(): Promise<DeviceFingerprint | null> {
+  try {
+    const response = await axios.get<DeviceFingerprint>(FINGERPRINT_URL, {
+      timeout: 5000,
+    });
+    return response.data ?? null;
+  } catch (error) {
+    console.warn("Failed to fetch device fingerprint:", error);
+    return null;
+  }
+}
+
 /**
  * Login API call
  *
@@ -34,10 +55,16 @@ const identityClient = axios.create({
  */
 export async function login(credentials: LoginRequest): Promise<LoginResponse> {
   try {
-    const response = await identityClient.post<LoginResponse>(
-      "/auth/login",
-      credentials,
-    );
+    const deviceFingerprint = await getDeviceFingerprint();
+
+    const response = await identityClient.post<LoginResponse>("/auth/login", {
+      ...credentials,
+      clientIp: credentials.clientIp ?? "",
+      clientPlatform: credentials.clientPlatform ?? "Web",
+      clientType: credentials.clientType ?? 1,
+      platformResolutionSource: credentials.platformResolutionSource ?? 1,
+      deviceFingerprint: credentials.deviceFingerprint ?? deviceFingerprint,
+    });
     return response.data;
   } catch (error) {
     const axiosError = error as AxiosError<LoginErrorResponse>;

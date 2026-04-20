@@ -109,10 +109,10 @@ function showSystemNotification(
     );
     return;
   }
-  if (document.hasFocus()) {
-    console.log("[notif] Tab đang focused → skip system notification");
-    return;
-  }
+  // if (document.hasFocus()) {
+  //   console.log("[notif] Tab đang focused → skip system notification");
+  //   return;
+  // }
 
   // Dedup: skip if we already showed one for this conversation recently
   const now = Date.now();
