@@ -118,8 +118,27 @@ export interface LoginResponse {
   requiresMfa: boolean;
   mfaToken: string | null;
   mfaMethod: string | null;
+  requiresPasswordChange?: boolean;
   accessToken: string;
   user: LoginApiUser;
+}
+
+/**
+ * Change Password (first login / reset required) request
+ */
+export interface ChangePasswordFirstRequest {
+  newPassword: string;
+  confirmPassword: string;
+}
+
+/**
+ * Change Password (first login / reset required) response
+ */
+export interface ChangePasswordFirstResponse {
+  success?: boolean;
+  message?: string;
+  newAccessToken?: string;
+  user?: LoginApiUser;
 }
 
 /**

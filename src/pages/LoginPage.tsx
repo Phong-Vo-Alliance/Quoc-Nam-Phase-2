@@ -9,6 +9,8 @@ import { useNavigate } from "react-router-dom";
 import { LoginForm } from "@/components/auth";
 import { useAuthStore } from "@/stores/authStore";
 import { AUTH_CONFIG } from "@/lib/auth/config";
+import { ROUTES } from "@/routes/routes";
+import type { LoginResponse } from "@/types/auth";
 import logoImage from "@/assets/Quocnam_logo.png";
 
 /**
@@ -30,7 +32,17 @@ export function LoginPage() {
     }
   }, [isAuthenticated, navigate]);
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = (data: LoginResponse) => {
+    if (data.requiresPasswordChange) {
+      navigate(ROUTES.CHANGE_PASSWORD, {
+        state: {
+          accessToken: data.accessToken,
+          user: data.user,
+        },
+        replace: true,
+      });
+      return;
+    }
     navigate(AUTH_CONFIG.routes.portal, { replace: true });
   };
 

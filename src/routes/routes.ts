@@ -7,6 +7,7 @@ export const ROUTES = {
   LOGIN: "/login",
   LOGOUT: "/logout",
   AUTH_SSO: "/auth/session",
+  CHANGE_PASSWORD: "/change-password",
 
   // Portal
   PORTAL: "/",

@@ -28,9 +28,53 @@ export const AUTH_ERROR_MESSAGES: Record<string, string> = {
   AUTH_INVALID_CREDENTIALS: 'Tài khoản hoặc mật khẩu không đúng',
   AUTH_ACCOUNT_LOCKED: 'Tài khoản đã bị khóa',
   AUTH_ACCOUNT_DISABLED: 'Tài khoản đã bị vô hiệu hóa',
+  PASSWORD_POLICY_FAILED: 'Mật khẩu chưa đáp ứng yêu cầu bảo mật',
+  PASSWORD_MISMATCH: 'Mật khẩu xác nhận không trùng khớp',
+  PASSWORD_SAME_AS_CURRENT: 'Mật khẩu mới phải khác mật khẩu hiện tại',
+  PASSWORD_CHANGE_REQUIRED: 'Bạn cần đổi mật khẩu trước khi tiếp tục',
+  RATE_LIMIT_EXCEEDED: 'Quá nhiều yêu cầu, vui lòng thử lại sau',
   NETWORK_ERROR: 'Không thể kết nối. Vui lòng kiểm tra mạng.',
   UNKNOWN_ERROR: 'Đã có lỗi xảy ra. Vui lòng thử lại.',
 };
+
+/**
+ * Password policy check for first-login / reset flows.
+ *
+ * Rules:
+ *  - Min 8 characters
+ *  - Must contain uppercase letter
+ *  - Must contain lowercase letter
+ *  - Must contain a digit
+ *  - Must contain a special character
+ */
+export interface PasswordPolicyChecks {
+  minLength: boolean;
+  hasUppercase: boolean;
+  hasLowercase: boolean;
+  hasDigit: boolean;
+  hasSpecial: boolean;
+}
+
+export function checkPasswordPolicy(password: string): PasswordPolicyChecks {
+  return {
+    minLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasDigit: /\d/.test(password),
+    hasSpecial: /[^A-Za-z0-9\s]/.test(password),
+  };
+}
+
+export function isPasswordPolicyValid(password: string): boolean {
+  const c = checkPasswordPolicy(password);
+  return (
+    c.minLength &&
+    c.hasUppercase &&
+    c.hasLowercase &&
+    c.hasDigit &&
+    c.hasSpecial
+  );
+}
 
 /**
  * Get localized error message from API error code

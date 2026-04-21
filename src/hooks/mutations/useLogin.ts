@@ -31,6 +31,14 @@ export function useLogin(options?: UseLoginOptions) {
       return login(credentials);
     },
     onSuccess: async (data) => {
+      // When BE requires password change, don't authenticate yet.
+      // Caller is responsible for navigating to the change-password screen.
+      if (data.requiresPasswordChange) {
+        setLoading(false);
+        options?.onSuccess?.(data);
+        return;
+      }
+
       // Update auth store with user and token
       loginSuccess(data.user, data.accessToken);
 

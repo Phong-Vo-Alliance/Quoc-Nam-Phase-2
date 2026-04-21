@@ -15,9 +15,10 @@ import { PasswordInput } from "./PasswordInput";
 import { loginSchema, type LoginFormData } from "@/lib/validation/auth";
 import { useLogin, getLoginErrorMessage } from "@/hooks/mutations/useLogin";
 import { cn } from "@/lib/utils";
+import type { LoginResponse } from "@/types/auth";
 
 interface LoginFormProps {
-  onSuccess?: () => void;
+  onSuccess?: (data: LoginResponse) => void;
   className?: string;
 }
 
@@ -43,9 +44,9 @@ export function LoginForm({ onSuccess, className }: LoginFormProps) {
   });
 
   const { mutate: login, isPending } = useLogin({
-    onSuccess: () => {
+    onSuccess: (data) => {
       setApiError(null);
-      onSuccess?.();
+      onSuccess?.(data);
     },
     onError: (error) => {
       const errorMessage = getLoginErrorMessage(error);

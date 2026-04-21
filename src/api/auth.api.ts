@@ -7,6 +7,8 @@
 import axios, { type AxiosError } from "axios";
 import { AUTH_CONFIG } from "@/lib/auth/config";
 import type {
+  ChangePasswordFirstRequest,
+  ChangePasswordFirstResponse,
   DeviceFingerprint,
   LoginRequest,
   LoginResponse,
@@ -112,6 +114,44 @@ export async function exchangeWebSession(
       const err = new Error(apiError.message || "Invalid web session token");
       (err as Error & { errorCode: string }).errorCode =
         apiError.errorCode || "INVALID_WEB_SESSION";
+      throw err;
+    }
+
+    if (axiosError.code === "ERR_NETWORK" || !axiosError.response) {
+      const err = new Error("Network error");
+      (err as Error & { errorCode: string }).errorCode = "NETWORK_ERROR";
+      throw err;
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Change password (first login / reset required).
+ * Uses the access token returned from /auth/login as Bearer.
+ */
+export async function changePasswordFirst(
+  payload: ChangePasswordFirstRequest,
+  accessToken: string,
+): Promise<ChangePasswordFirstResponse> {
+  try {
+    const response = await identityClient.post<ChangePasswordFirstResponse>(
+      "/auth/change-password",
+      { newPassword: payload.newPassword },
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    const axiosError = error as AxiosError<LoginErrorResponse>;
+
+    if (axiosError.response?.data) {
+      const apiError = axiosError.response.data;
+      const err = new Error(apiError.message || "Change password failed");
+      (err as Error & { errorCode: string }).errorCode =
+        apiError.errorCode || "UNKNOWN_ERROR";
       throw err;
     }
 

@@ -11,6 +11,7 @@ import {
   AuthSsoPage,
   AccountPage,
   BlockedPage,
+  ChangePasswordPage,
   LoginPage,
   PortalPage,
 } from "@/pages";
@@ -35,6 +36,10 @@ const router = createBrowserRouter([
   {
     path: ROUTES.AUTH_SSO,
     element: <AuthSsoPage />,
+  },
+  {
+    path: ROUTES.CHANGE_PASSWORD,
+    element: <ChangePasswordPage />,
   },
   {
     path: ROUTES.PORTAL,
