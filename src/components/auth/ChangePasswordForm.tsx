@@ -159,13 +159,8 @@ export function ChangePasswordForm({
     if (newPassword.length === 0) return ["Mật khẩu là bắt buộc"];
     const msgs: string[] = [];
     if (!checks.minLength) msgs.push("Mật khẩu phải có ít nhất 8 ký tự");
-    if (
-      !checks.hasUppercase ||
-      !checks.hasLowercase ||
-      !checks.hasDigit ||
-      !checks.hasSpecial
-    ) {
-      msgs.push("Mật khẩu phải chứa chữ hoa, chữ thường, số và ký tự đặc biệt");
+    if (!checks.hasLowercase || !checks.hasDigit || !checks.hasSpecial) {
+      msgs.push("Mật khẩu phải chứa chữ thường, số và ký tự đặc biệt");
     }
     return msgs;
   }, [touchedNew, newPassword, checks]);

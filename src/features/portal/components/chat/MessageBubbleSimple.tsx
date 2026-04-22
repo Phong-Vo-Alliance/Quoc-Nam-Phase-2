@@ -27,6 +27,7 @@ import QuotedMessagePreview from "./QuotedMessagePreview";
 import type { ChatMessage, AttachmentDto } from "@/types/messages";
 import { hasLeaderPermissions } from "@/utils/roleUtils";
 import { useReplyStore } from "@/stores/replyStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useContentProtection } from "@/hooks/useContentProtection";
 import { renderMessageWithMentions } from "@/utils/mentionHighlight";
 
@@ -135,6 +136,9 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   const debugTimestamp = Date.now();
   // Quote Reply: Get setReplyTarget from store
   const setReplyTarget = useReplyStore((state) => state.setReplyTarget);
+  // Current viewer id — used to detect mentions targeting the current user so
+  // we can render them with a stronger highlight (Google Chat style).
+  const currentUserId = useAuthStore((state) => state.user?.id);
   // Content Protection: Prevent copy/select for message content
   const messageContentRef = useRef<HTMLDivElement>(null);
   useContentProtection(messageContentRef as React.RefObject<HTMLElement>, {
@@ -526,13 +530,18 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                           {renderMessageWithMentions(
                             message.content,
                             message.mentions,
-                            isOwn
-                              ? "bg-brand-200 text-brand-800 font-semibold px-1 rounded"
-                              : "bg-brand-100 text-brand-800 font-semibold px-1 rounded",
+                            // Mentions of other users — white pill with
+                            // brand-colored text.
+                            "bg-white text-brand-700 font-semibold px-1.5 py-0.5 rounded",
                             true, // enableLinks
                             isOwn
                               ? "text-brand-700 underline hover:text-brand-900 cursor-pointer"
                               : "text-brand-600 hover:text-brand-800 underline hover:no-underline cursor-pointer",
+                            currentUserId,
+                            // Self-mention — green pill with white text to
+                            // stand out from the white pill used for other
+                            // users.
+                            "bg-brand-500 text-white font-semibold px-1.5 py-0.5 rounded",
                           )}
                         </p>
                       </div>

@@ -135,25 +135,18 @@ export function parseMentions(
 /**
  * Render message content with highlighted mentions and clickable links
  *
+ * When `currentUserId` is provided, mentions targeting that user will be
+ * rendered with `selfMentionClassName` (if supplied), so the current user's
+ * own @-mention stands out from mentions of other people — similar to
+ * Google Chat's self-mention highlight.
+ *
  * @param content - The message content string
  * @param mentions - Array of mention metadata from API
- * @param mentionClassName - Additional CSS classes for mention highlights
+ * @param mentionClassName - CSS classes for mentions of other users
  * @param enableLinks - Whether to make URLs clickable (default: true)
- * @param linkClassName - CSS classes for links (default: blue for received messages)
- * @returns React nodes with highlighted mentions and clickable links
- *
- * @example
- * ```tsx
- * <p className="text-sm">
- *   {renderMessageWithMentions(
- *     message.content,
- *     message.mentions,
- *     "bg-blue-100 text-blue-800",
- *     true,
- *     "text-blue-600 underline" // or "text-white/90 underline" for own messages
- *   )}
- * </p>
- * ```
+ * @param linkClassName - CSS classes for links
+ * @param currentUserId - The id of the viewer; used to detect self-mentions
+ * @param selfMentionClassName - CSS classes applied only when the viewer is the mentioned user
  */
 export function renderMessageWithMentions(
   content: string | null | undefined,
@@ -161,10 +154,29 @@ export function renderMessageWithMentions(
   mentionClassName?: string,
   enableLinks: boolean = true,
   linkClassName?: string,
+  currentUserId?: string | null,
+  selfMentionClassName?: string,
 ): React.ReactNode {
   if (!content) return null;
 
   const segments = parseMentions(content, mentions);
+
+  // Collect startIndex positions where the viewer themself is mentioned.
+  // Needed because @all expands to multiple mention entries sharing the same
+  // startIndex — parseMentions keeps only the first, which may not be the
+  // viewer's entry.
+  const selfMentionPositions = new Set<number>();
+  if (currentUserId && mentions) {
+    for (const m of mentions) {
+      const userId =
+        "mentionedUserId" in m
+          ? (m as MentionDto).mentionedUserId
+          : (m as MentionInputDto).userId;
+      if (userId === currentUserId) {
+        selfMentionPositions.add(m.startIndex);
+      }
+    }
+  }
 
   // Default link class for received messages (blue)
   const defaultLinkClass =
@@ -178,14 +190,20 @@ export function renderMessageWithMentions(
           ? (segment.mentionData as MentionDto).mentionedUserId
           : (segment.mentionData as MentionInputDto)?.userId;
 
+      const startIdx = segment.mentionData?.startIndex ?? -1;
+      const isSelfMention = selfMentionPositions.has(startIdx);
+      const resolvedClassName =
+        isSelfMention && selfMentionClassName
+          ? selfMentionClassName
+          : mentionClassName ||
+            "bg-brand-100 text-brand-800 font-semibold px-1 rounded";
+
       return (
         <span
           key={`mention-${index}`}
-          className={
-            mentionClassName ||
-            "bg-brand-100 text-brand-800 font-semibold px-1 rounded"
-          }
+          className={resolvedClassName}
           data-mention-user-id={userId}
+          data-self-mention={isSelfMention ? "true" : undefined}
           data-testid={`mention-highlight-${userId}`}
         >
           {segment.content}

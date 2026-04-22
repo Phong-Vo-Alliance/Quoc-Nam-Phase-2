@@ -190,11 +190,10 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
       // All succeeded
       handleClose();
     } else {
-      // Some failed - show error toast and allow closing
+      // Some failed - show error toast, keep only failed users selected for retry
       toast.error("Thêm thất bại, vui lòng thử lại sau.");
-      setAddingProgress((prev) =>
-        prev ? { ...prev, completed: prev.total, failed } : null,
-      );
+      setSelectedUserIds(failed);
+      setAddingProgress(null);
     }
   };
 

@@ -42,14 +42,12 @@ export const AUTH_ERROR_MESSAGES: Record<string, string> = {
  *
  * Rules:
  *  - Min 8 characters
- *  - Must contain uppercase letter
  *  - Must contain lowercase letter
  *  - Must contain a digit
  *  - Must contain a special character
  */
 export interface PasswordPolicyChecks {
   minLength: boolean;
-  hasUppercase: boolean;
   hasLowercase: boolean;
   hasDigit: boolean;
   hasSpecial: boolean;
@@ -58,7 +56,6 @@ export interface PasswordPolicyChecks {
 export function checkPasswordPolicy(password: string): PasswordPolicyChecks {
   return {
     minLength: password.length >= 8,
-    hasUppercase: /[A-Z]/.test(password),
     hasLowercase: /[a-z]/.test(password),
     hasDigit: /\d/.test(password),
     hasSpecial: /[^A-Za-z0-9\s]/.test(password),
@@ -67,13 +64,7 @@ export function checkPasswordPolicy(password: string): PasswordPolicyChecks {
 
 export function isPasswordPolicyValid(password: string): boolean {
   const c = checkPasswordPolicy(password);
-  return (
-    c.minLength &&
-    c.hasUppercase &&
-    c.hasLowercase &&
-    c.hasDigit &&
-    c.hasSpecial
-  );
+  return c.minLength && c.hasLowercase && c.hasDigit && c.hasSpecial;
 }
 
 /**
