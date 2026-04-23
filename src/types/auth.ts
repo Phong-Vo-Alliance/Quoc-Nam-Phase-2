@@ -41,7 +41,7 @@ export interface LoginCredentials {
 
 /**
  * Device fingerprint payload returned by the local fingerprint agent
- * (http://localhost:52100/fingerprint) and forwarded to the identity API.
+ * (http://localhost:36868/fingerprint) and forwarded to the identity API.
  */
 export interface DeviceFingerprint {
   fingerprintType?: string;

@@ -204,33 +204,30 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             onChangeConversation && (
               <div className="mt-2" data-testid="category-tabs">
                 <LinearTabs
-                  tabs={categoryConversations.map((conv) => ({
-                    key: conv.conversationId,
-                    label: (
-                      <div
-                        className="relative inline-flex items-center gap-1"
-                        data-testid={`category-tab-${conv.conversationId}`}
-                      >
-                        <span className="truncate max-w-[150px]">
-                          {conv.conversationName}
-                        </span>
-                        {
-                          // `ConversationInfoDto` may not include `unreadCount`; use a runtime check
-                          (() => {
-                            const unread = (conv as any).unreadCount;
-                            if (unread !== undefined && unread > 0) {
-                              return (
-                                <span className="ml-1 inline-flex min-w-[16px] h-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-medium text-white">
-                                  {unread > 99 ? "99+" : unread}
-                                </span>
-                              );
-                            }
-                            return null;
-                          })()
-                        }
-                      </div>
-                    ),
-                  }))}
+                  tabs={categoryConversations.map((conv) => {
+                    const unread = (conv as any).unreadCount as
+                      | number
+                      | undefined;
+                    return {
+                      key: conv.conversationId,
+                      unread,
+                      label: (
+                        <div
+                          className="relative inline-flex items-center gap-1"
+                          data-testid={`category-tab-${conv.conversationId}`}
+                        >
+                          <span className="truncate max-w-[150px]">
+                            {conv.conversationName}
+                          </span>
+                          {unread !== undefined && unread > 0 && (
+                            <span className="ml-1 inline-flex min-w-[16px] h-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-medium text-white">
+                              {unread > 99 ? "99+" : unread}
+                            </span>
+                          )}
+                        </div>
+                      ),
+                    };
+                  })}
                   active={
                     conversationId ?? categoryConversations[0]?.conversationId
                   }

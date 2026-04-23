@@ -30,7 +30,7 @@ const identityClient = axios.create({
 
 // Local fingerprint agent (desktop helper) exposes device info for login.
 const FINGERPRINT_URL =
-  import.meta.env.VITE_FINGERPRINT_URL || "http://localhost:52100/fingerprint";
+  import.meta.env.VITE_FINGERPRINT_URL || "http://localhost:36868/fingerprint";
 
 /**
  * Fetch device fingerprint from the local agent.

@@ -24,7 +24,7 @@ import { ALL_MENTION_NAME, ALL_MENTION_USER_ID } from "./mentionConstants";
 export { ALL_MENTION_NAME, ALL_MENTION_USER_ID };
 
 /** Feature flag — flip to `true` to re-enable the @all dropdown entry. */
-const MENTION_ALL_ENABLED = false;
+const MENTION_ALL_ENABLED = true;
 
 /** Build the virtual ConversationMember used to render the @all dropdown row. */
 function createAllMember(memberCount: number): ConversationMember {

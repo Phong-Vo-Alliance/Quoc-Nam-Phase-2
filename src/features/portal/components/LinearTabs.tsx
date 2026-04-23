@@ -9,6 +9,15 @@ const scrollContainerStyle: React.CSSProperties = {
   WebkitOverflowScrolling: "touch", // iOS momentum scrolling
 };
 
+type LinearTab = {
+  key: string;
+  label: React.ReactNode;
+  /** Số tin chưa đọc của tab — dùng để cộng dồn lên mũi tên khi tab bị ẩn */
+  unread?: number;
+};
+
+const formatUnread = (count: number) => (count > 9 ? "9+" : String(count));
+
 export const LinearTabs = ({
   tabs,
   active,
@@ -16,7 +25,7 @@ export const LinearTabs = ({
   textClass = "text-sm",
   noWrap = true,
 }: {
-  tabs: { key: string; label: React.ReactNode }[];
+  tabs: LinearTab[];
   active: string;
   onChange: (key: string) => void;
   textClass?: string;
@@ -25,10 +34,17 @@ export const LinearTabs = ({
 }) => {
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const activeTabRef = React.useRef<HTMLButtonElement>(null);
+  const tabRefs = React.useRef<Map<string, HTMLButtonElement | null>>(
+    new Map(),
+  );
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
   const [canScrollRight, setCanScrollRight] = React.useState(false);
+  const [hiddenUnread, setHiddenUnread] = React.useState<{
+    left: number;
+    right: number;
+  }>({ left: 0, right: 0 });
 
-  // Check scroll position
+  // Check scroll position + unread của các tab ngoài khung nhìn
   const checkScroll = React.useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -36,7 +52,33 @@ export const LinearTabs = ({
     const { scrollLeft, scrollWidth, clientWidth } = container;
     setCanScrollLeft(scrollLeft > 0);
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1);
-  }, []);
+
+    const cRect = container.getBoundingClientRect();
+    let leftUnread = 0;
+    let rightUnread = 0;
+    // Coi tab là "ẩn" khi tâm của nó đã nằm ngoài khung — kể cả khi còn
+    // thò ra vài pixel ở mép. Nếu đòi hỏi ẩn hoàn toàn, tab bị cắt gần hết
+    // vẫn bị bỏ qua và badge trên mũi tên không hiện dù người dùng không
+    // thấy tên tab đó.
+    tabs.forEach((tab) => {
+      const unread = tab.unread ?? 0;
+      if (unread <= 0) return;
+      const el = tabRefs.current.get(tab.key);
+      if (!el) return;
+      const tRect = el.getBoundingClientRect();
+      const tabCenter = (tRect.left + tRect.right) / 2;
+      if (tabCenter <= cRect.left) {
+        leftUnread += unread;
+      } else if (tabCenter >= cRect.right) {
+        rightUnread += unread;
+      }
+    });
+    setHiddenUnread((prev) =>
+      prev.left === leftUnread && prev.right === rightUnread
+        ? prev
+        : { left: leftUnread, right: rightUnread },
+    );
+  }, [tabs]);
 
   // Scroll active tab into view
   React.useEffect(() => {
@@ -89,6 +131,14 @@ export const LinearTabs = ({
           aria-label="Scroll left"
         >
           <ChevronLeft className="h-4 w-4 text-brand-600 shrink-0" />
+          {hiddenUnread.left > 0 && (
+            <span
+              className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-[10px] font-medium text-white shadow-sm"
+              aria-label={`${hiddenUnread.left} tin chưa đọc ở các loại việc phía trái`}
+            >
+              {formatUnread(hiddenUnread.left)}
+            </span>
+          )}
         </button>
       )}
 
@@ -100,6 +150,14 @@ export const LinearTabs = ({
           aria-label="Scroll right"
         >
           <ChevronRight className="h-4 w-4 text-brand-600 shrink-0" />
+          {hiddenUnread.right > 0 && (
+            <span
+              className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 inline-flex items-center justify-center rounded-full bg-rose-500 text-[10px] font-medium text-white shadow-sm"
+              aria-label={`${hiddenUnread.right} tin chưa đọc ở các loại việc phía phải`}
+            >
+              {formatUnread(hiddenUnread.right)}
+            </span>
+          )}
         </button>
       )}
 
@@ -115,7 +173,18 @@ export const LinearTabs = ({
           return (
             <button
               key={tab.key}
-              ref={isActive ? activeTabRef : null}
+              ref={(el) => {
+                if (el) {
+                  tabRefs.current.set(tab.key, el);
+                } else {
+                  tabRefs.current.delete(tab.key);
+                }
+                if (isActive) {
+                  (
+                    activeTabRef as { current: HTMLButtonElement | null }
+                  ).current = el;
+                }
+              }}
               onClick={() => {
                 onChange(tab.key);
               }}
