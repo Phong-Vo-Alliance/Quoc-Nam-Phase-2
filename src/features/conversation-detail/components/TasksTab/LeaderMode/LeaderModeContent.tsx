@@ -19,6 +19,7 @@ import {
   isToday,
   abbreviateVietnameseName,
 } from "../../../utils/formatters";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 interface LeadBuckets {
   todo: Task[];
@@ -162,6 +163,11 @@ export const LeaderModeContent: React.FC<LeaderModeContentProps> = ({
   isTasksLoading = false,
   isLoading = false,
 }) => {
+  useEscapeToClose(showLeadCompletedAll, () => setShowLeadCompletedAll(false));
+  useEscapeToClose(showLeaderOwnCompletedAll, () =>
+    setShowLeaderOwnCompletedAll(false),
+  );
+
   return (
     <>
       {/* Confirmed Information Section */}

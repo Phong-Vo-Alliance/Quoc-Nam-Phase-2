@@ -6,6 +6,7 @@ import {
   useCategories,
   useCategoryConversations,
 } from "@/hooks/queries/useCategories";
+import { useLedCategories } from "@/hooks/useCategoryLeader";
 import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
 import type { GroupChat, WorkType } from "../types";
 import type {
@@ -51,9 +52,13 @@ export const WorkTypeManagerDialog: React.FC<WorkTypeManagerDialogProps> = ({
   const [selectedConversation, setSelectedConversation] =
     useState<ConversationDto | null>(null);
 
-  // Fetch all categories from API (already filtered by user on server-side)
+  // Fetch all categories from API, then keep only those where the current
+  // user is a department leader (Admin sees all). Staff without any
+  // leadership will see an empty list — the entry button in MainSidebar is
+  // already gated by `useIsLeaderInAnyCategory`, so this state is unreachable
+  // via normal navigation but kept defensive.
   const categoriesQuery = useCategories();
-  const categories = categoriesQuery.data || [];
+  const categories = useLedCategories();
 
   const loadingCategories = categoriesQuery.isLoading;
   const categoriesError = categoriesQuery.error;

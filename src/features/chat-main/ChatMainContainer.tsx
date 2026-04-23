@@ -412,7 +412,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       <div
         ref={messagesContainerRef}
         className={`flex-1 p-4 space-y-0.5 min-h-0 bg-gray-50 ${
-          messages.length > 0 ? "overflow-y-auto" : "overflow-y-hidden"
+          messages.length > 0 ? "overflow-y-auto scrollbar-thin" : "overflow-y-hidden"
         }`}
         data-testid="message-list"
       >

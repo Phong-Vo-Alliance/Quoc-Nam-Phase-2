@@ -18,6 +18,7 @@ import {
   type SortOption,
 } from '@/hooks/queries/useViewAllTasks';
 import type { LinkedTaskDto } from '@/types/tasks_api';
+import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 
 // ==========================================
 // Types
@@ -69,9 +70,6 @@ export function ViewAllTasksModal({
     sortBy,
   });
 
-  // Don't render if not open
-  if (!isOpen) return null;
-
   // Handle close and reset
   const handleClose = () => {
     setSearchTerm('');
@@ -80,6 +78,11 @@ export function ViewAllTasksModal({
     setSortBy('priority');
     onClose();
   };
+
+  useEscapeToClose(isOpen, handleClose);
+
+  // Don't render if not open
+  if (!isOpen) return null;
 
   return (
     <div

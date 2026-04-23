@@ -13,6 +13,7 @@ import { transformTemplateItems } from "@/utils/checklistTemplateTransform";
 import { useUpdateChecklistTemplate } from "@/hooks/mutations/useTaskMutations";
 import type { CheckListTemplateResponse } from "@/types/tasks_api";
 import { useConversationStore } from "@/stores";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 type Props = {
   open: boolean;
@@ -49,6 +50,11 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
 
   // Update template mutation
   const updateTemplateMutation = useUpdateChecklistTemplate();
+
+  useEscapeToClose(
+    open && !templatesLoading && !updateTemplateMutation.isPending,
+    onClose,
+  );
 
   // State for selected API template
   const [selectedApiTemplateId, setSelectedApiTemplateId] =

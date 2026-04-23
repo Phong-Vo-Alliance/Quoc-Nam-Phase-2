@@ -12,6 +12,7 @@ import type { StarredMessageDto } from "@/types/pinned_and_starred";
 import type { MessageLike } from "@/features/portal/components/FileManagerPhase1A";
 import type { MinimalMember } from "../../../types";
 import { truncateMessageTitle } from "../../../utils/formatters";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 interface StaffBuckets {
   todo: Task[];
@@ -70,6 +71,8 @@ export const StaffModeContent: React.FC<StaffModeContentProps> = ({
   isTasksLoading = false,
   isLoading = false,
 }) => {
+  useEscapeToClose(showCompleted, () => setShowCompleted(false));
+
   return (
     <div className={isLoading ? "opacity-50 pointer-events-none" : ""}>
       {/* Primary: Chưa xử lý + Đang xử lý */}

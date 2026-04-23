@@ -332,8 +332,13 @@ export const ConversationListSidebar: React.FC<
       const otherUserId = otherMember?.userId;
       const colleague = otherUserId ? colleagueMap.get(otherUserId) : undefined;
       const departments = colleague?.sharedDepartments ?? [];
+      const memberDepartments = otherMember?.departments ?? [];
       const isLeader =
-        departments.length > 0 ? departments.some((d) => d.isLeader) : null;
+        memberDepartments.length > 0
+          ? memberDepartments.some((d) => d.isLeader === true)
+          : departments.length > 0
+            ? departments.some((d) => d.isLeader)
+            : null;
 
       const displayName =
         otherMember?.userInfo?.fullName ||
@@ -1098,7 +1103,7 @@ export const ConversationListSidebar: React.FC<
 
       {/* Content */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto"
+        className="flex-1 min-h-0 overflow-y-auto scrollbar-thin"
         data-testid="conversation-content"
       >
         {/* Loading State */}

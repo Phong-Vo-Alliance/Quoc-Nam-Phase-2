@@ -16,6 +16,7 @@ import {
   downloadFile,
 } from "@/api/files.api";
 import { fileApiClient } from "@/api/fileClient";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 interface ImageItem {
   fileId: string;
@@ -86,6 +87,8 @@ export default function ImagePreviewModal({
 
   // ✅ Local Gallery Cache - Cache blob URLs for this modal session
   const [imageCache, setImageCache] = useState<Map<string, string>>(new Map());
+
+  useEscapeToClose(open && !isDownloading, () => onOpenChange(false));
 
   // Determine current image to display
   const isGalleryMode = images && images.length > 0;

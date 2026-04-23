@@ -132,8 +132,21 @@ export function DirectMessageItem({
 
         {/* Row 3: Department names */}
         {contact.sharedDepartments.length > 0 && (
-          <p className="text-[11px] text-gray-400 mt-0.5 truncate">
-            {contact.sharedDepartments.map((d) => d.departmentName).join(" · ")}
+          <p className="text-[11px] text-gray-400 mt-0.5 break-words">
+            {contact.sharedDepartments.map((d, idx) => (
+              <span key={d.departmentId}>
+                {idx > 0 && " · "}
+                <span
+                  className={
+                    d.isLeader
+                      ? "font-semibold text-brand-600"
+                      : undefined
+                  }
+                >
+                  {d.departmentName}
+                </span>
+              </span>
+            ))}
           </p>
         )}
       </div>

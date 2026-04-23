@@ -23,7 +23,7 @@ interface MessageListProps {
   };
   isLoadingNewer: boolean;
   typingUsers: any[];
-  confirmedMessageMap: Map<string, string | undefined>;
+  confirmedMessageMap: Map<string, { userId: string; name?: string }>;
   confirmingMessageId: string | null;
   openThreadMessageId?: string;
   threadUnreadCounts?: Record<string, number>;
@@ -126,7 +126,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                   onCreateTask={isDirect ? undefined : onCreateTask}
                   onConfirmInfo={isDirect ? undefined : onConfirmInfo}
                   hasConfirmedInfo={confirmedMessageMap.has(message.id)}
-                  confirmedByName={confirmedMessageMap.get(message.id)}
+                  confirmedByName={confirmedMessageMap.get(message.id)?.name}
+                  confirmedByUserId={
+                    confirmedMessageMap.get(message.id)?.userId
+                  }
                   isConfirming={confirmingMessageId === message.id}
                   onRetry={onRetry}
                   onScrollToQuoted={onScrollToQuoted}

@@ -25,11 +25,13 @@ import MessageVideo from "@/features/portal/workspace/MessageVideo";
 import { MessageStatusIndicator } from "@/components/chat/MessageStatusIndicator";
 import QuotedMessagePreview from "./QuotedMessagePreview";
 import type { ChatMessage, AttachmentDto } from "@/types/messages";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
 import { useReplyStore } from "@/stores/replyStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useConversationStore } from "@/stores";
 import { useContentProtection } from "@/hooks/useContentProtection";
 import { renderMessageWithMentions } from "@/utils/mentionHighlight";
+import { hasRole } from "@/utils/roleUtils";
 
 /**
  * Format file size from bytes to human-readable format
@@ -99,6 +101,7 @@ export interface MessageBubbleSimpleProps {
   onConfirmInfo?: (messageId: string) => void; // NEW: Confirm information
   hasConfirmedInfo?: boolean; // NEW: Check if message already has confirmed info
   confirmedByName?: string; // NEW: Name of user who confirmed (for display)
+  confirmedByUserId?: string; // NEW: User id of confirmer — used to gate "Giao việc" to the confirmer only
   onTaskLogClick?: (taskId: string) => void; // NEW: Open task log thread
   threadUnreadCount?: number; // NEW: Unread count for task log thread
   isConfirming?: boolean; // NEW: Loading state when confirming
@@ -124,6 +127,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   onConfirmInfo,
   hasConfirmedInfo = false,
   confirmedByName,
+  confirmedByUserId,
   onTaskLogClick,
   threadUnreadCount = 0,
   isConfirming = false,
@@ -139,6 +143,24 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   // Current viewer id — used to detect mentions targeting the current user so
   // we can render them with a stronger highlight (Google Chat style).
   const currentUserId = useAuthStore((state) => state.user?.id);
+  // Per-category leader check for this conversation (Admin bypass inside hook).
+  // Falls back to the currently-selected conversation from the store since the
+  // bubble component doesn't receive conversationId as a prop.
+  const selectedConversationId = useConversationStore(
+    (s) => s.selectedConversation?.id ?? null,
+  );
+  const isLeaderOfGroup = useIsLeaderInConversation(selectedConversationId);
+  // Admin users cannot receive info themselves — only category leaders can.
+  // Assigning a task from a message:
+  //  - before it's been received: any leader (admin included) may assign
+  //  - after it's been received: only the confirmer may assign
+  const isAdmin = hasRole("Admin");
+  const canReceiveInfo = isLeaderOfGroup && !isAdmin;
+  const isConfirmerOfMessage =
+    hasConfirmedInfo && !!confirmedByUserId && confirmedByUserId === currentUserId;
+  const canAssignTaskFromMessage = hasConfirmedInfo
+    ? isConfirmerOfMessage
+    : isLeaderOfGroup;
   // Content Protection: Prevent copy/select for message content
   const messageContentRef = useRef<HTMLDivElement>(null);
   useContentProtection(messageContentRef as React.RefObject<HTMLElement>, {
@@ -398,7 +420,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       <MessageSquarePlus size={14} />
                     </button>
                   )}
-                  {hasLeaderPermissions() &&
+                  {canAssignTaskFromMessage &&
                     onCreateTask &&
                     !message.linkedTaskId && (
                       <button
@@ -410,7 +432,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         <ClipboardPlus size={14} />
                       </button>
                     )}
-                  {hasLeaderPermissions() &&
+                  {canReceiveInfo &&
                     onConfirmInfo &&
                     message.contentType !== "SYS" &&
                     !message.linkedTaskId &&

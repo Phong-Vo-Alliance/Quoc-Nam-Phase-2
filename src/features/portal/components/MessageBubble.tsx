@@ -1,5 +1,7 @@
 import React from "react";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
+import { useConversationStore } from "@/stores";
+import { hasRole } from "@/utils/roleUtils";
 import { createPortal } from "react-dom";
 import type { Message, TaskLogMessage } from "../types";
 import {
@@ -104,6 +106,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   defaultChecklistVariantId,
   onCreateTaskFromMessage,
 }) => {
+  // Per-category leader check for the currently-selected conversation
+  // (message bubble doesn't receive conversationId as a prop).
+  const selectedConversationId = useConversationStore(
+    (s) => s.selectedConversation?.id ?? null,
+  );
+  const isLeaderOfGroup = useIsLeaderInConversation(selectedConversationId);
+  // Admins cannot receive info — only category leaders can.
+  // "Giao Task":
+  //  - before receiving: any leader (admin included) may assign
+  //  - after receiving:  only the receiver (in this wireframe path,
+  //    `isReceived` already represents the current viewer).
+  const isAdmin = hasRole("Admin");
+  const canReceiveInfo = isLeaderOfGroup && !isAdmin;
+  const canAssignTaskFromMessage = isReceived || isLeaderOfGroup;
+
   // Mobile-like overlay popup (preview + menu)
   const [showOverlay, setShowOverlay] = React.useState(false);
   const previewRef = React.useRef<HTMLDivElement | null>(null);
@@ -406,7 +423,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <ListTodo className="w-4 h-4" />
                 </button>
               )}
-              {!data.taskId && hasLeaderPermissions() && (
+              {!data.taskId && canAssignTaskFromMessage && (
                 <button data-testid="assign-task-button" title="Giao Task" className="p-1 hover:bg-brand-50 rounded" onClick={() => onAssignFromMessage?.(data)}>
                   <ClipboardPlus className="w-4 h-4 text-brand-600" />
                 </button>
@@ -416,7 +433,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <MessageSquarePlus className="w-4 h-4 text-emerald-600" />
                 </button>
               )}
-              {!isReceived && !data.taskId && hasLeaderPermissions() && (
+              {!isReceived && !data.taskId && canReceiveInfo && (
                 <button data-testid="receive-info-button" onClick={() => onReceiveInfo?.(data)} title="Tiếp nhận thông tin" className="p-1 rounded hover:bg-brand-50">
                   <Inbox className="w-4 h-4 text-brand-600" />
                 </button>
@@ -546,7 +563,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <span className="text-[12px] text-gray-800">Trả lời</span>
                 </button>
 
-                {!data.taskId && (
+                {!data.taskId && canAssignTaskFromMessage && (
                   <button className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 hover:bg-brand-50 transition"
                           onClick={() => { setShowOverlay(false); setOpenMobileAssign(true); }}>
                     <ClipboardPlus className="h-5 w-5 text-sky-600" />
@@ -577,7 +594,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   </button>
                 )}
 
-                {!isReceived && !data.taskId && (
+                {!isReceived && !data.taskId && canReceiveInfo && (
                   <button className="flex flex-col items-center gap-1 rounded-xl px-2 py-2 hover:bg-brand-50 transition"
                           onClick={() => { setShowOverlay(false); onReceiveInfo?.(data); }}>
                     <Inbox className="h-5 w-5 text-green-600" />

@@ -13,6 +13,7 @@ export interface Department {
   id: string;
   name: string;
   code: string;
+  isLeader?: boolean;
 }
 
 // Conversation Member User Info

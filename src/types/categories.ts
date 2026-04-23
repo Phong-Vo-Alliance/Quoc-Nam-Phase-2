@@ -28,6 +28,35 @@ export interface CategoryDto {
   updatedAt: string | null;
   /** Department IDs associated with this category */
   departmentIds?: string[];
+  /** Users who are leaders of this category's departments (source of truth for per-chat leader check) */
+  departmentLeaders?: CategoryDepartmentLeaderDto[];
+  /** Departments associated with this category (each flagged whether current user is leader) */
+  departments?: CategoryDepartmentDto[];
+}
+
+/**
+ * User summary returned in CategoryDto.departmentLeaders
+ * Contains only fields the category endpoint returns for each leader
+ */
+export interface CategoryDepartmentLeaderDto {
+  id: string;
+  userName: string | null;
+  fullName: string | null;
+  identifier: string | null;
+  roles: string | null;
+  avatarUrl: string | null;
+  isActive: boolean;
+}
+
+/**
+ * Department summary returned in CategoryDto.departments
+ * `isLeader` indicates whether the current (requesting) user is leader of this department
+ */
+export interface CategoryDepartmentDto {
+  id: string;
+  name: string;
+  code: string;
+  isLeader: boolean;
 }
 
 /**

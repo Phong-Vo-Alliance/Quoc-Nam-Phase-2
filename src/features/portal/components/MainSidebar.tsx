@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { hasRole } from "@/utils/roleUtils";
+import { useIsLeaderInAnyCategory } from "@/hooks/useCategoryLeader";
 import {
   MessageSquareText,
   Users,
@@ -44,7 +45,6 @@ interface MainSidebarProps {
   workspaceMode?: "default" | "pinned";
   viewMode?: "lead" | "staff";
   currentUserName?: string;
-  currentUserEmail?: string;
   currentUserDepartment?: string;
 
   pendingTasks?: {
@@ -66,7 +66,6 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   pendingTasks: initialPending = [],
   showPinnedToast,
   currentUserName = "",
-  currentUserEmail = "",
   currentUserDepartment = "",
   onOpenWorkTypeManager,
 }) => {
@@ -85,6 +84,8 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   // NEW: Profile popover open state
   const [openProfile, setOpenProfile] = React.useState(false);
   const navigate = useNavigate();
+
+  const isLeaderInAnyCategory = useIsLeaderInAnyCategory();
 
   const isShowPhasedFeatures = false;
 
@@ -289,8 +290,8 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
                 </span>
               </div>
 
-              {/* Quản lý loại việc (Leader only) */}
-              {hasLeaderPermissions() && (
+              {/* Quản lý loại việc (chỉ hiện khi user là leader ở ≥1 nhóm chat) */}
+              {isLeaderInAnyCategory && (
                 <div
                   className="flex flex-col items-center text-center text-gray-500 hover:text-brand-700 cursor-pointer"
                   data-testid="tools-worktype-manager-button"
@@ -341,22 +342,17 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
               <div className="text-sm font-semibold text-gray-800">
                 Xin chào {currentUserName}
               </div>
-              {currentUserEmail && (
-                <div className="text-xs text-gray-500 mt-0.5 break-all">
-                  {currentUserEmail}
-                </div>
-              )}
             </div>
 
             <div className="mt-1">
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                  hasLeaderPermissions()
+                  hasRole("Admin")
                     ? "bg-brand-100 text-brand-700"
                     : "bg-gray-100 text-gray-700"
                 }`}
               >
-                {hasLeaderPermissions() ? "🎖️ Trưởng nhóm" : "👤 Nhân viên"}
+                {hasRole("Admin") ? "🎖️ Admin" : "👤 Nhân viên"}
               </span>
             </div>
 
@@ -364,7 +360,7 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
               <div className="mt-2 px-2 py-1 text-xs text-gray-600">
                 <div className="flex items-start gap-1.5">
                   <Building2 className="h-3.5 w-3.5 shrink-0 text-gray-500 mt-0.5" />
-                  <span className="font-medium text-gray-700 break-words line-clamp-3">
+                  <span className="font-medium text-gray-700 break-words">
                     {currentUserDepartment}
                   </span>
                 </div>

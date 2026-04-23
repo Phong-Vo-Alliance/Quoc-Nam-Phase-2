@@ -111,7 +111,16 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   const { data: categoriesData, isLoading: categoriesLoading } =
     useCategories();
 
-  const categories = categoriesData || [];
+  // Only categories where current user is in `departmentLeaders` — a leader
+  // may only transfer the received info into a category they also lead.
+  const categories = React.useMemo(() => {
+    const all = categoriesData || [];
+    const uid = currentUser?.id;
+    if (!uid) return [];
+    return all.filter((cat) =>
+      cat.departmentLeaders?.some((l) => l.id === uid),
+    );
+  }, [categoriesData, currentUser?.id]);
 
   // Fetch conversations for selected category
   const { data: conversationsData, isLoading: conversationsLoading } =

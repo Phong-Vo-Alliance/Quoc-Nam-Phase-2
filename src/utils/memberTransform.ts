@@ -18,30 +18,8 @@ export interface MinimalMember {
 export function transformMemberToMinimal(
   member: ConversationMember,
 ): MinimalMember {
-  // Map role from API format to local format
-  // Check userInfo.roles first (system-level roles contain "Leader")
-  // Then fallback to member.role (conversation-level role)
-  let role: "Leader" | "Member" | undefined;
-
-  // Check userInfo.roles for "Leader" (case-insensitive)
-  const userRoles = member.userInfo?.roles?.toLowerCase() || "";
-  if (userRoles.includes("leader")) {
-    role = "Leader";
-  } else if (member.role) {
-    // Fallback to conversation role
-    const normalizedRole = member.role.toLowerCase();
-    if (
-      normalizedRole === "leader" ||
-      normalizedRole === "admin" ||
-      normalizedRole === "owner"
-    ) {
-      role = "Leader";
-    } else {
-      role = "Member";
-    }
-  } else {
-    role = "Member";
-  }
+  // Leader = any department has isLeader === true
+  const isLeader = member.departments?.some((dept) => dept.isLeader === true);
 
   return {
     id: member.userId,
@@ -50,7 +28,7 @@ export function transformMemberToMinimal(
       member.userName ||
       member.userInfo?.userName ||
       "Unknown User",
-    role,
+    role: isLeader ? "Leader" : "Member",
     departments: member.departments?.map((dept) => dept.name),
   };
 }

@@ -4,7 +4,11 @@ import { useAllInformationConfirmed } from "@/hooks/queries/useInformationConfir
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { useAuthStore } from "@/stores/authStore";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import {
+  useIsDepartmentLeaderInConversation,
+  useIsLeaderInConversation,
+} from "@/hooks/useCategoryLeader";
+import { hasRole } from "@/utils/roleUtils";
 import { buildReceiveInfoContent } from "@/utils/receiveInfoMessage";
 import type { GroupedMessage } from "@/utils/messageGrouping";
 
@@ -22,29 +26,42 @@ export function useConfirmedInfo({
   onConfirmInfoSuccess,
 }: UseConfirmedInfoOptions) {
   const user = useAuthStore((state) => state.user);
+  const isLeaderOfGroup = useIsLeaderInConversation(conversationId);
+  // Strict check (no Admin bypass) — used to gate the non-admin branch of the
+  // `/all` fetch. Admin is allowed by the backend regardless of
+  // `departmentLeaders` membership, so we OR the two checks below.
+  const isDepartmentLeaderOfGroup =
+    useIsDepartmentLeaderInConversation(conversationId);
+  // Admin can't confirm information, but still needs the confirmed map so the
+  // "Giao việc" button can be hidden on messages already taken by someone else
+  // (see confirm-info-assign-task-gating.md).
+  const isAdmin = hasRole("Admin");
 
   const [confirmingMessageId, setConfirmingMessageId] = useState<string | null>(
     null,
   );
   const confirmingRef = useRef(false); // Synchronous mutex to prevent duplicate API calls
 
-  // 🆕 NEW: Fetch ALL confirmed information for this conversation (leader only)
+  // 🆕 NEW: Fetch ALL confirmed information for this conversation. Allowed
+  // for Admin and for department leaders of the group — others 403.
   const { data: confirmedInfoData } = useAllInformationConfirmed(
     {
       conversationId,
     },
-    { enabled: !!conversationId && hasLeaderPermissions() },
+    { enabled: !!conversationId && (isAdmin || isDepartmentLeaderOfGroup) },
   );
 
   // 🆕 NEW: Fetch conversation members for confirmed info userName lookup
   const { data: conversationMembers } = useConversationMembers({
     conversationId,
-    enabled: !!conversationId && hasLeaderPermissions(),
+    enabled: !!conversationId && isLeaderOfGroup,
   });
 
-  // 🆕 NEW: Create Map of message IDs to confirmed info with userName
+  // 🆕 NEW: Create Map of message IDs to confirmed info with userName + userId.
+  // We track userId so callers can gate actions (e.g. "Giao việc") on whether
+  // the current viewer is the confirmer.
   const confirmedMessageMap = useMemo(() => {
-    const map = new Map<string, string | undefined>();
+    const map = new Map<string, { userId: string; name?: string }>();
     if (confirmedInfoData?.data) {
       confirmedInfoData.data.forEach((info) => {
         let confirmedByName: string | undefined;
@@ -60,7 +77,10 @@ export function useConfirmedInfo({
           confirmedByName = member?.userInfo?.fullName || member?.userName;
         }
 
-        map.set(info.messageId, confirmedByName);
+        map.set(info.messageId, {
+          userId: info.confirmedBy,
+          name: confirmedByName,
+        });
       });
     }
     return map;

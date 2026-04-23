@@ -1,5 +1,5 @@
 import React from "react";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
 import { useCallback, useEffect, useRef } from "react";
 import {
   Search,
@@ -298,6 +298,7 @@ export const ChatMessagePanel: React.FC<{
   const isMobileLayout = isMobile;
   const memberCount = selectedGroup?.members?.length ?? 0;
   const headerTitle = selectedGroup?.name ?? title;
+  const isLeaderOfGroup = useIsLeaderInConversation(selectedGroup?.id);
 
   const mainContainerCls = isMobileLayout
     ? "flex flex-col w-full h-full min-h-0 bg-white"
@@ -519,7 +520,7 @@ export const ChatMessagePanel: React.FC<{
                         <span className="text-sm font-normal">Công việc</span>
                       </button>
 
-                      {hasLeaderPermissions() && (
+                      {isLeaderOfGroup && (
                         <button
                           className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-brand-50 text-gray-700"
                           onClick={() => {

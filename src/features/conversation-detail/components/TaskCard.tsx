@@ -8,7 +8,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   useAddCheckItem,
@@ -149,7 +149,8 @@ export const TaskCard: React.FC<{
     (total ? `${doneCount}/${total} mục` : "Không có checklist");
 
   const [editChecklist, setEditChecklist] = React.useState(false);
-  const canEditStructure = hasLeaderPermissions() && t.status.code === "todo";
+  const isLeaderOfGroup = useIsLeaderInConversation(conversationId);
+  const canEditStructure = isLeaderOfGroup && t.status.code === "todo";
 
   const permissions = t.permissions;
 
@@ -502,7 +503,7 @@ export const TaskCard: React.FC<{
                 </span>
               </span>
 
-              {hasLeaderPermissions() && (
+              {isLeaderOfGroup && (
                 <>
                   <span>•</span>
                   {t.status.code !== "need_to_verified" &&
@@ -907,7 +908,7 @@ export const TaskCard: React.FC<{
                 )}
 
               {(permissions?.canChangeToFinished ||
-                (hasLeaderPermissions() &&
+                (isLeaderOfGroup &&
                   t.status.code === "need_to_verified")) &&
                 (t.status.code === "doing" ||
                   t.status.code === "need_to_verified") && (

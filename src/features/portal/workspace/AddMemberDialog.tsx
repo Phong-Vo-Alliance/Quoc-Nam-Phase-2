@@ -7,13 +7,15 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { X, Search, UserPlus, Loader2, AlertCircle, Check } from "lucide-react";
 import { useDepartmentMembers } from "@/hooks/queries/useDepartmentMembers";
 import { useAddGroupMember } from "@/hooks/mutations/useGroupMutations";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
 import { useCategories } from "@/hooks/queries/useCategories";
+import { useIsLeaderInCategory } from "@/hooks/useCategoryLeader";
+import { hasRole } from "@/utils/roleUtils";
 import { getSelectedCategory } from "@/utils/storage";
 import useAuthStore from "@/stores/authStore";
 import { sendMessage } from "@/api/messages.api";
 import type { SendChatMessageRequest } from "@/types/messages";
 import { toast } from "sonner";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 interface AddMemberDialogProps {
   open: boolean;
@@ -30,10 +32,10 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   conversationId,
   existingMemberIds = [],
 }) => {
-  // Hide dialog for non-leader users
-  if (!hasLeaderPermissions()) return null;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+  useEscapeToClose(open, onClose);
 
   // Get current user from localStorage
   const currentUserData = useAuthStore();
@@ -60,26 +62,34 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   // Fetch all categories to get departmentIds for the selected category
   const { data: categories } = useCategories();
 
-  // Find the selected category and match with user's leader department
-  const departmentId = useMemo(() => {
-    if (!selectedCategoryId || !categories || !user?.departments)
-      return undefined;
+  // Per-category leader check: Admin bypass, otherwise user.id ∈ category.departmentLeaders
+  const isLeaderOfCategory = useIsLeaderInCategory(selectedCategoryId);
 
-    // Find the selected category
+  // Pick a department to fetch candidate members from.
+  // Identity API returns 403 on /departments/{id}/members for non-leaders,
+  // so prefer a department the user is personally `isLeader` of. Only Admin
+  // can safely fall back to an arbitrary category dept.
+  const departmentId = useMemo(() => {
+    if (!selectedCategoryId || !categories) return undefined;
+
     const selectedCategory = categories.find(
       (cat) => cat.id === selectedCategoryId,
     );
+    const categoryDeptIds = selectedCategory?.departmentIds;
+    if (!categoryDeptIds?.length) return undefined;
 
-    if (!selectedCategory?.departmentIds) return undefined;
+    const userDepts = user?.departments;
+    if (userDepts?.length) {
+      const leaderDept = userDepts.find(
+        (dept: any) =>
+          dept.isLeader && categoryDeptIds.includes(dept.departmentId),
+      );
+      if (leaderDept) return leaderDept.departmentId;
+    }
 
-    // Find user's department where isLeader=true AND departmentId is in category.departmentIds
-    const matchingDepartment = user.departments.find(
-      (dept: any) =>
-        dept.isLeader &&
-        selectedCategory.departmentIds?.includes(dept.departmentId),
-    );
+    if (hasRole("Admin")) return categoryDeptIds[0];
 
-    return matchingDepartment?.departmentId;
+    return undefined;
   }, [selectedCategoryId, categories, user]);
 
   // Fetch department members
@@ -206,6 +216,8 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   };
 
   if (!open) return null;
+  // Hide dialog if current user is not a leader of this category (Admin bypass handled in hook)
+  if (!isLeaderOfCategory) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" data-testid="add-member-dialog">

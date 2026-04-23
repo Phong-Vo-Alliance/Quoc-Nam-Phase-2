@@ -1,7 +1,7 @@
 // InformationPanel - Information tab content for ConversationDetailPanel
 
 import React, { useEffect, useState } from "react";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
 import { RightAccordion } from "../components";
 import {
   FileManagerPhase1A,
@@ -63,6 +63,7 @@ export const InformationPanel: React.FC<InformationPanelProps> = ({
   const [conversationMessages, setConversationMessages] =
     useState<MessageLike[]>(messages);
   const { openModal, closeModal, isOpen } = useViewFiles();
+  const isLeaderOfGroup = useIsLeaderInConversation(groupId);
 
   // Update conversation messages when messages prop changes
   useEffect(() => {
@@ -143,7 +144,7 @@ export const InformationPanel: React.FC<InformationPanelProps> = ({
       </div>
 
       {/* Thành viên (Leader only) */}
-      {hasLeaderPermissions() && (
+      {isLeaderOfGroup && (
         <div
           className="premium-accordion-wrapper"
           data-testid="info-tab-members"

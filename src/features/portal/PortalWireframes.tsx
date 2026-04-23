@@ -333,7 +333,7 @@ export default function PortalWireframes({
         return departmentNames.join(" • ");
       }
     }
-    return "—";
+    return "";
   }, [authUser?.departments]);
 
   const currentUserId = getCurrentUserIdSync();
@@ -1282,7 +1282,6 @@ export default function PortalWireframes({
           ]}
           showPinnedToast={showPinnedToast}
           currentUserName={currentUser}
-          currentUserEmail={authUser?.identifier}
           currentUserDepartment={currentUserDepartment}
           onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
         />

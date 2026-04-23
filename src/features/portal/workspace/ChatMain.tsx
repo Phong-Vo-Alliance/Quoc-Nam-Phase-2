@@ -1,5 +1,5 @@
 import React from 'react';
-import { hasLeaderPermissions } from '@/utils/roleUtils';
+import { useIsLeaderInConversation } from '@/hooks/useCategoryLeader';
 import { useCallback, useEffect, useRef } from 'react';
 import {
   Search,
@@ -275,6 +275,10 @@ export const ChatMain: React.FC<{
   const [inlineToast, setInlineToast] = React.useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
+  // Per-category leader check (Admin bypass inside hook). Drives task/info UI for this chat group.
+  const groupId = selectedGroup?.id;
+  const isLeaderOfGroup = useIsLeaderInConversation(groupId);
+
   // Mobile task log screen state
   const [mobileTaskLogOpen, setMobileTaskLogOpen] = React.useState(false);
   const [mobileTaskLogId, setMobileTaskLogId] = React.useState<string | null>(null);
@@ -290,9 +294,9 @@ export const ChatMain: React.FC<{
 
   // Calculate waiting info count for badge
   const waitingInfoCount = React.useMemo(() => {
-    if (!hasLeaderPermissions() || !isMobile) return 0;
+    if (!isLeaderOfGroup || !isMobile) return 0;
     return receivedInfos?.filter(info => info.status === 'waiting').length ?? 0;
-  }, [receivedInfos, viewMode, isMobile]);
+  }, [receivedInfos, isLeaderOfGroup, isMobile]);
 
   // ✅ UPDATED: Task banner data for BOTH staff AND leader
   const myPendingTasks = React.useMemo(() => {
@@ -507,7 +511,7 @@ export const ChatMain: React.FC<{
 
   // Calculate leader's active task count for badge
   const leaderOwnActiveCount = React.useMemo(() => {
-    if (!hasLeaderPermissions() || !currentUserId) return 0;
+    if (!isLeaderOfGroup || !currentUserId) return 0;
 
     // Helper to check if date is today
     const isToday = (iso?: string) => {
@@ -527,7 +531,7 @@ export const ChatMain: React.FC<{
       (t.status.code === 'todo' || t.status.code === 'doing') &&
       (!selectedWorkTypeId || t.workTypeId === selectedWorkTypeId)
     ).length;
-  }, [tasks, viewMode, currentUserId, selectedWorkTypeId]);
+  }, [tasks, isLeaderOfGroup, currentUserId, selectedWorkTypeId]);
 
   // Handle confirm group transfer
   const handleConfirmGroupTransfer = React.useCallback((payload: {
@@ -615,12 +619,12 @@ export const ChatMain: React.FC<{
                           <LayoutList className="h-4 w-4 text-brand-600" />
                         </div>
                         <span className="text-sm font-normal">
-                          Công việc {hasLeaderPermissions() ? '(Phòng ban)' : ''}
+                          Công việc {isLeaderOfGroup ? '(Phòng ban)' : ''}
                         </span>
                       </button>
 
                       {/* Leader own tasks menu item */}
-                      {hasLeaderPermissions() && (
+                      {isLeaderOfGroup && (
                         <button
                           className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-brand-50 text-gray-700"
                           onClick={() => {
@@ -654,7 +658,7 @@ export const ChatMain: React.FC<{
                       )}
 
                       {/* Tiếp nhận công việc */}
-                      {hasLeaderPermissions() && (
+                      {isLeaderOfGroup && (
                         <button
                           className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-brand-50 text-gray-700"
                           onClick={() => {
@@ -687,7 +691,7 @@ export const ChatMain: React.FC<{
                         </button>
                       )}
 
-                      {hasLeaderPermissions() && (
+                      {isLeaderOfGroup && (
                         <button
                           className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-brand-50 text-gray-700"
                           onClick={() => {
@@ -769,7 +773,7 @@ export const ChatMain: React.FC<{
             onChangeWorkType?.(workTypeId);
 
             // Open appropriate task panel based on role
-            if (hasLeaderPermissions()) {
+            if (isLeaderOfGroup) {
               setMobileOwnTasksOpen(true); // ✅ Leader sees their own tasks
             } else {
               setMobileTaskOpen(true); // Staff sees team tasks

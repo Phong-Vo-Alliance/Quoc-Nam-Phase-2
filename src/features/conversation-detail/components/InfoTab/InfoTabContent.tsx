@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { Users, Plus } from "lucide-react";
-import { hasLeaderPermissions } from "@/utils/roleUtils";
+import { Users, Plus, Building2 } from "lucide-react";
+import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
 import { RightAccordion } from "@/features/portal/components";
 import { FileManagerPhase1A } from "@/features/portal/components/FileManagerPhase1A";
 import type { MessageLike } from "@/features/portal/components/FileManagerPhase1A";
+import type { CategoryDepartmentDto } from "@/types/categories";
 import type { MinimalMember } from "../../types";
 import { MemberListModal } from "../MemberListModal";
 
@@ -11,6 +12,7 @@ interface InfoTabContentProps {
   isDM: boolean;
   categoryName: string;
   groupName: string;
+  departments?: CategoryDepartmentDto[];
   groupId?: string;
   selectedWorkTypeId?: string;
   handleOpenSourceMessageById: (messageId: string) => void;
@@ -41,6 +43,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
   isDM,
   categoryName,
   groupName,
+  departments,
   groupId,
   selectedWorkTypeId,
   handleOpenSourceMessageById,
@@ -54,7 +57,9 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
   onNavigateToChat,
   onOpenTaskLogByMessageId,
 }) => {
+  const visibleDepartments = (departments ?? []).filter((d) => !!d.name);
   const [isMemberListOpen, setIsMemberListOpen] = useState(false);
+  const isLeaderOfGroup = useIsLeaderInConversation(groupId);
 
   return (
     <div className="space-y-4 min-h-0" data-testid="info-tab-content">
@@ -75,7 +80,8 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
               <div className="text-xs text-gray-700">
                 {selectedWorkTypeId ? (
                   <>
-                    Đang xem thông tin cho{" "}
+                    Đang xem thông tin cho
+                    <br />
                     <span className="font-medium text-brand-600">
                       Loại việc: {groupName}
                     </span>
@@ -166,7 +172,7 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
       </div>
 
       {/* Thanh vien (Leader only + Group chat only) */}
-      {hasLeaderPermissions() && !isDM ? (
+      {isLeaderOfGroup && !isDM ? (
         <div
           className="premium-accordion-wrapper"
           data-testid="members-section"
@@ -228,6 +234,30 @@ export const InfoTabContent: React.FC<InfoTabContentProps> = ({
           </RightAccordion>
         </div>
       ) : null}
+
+      {/* Phòng ban (Leader/Admin only + Group chat only) */}
+      {!isDM && isLeaderOfGroup && visibleDepartments.length > 0 && (
+        <div
+          className="premium-accordion-wrapper"
+          data-testid="departments-section"
+        >
+          <div className="premium-light-bar" />
+          <RightAccordion title="Phòng ban">
+            <ul className="flex flex-col gap-1.5">
+              {visibleDepartments.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center gap-2"
+                  data-testid={`department-item-${d.id}`}
+                >
+                  <Building2 className="h-4 w-4 text-gray-600" />
+                  <span className="text-xs text-brand-600">{d.name}</span>
+                </li>
+              ))}
+            </ul>
+          </RightAccordion>
+        </div>
+      )}
 
       {/* Member List Modal - Only render when members exist */}
       {members.length > 0 && (

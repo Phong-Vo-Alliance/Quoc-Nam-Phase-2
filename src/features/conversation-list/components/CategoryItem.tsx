@@ -8,7 +8,9 @@
  * - Total unread count badge
  */
 
+import { Crown } from "lucide-react";
 import RelativeTime from "@/features/portal/components/RelativeTime";
+import { useAuthStore } from "@/stores/authStore";
 import { formatMessagePreview } from "@/utils/formatMessagePreview";
 import type { CategoryItemProps } from "../types";
 import { useMemo } from "react";
@@ -27,6 +29,11 @@ export function CategoryItem({
   isActive,
   onClick,
 }: CategoryItemProps) {
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isCurrentUserLeader = !!category.departmentLeaders?.some(
+    (leader) => leader.id === currentUserId && leader.isActive,
+  );
+
   // Find the latest conversation with a message
   const latestConversation = category.conversations
     ?.filter((conv) => conv.lastMessage !== null)
@@ -66,10 +73,18 @@ export function CategoryItem({
       onClick={onClick}
     >
       {/* Avatar */}
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600/10 text-brand-700 border border-brand-100">
-        <span className="text-[11px] font-semibold">
-          {getInitials(category.name)}
-        </span>
+      <div className="relative flex-shrink-0">
+        {isCurrentUserLeader && (
+          <Crown
+            className="absolute -top-[0.1rem] -right-[0.05rem] rotate-[30deg] h-3 w-3 text-amber-500 fill-amber-400 drop-shadow-sm pointer-events-none"
+            aria-label="Bạn là trưởng nhóm"
+          />
+        )}
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600/10 text-brand-700 border border-brand-100">
+          <span className="text-[11px] font-semibold">
+            {getInitials(category.name)}
+          </span>
+        </div>
       </div>
 
       {/* Content */}

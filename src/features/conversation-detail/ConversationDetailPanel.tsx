@@ -1,5 +1,8 @@
 import React from "react";
-import { hasLeaderPermissions, hasStaffPermissions } from "@/utils/roleUtils";
+import {
+  useIsDepartmentLeaderInConversation,
+  useIsLeaderInConversation,
+} from "@/hooks/useCategoryLeader";
 import { SegmentedTabs } from "../portal/components/SegmentedTabs";
 import { AddMemberDialog } from "../portal/workspace/AddMemberDialog";
 import { ViewAllTasksModal } from "../portal/components/ViewAllTasksModal";
@@ -35,6 +38,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useConversationStore } from "@/stores";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { useFilteredAssignees } from "@/hooks/useFilteredAssignees";
+import { hasRole } from "@/utils/roleUtils";
 
 // Import extracted components from conversation-detail feature
 import {
@@ -154,9 +158,9 @@ export const ConversationDetailPanel: React.FC<
 
   // Derive categoryName and groupName from categories query using conversation ID
   const { data: categories } = useCategories();
-  const { categoryName, groupName } = React.useMemo(() => {
+  const { categoryName, groupName, categoryDepartments } = React.useMemo(() => {
     if (!selectedConversation?.id || !categories) {
-      return { categoryName: "", groupName: "Nhóm" };
+      return { categoryName: "", groupName: "Nhóm", categoryDepartments: [] };
     }
     for (const cat of categories) {
       const conv = cat.conversations?.find(
@@ -166,13 +170,26 @@ export const ConversationDetailPanel: React.FC<
         return {
           categoryName: cat.name || "",
           groupName: conv.conversationName || "Nhóm",
+          categoryDepartments: cat.departments ?? [],
         };
       }
     }
-    return { categoryName: "", groupName: "Nhóm" };
+    return { categoryName: "", groupName: "Nhóm", categoryDepartments: [] };
   }, [selectedConversation?.id, categories]);
   const isDM = activeTabType === "dm" || selectedConversation?.type === "dm";
   const authUser = useAuthStore((s) => s.user);
+
+  // Per-category leader check (Admin bypass inside hook).
+  // Replaces the previous global `hasLeaderPermissions()` for everything scoped to this conversation.
+  const isLeaderOfGroup = useIsLeaderInConversation(groupId);
+  // Strict check (no Admin bypass) — backend rejects callers who aren't in
+  // `departmentLeaders`, so Admins that aren't department leaders would 403.
+  const isDepartmentLeaderOfGroup =
+    useIsDepartmentLeaderInConversation(groupId);
+  // Information-confirmed is a department-leader-only feature; Admin has no
+  // UI for it, so skip the API call entirely even if the admin happens to be
+  // listed in `departmentLeaders`.
+  const isAdmin = hasRole("Admin");
 
   /* =============== Dynamic Tabs =============== */
   const detailTabs = React.useMemo(() => {
@@ -205,10 +222,10 @@ export const ConversationDetailPanel: React.FC<
 
   // Auto-switch to "mine" when forceLeaderMine changes (from TaskBanner "Xem chi tiết")
   React.useEffect(() => {
-    if (forceLeaderMine && forceLeaderMine > 0 && hasLeaderPermissions()) {
+    if (forceLeaderMine && forceLeaderMine > 0 && isLeaderOfGroup) {
       setLeaderMode("mine");
     }
-  }, [forceLeaderMine]);
+  }, [forceLeaderMine, isLeaderOfGroup]);
   const [assigneeFilter, setAssigneeFilter] = React.useState<string>("all");
 
   // Leader Team Mode - Collapse states
@@ -261,7 +278,7 @@ export const ConversationDetailPanel: React.FC<
       conversationId: groupId,
       isFinished: false, // Only show unfinished confirmed info
     },
-    { enabled: !!groupId && hasLeaderPermissions() },
+    { enabled: !!groupId && !isAdmin && isDepartmentLeaderOfGroup },
   );
 
   const confirmedInfos = confirmedInfoData?.data || [];
@@ -289,7 +306,7 @@ export const ConversationDetailPanel: React.FC<
     isError: isFilterError,
   } = useFilteredAssignees({
     conversationId: groupId || "",
-    enabled: hasLeaderPermissions(), // Enable cho cả team và mine mode
+    enabled: isLeaderOfGroup, // Enable cho cả team và mine mode
   });
 
   /* =============== Derived Data =============== */
@@ -334,8 +351,8 @@ export const ConversationDetailPanel: React.FC<
 
   // LEADER MODE: Assignee options (filtered for both team and mine mode)
   const assigneeOptions = React.useMemo(
-    () => (hasLeaderPermissions() ? filteredMembers : members),
-    [filteredMembers, members],
+    () => (isLeaderOfGroup ? filteredMembers : members),
+    [isLeaderOfGroup, filteredMembers, members],
   );
 
   // LEADER TEAM MODE: Team tasks by assignee filter
@@ -370,9 +387,9 @@ export const ConversationDetailPanel: React.FC<
 
   // LEADER MINE MODE: Leader's own tasks
   const leaderOwnTasks = React.useMemo(() => {
-    if (!hasLeaderPermissions() || !effectiveUserId) return [];
+    if (!isLeaderOfGroup || !effectiveUserId) return [];
     return tasksByWorkRaw.filter((t) => t.assignTo === effectiveUserId);
-  }, [tasksByWorkRaw, effectiveUserId]);
+  }, [isLeaderOfGroup, tasksByWorkRaw, effectiveUserId]);
 
   const leaderOwnBuckets = React.useMemo(
     () => ({
@@ -389,7 +406,7 @@ export const ConversationDetailPanel: React.FC<
 
   // All completed tasks for leader mine (any date)
   const leaderOwnAllCompleted = React.useMemo(() => {
-    if (!hasLeaderPermissions() || !effectiveUserId) return [];
+    if (!isLeaderOfGroup || !effectiveUserId) return [];
 
     return tasksByWorkRaw
       .filter(
@@ -403,7 +420,7 @@ export const ConversationDetailPanel: React.FC<
         const db = new Date(b.updatedAt || b.createdAt || "");
         return db.getTime() - da.getTime();
       });
-  }, [tasksByWorkRaw, effectiveUserId, selectedWorkTypeId]);
+  }, [isLeaderOfGroup, tasksByWorkRaw, effectiveUserId, selectedWorkTypeId]);
 
   /* =============== Confirmed Info Transforms & Handlers =============== */
   // Transform confirmed info to ReceivedInfo format for display
@@ -626,6 +643,7 @@ export const ConversationDetailPanel: React.FC<
               isDM={isDM}
               categoryName={categoryName}
               groupName={groupName}
+              departments={categoryDepartments}
               groupId={groupId || ""}
               selectedWorkTypeId={selectedWorkTypeId}
               handleOpenSourceMessageById={handleOpenSourceMessageById}
@@ -644,8 +662,8 @@ export const ConversationDetailPanel: React.FC<
 
         {tab === "order" && !isDM && (
           <>
-            {/* Staff Mode */}
-            {hasStaffPermissions() && !hasLeaderPermissions() && (
+            {/* Staff Mode — shown when current user is NOT a leader of this category */}
+            {!isLeaderOfGroup && (
               <StaffModeContent
                 staffBuckets={staffBuckets}
                 groupName={groupName}
@@ -673,7 +691,7 @@ export const ConversationDetailPanel: React.FC<
             )}
 
             {/* Leader Mode */}
-            {hasLeaderPermissions() && (
+            {isLeaderOfGroup && (
               <LeaderModeContent
                 leaderMode={leaderMode}
                 setLeaderMode={setLeaderMode}

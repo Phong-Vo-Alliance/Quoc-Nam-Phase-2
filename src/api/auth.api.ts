@@ -63,7 +63,7 @@ export async function login(credentials: LoginRequest): Promise<LoginResponse> {
       ...credentials,
       clientIp: credentials.clientIp ?? "",
       clientPlatform: credentials.clientPlatform ?? "Web",
-      clientType: credentials.clientType ?? 1,
+      clientType: credentials.clientType ?? 2,
       platformResolutionSource: credentials.platformResolutionSource ?? 1,
       deviceFingerprint: credentials.deviceFingerprint ?? deviceFingerprint,
     });

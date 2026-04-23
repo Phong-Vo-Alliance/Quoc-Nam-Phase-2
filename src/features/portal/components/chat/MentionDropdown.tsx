@@ -122,6 +122,11 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
         const fullName = member.userInfo?.fullName || member.userName;
         const identifier = member.userInfo?.identifier || "";
         const isAllMention = member.userId === ALL_MENTION_USER_ID;
+        const departmentNames =
+          member.departments
+            ?.map((dept) => dept.name)
+            .filter((name): name is string => Boolean(name)) ?? [];
+        const departmentLabel = departmentNames.join(" • ");
 
         // Parse member count from identifier for the @all row ("Thông báo cho N thành viên")
         const allMemberCount = isAllMention
@@ -143,7 +148,9 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
             )}
             onClick={() => onSelect(member)}
             data-testid={
-              isAllMention ? "mention-item-all" : `mention-item-${member.userId}`
+              isAllMention
+                ? "mention-item-all"
+                : `mention-item-${member.userId}`
             }
           >
             {/* Avatar (or Users icon for @all) */}
@@ -173,14 +180,18 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
                 </div>
               )}
 
-              {/* Identifier (email/phone or member count subtitle) */}
-              {identifier && (
-                <div className="text-xs text-gray-500 truncate">
-                  {isAllMention
-                    ? identifier
-                    : highlightMatch(identifier, searchQuery)}
-                </div>
-              )}
+              {/* Subtitle: member count for @all, departments for users */}
+              {isAllMention
+                ? identifier && (
+                    <div className="text-[11px] text-gray-400 line-clamp-2">
+                      {identifier}
+                    </div>
+                  )
+                : departmentLabel && (
+                    <div className="text-[11px] text-gray-400 line-clamp-2">
+                      {departmentLabel}
+                    </div>
+                  )}
             </div>
 
             {/* Selected indicator */}

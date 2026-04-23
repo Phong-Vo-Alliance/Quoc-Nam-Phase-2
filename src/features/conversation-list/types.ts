@@ -2,6 +2,7 @@
  * Types for conversation-list feature
  */
 
+import type { CategoryDepartmentLeaderDto } from "@/types/categories";
 import type { DirectConversation } from "@/types/conversations";
 import type {
   DepartmentColleagueDto,
@@ -57,6 +58,7 @@ export interface CategoryItemProps {
   category: {
     id: string;
     name: string;
+    departmentLeaders?: CategoryDepartmentLeaderDto[];
     conversations: Array<{
       conversationId: string;
       conversationName: string;

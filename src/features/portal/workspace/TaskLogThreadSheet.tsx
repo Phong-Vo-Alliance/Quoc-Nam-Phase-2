@@ -51,6 +51,7 @@ import { formatDateSeparator } from "@/utils/formatDateSeparator"; // 🆕 NEW: 
 import type { QuotedMessageData } from "@/stores/replyStore"; // 🆕 NEW: Reply type
 import QuotedMessagePreview from "@/features/portal/components/chat/QuotedMessagePreview"; // 🆕 NEW: Reply preview
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 /**
  * Merge two blocks of thread replies (around-block + latest-block).
@@ -202,6 +203,8 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   );
 
   const parentMessageId = task?.messageId;
+
+  useEscapeToClose(open && !loading, onClose);
 
   // ✅ NEW: Mark thread as read when opened (only if unreadReplyCount > 0)
   const markAsRead = useMarkConversationAsRead();
