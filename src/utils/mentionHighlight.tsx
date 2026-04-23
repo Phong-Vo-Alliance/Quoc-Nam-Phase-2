@@ -7,6 +7,10 @@
 import React from "react";
 import type { MentionDto, MentionInputDto } from "@/types/messages";
 import { renderWithLinks } from "@/utils/linkify";
+import {
+  ALL_MENTION_NAME,
+  ALL_MENTION_USER_ID,
+} from "@/features/portal/components/chat/mentionConstants";
 
 // Union type for mentions (can be either from request or response)
 type MentionType = MentionDto | MentionInputDto;
@@ -15,6 +19,57 @@ export interface MentionSegment {
   type: "text" | "mention";
   content: string;
   mentionData?: MentionType;
+}
+
+const ALL_TOKEN = `@${ALL_MENTION_NAME}`;
+
+/**
+ * Scan content for "@all" tokens at valid positions that aren't covered by
+ * any existing mention range, and return virtual mention entries for them.
+ *
+ * This makes the "@all" chip render even when every non-self member was
+ * mentioned individually and dedup in buildMentionsForApi left the @all range
+ * with 0 entries. The virtual entry uses the sentinel userId, so it will
+ * never match the viewer and always renders with the "other-user" chip style.
+ */
+function findUnmentionedAllTokens(
+  content: string,
+  mentions: MentionType[],
+): MentionInputDto[] {
+  const results: MentionInputDto[] = [];
+  const tokenLen = ALL_TOKEN.length;
+  let searchStart = 0;
+
+  while (searchStart < content.length) {
+    const idx = content.indexOf(ALL_TOKEN, searchStart);
+    if (idx === -1) break;
+    searchStart = idx + 1;
+
+    // Must be preceded by start-of-string or whitespace
+    const before = idx === 0 ? undefined : content[idx - 1];
+    if (before !== undefined && !/\s/.test(before)) continue;
+
+    // Must NOT be followed by a word char (so "@allen" never matches)
+    const afterIdx = idx + tokenLen;
+    const after = afterIdx < content.length ? content[afterIdx] : undefined;
+    if (after !== undefined && /[A-Za-z0-9_]/.test(after)) continue;
+
+    // Skip if this range overlaps any real mention entry
+    const overlaps = mentions.some((m) => {
+      const mEnd = m.startIndex + m.length;
+      return !(afterIdx <= m.startIndex || idx >= mEnd);
+    });
+    if (overlaps) continue;
+
+    results.push({
+      userId: ALL_MENTION_USER_ID,
+      startIndex: idx,
+      length: tokenLen,
+      mentionText: ALL_TOKEN,
+    });
+  }
+
+  return results;
 }
 
 /**
@@ -59,8 +114,15 @@ export function parseMentions(
 
   const mentionList = mentions as MentionType[];
 
+  // Auto-highlight "@all" tokens in content that aren't covered by any real
+  // mention entry (happens when every non-self member was individually
+  // mentioned and buildMentionsForApi dedup'd the @all range to 0 entries).
+  const virtualAll = findUnmentionedAllTokens(nfcContent, mentionList);
+  const augmentedMentions =
+    virtualAll.length > 0 ? [...mentionList, ...virtualAll] : mentionList;
+
   // Sort mentions by startIndex to process them in order
-  const sortedMentions = [...mentionList].sort(
+  const sortedMentions = [...augmentedMentions].sort(
     (a, b) => a.startIndex - b.startIndex,
   );
 
@@ -161,21 +223,40 @@ export function renderMessageWithMentions(
 
   const segments = parseMentions(content, mentions);
 
-  // Collect startIndex positions where the viewer themself is mentioned.
-  // Needed because @all expands to multiple mention entries sharing the same
-  // startIndex — parseMentions keeps only the first, which may not be the
-  // viewer's entry.
+  // Collect startIndex positions that should receive the self-mention style.
+  //
+  // Priority rule: when the viewer is targeted by BOTH an @all expansion and
+  // a dedicated @name mention, only the dedicated @name gets the self-mention
+  // highlight — @all falls back to the "mention of another user" style.
+  //
+  // A mention range is "shared" (part of @all) when multiple mention entries
+  // share the same (startIndex, length); a dedicated @name owns its range
+  // uniquely.
   const selfMentionPositions = new Set<number>();
   if (currentUserId && mentions) {
+    const rangeCounts = new Map<string, number>();
+    for (const m of mentions) {
+      const key = `${m.startIndex}-${m.length}`;
+      rangeCounts.set(key, (rangeCounts.get(key) ?? 0) + 1);
+    }
+
+    const dedicatedSelf = new Set<number>();
+    const sharedSelf = new Set<number>();
+
     for (const m of mentions) {
       const userId =
         "mentionedUserId" in m
           ? (m as MentionDto).mentionedUserId
           : (m as MentionInputDto).userId;
-      if (userId === currentUserId) {
-        selfMentionPositions.add(m.startIndex);
-      }
+      if (userId !== currentUserId) continue;
+
+      const key = `${m.startIndex}-${m.length}`;
+      if ((rangeCounts.get(key) ?? 0) > 1) sharedSelf.add(m.startIndex);
+      else dedicatedSelf.add(m.startIndex);
     }
+
+    const chosen = dedicatedSelf.size > 0 ? dedicatedSelf : sharedSelf;
+    chosen.forEach((p) => selfMentionPositions.add(p));
   }
 
   // Default link class for received messages (blue)

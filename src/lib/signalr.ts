@@ -1,7 +1,17 @@
 import * as signalR from "@microsoft/signalr";
 import type { QueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import type { SignalRConnectionState } from "@/types/signalr-events";
+import { useAuthStore } from "@/stores/authStore";
+import type {
+  CategoryWithUnread,
+  ConversationDto,
+} from "@/types/categories";
+import type {
+  DepartmentColleagueDto,
+  DepartmentMemberDto,
+} from "@/types/identity";
 
 // Re-export all event types from dedicated file
 export type { SignalRConnectionState };
@@ -119,6 +129,7 @@ export const SIGNALR_EVENTS = {
   // ============= Identity Events =============
   DEPARTMENT_MEMBERS_ADDED: "DepartmentMembersAdded",
   DEPARTMENT_MEMBERS_REMOVED: "DepartmentMembersRemoved",
+  DEPARTMENT_MEMBER_LEADER_STATUS_CHANGED: "DepartmentMemberLeaderStatusChanged",
 
   // ============= Error Events =============
   ERROR: "Error",
@@ -678,6 +689,121 @@ class IdentityHubConnection {
     });
   }
 
+  private resolveUserFullName(userId: string): string | null {
+    if (!this.queryClient) return null;
+
+    // 1) department-colleagues cache — primary source, contains every
+    //    colleague across user's departments with fullName.
+    const colleagues = this.queryClient.getQueryData<DepartmentColleagueDto[]>([
+      "department-colleagues",
+    ]);
+    const fromColleagues = colleagues?.find((c) => c.userId === userId)?.fullName;
+    if (fromColleagues) return fromColleagues;
+
+    // 2) categories cache — departmentLeaders[] (useful for demotion case:
+    //    user was a leader, still in cache before refetch).
+    const categories = this.queryClient.getQueryData<CategoryWithUnread[]>([
+      "categories",
+      "list",
+    ]);
+    if (categories) {
+      for (const category of categories) {
+        const leader = category.departmentLeaders?.find((l) => l.id === userId);
+        if (leader?.fullName) return leader.fullName;
+      }
+    }
+
+    // 3) per-department members cache — covers promotion case
+    //    (user just became leader, not yet in departmentLeaders).
+    const memberQueries = this.queryClient.getQueriesData<DepartmentMemberDto[]>({
+      queryKey: ["department-members"],
+    });
+    for (const [, members] of memberQueries) {
+      const hit = members?.find((m) => m.userId === userId)?.userFullName;
+      if (hit) return hit;
+    }
+
+    // 4) conversation members cache — last resort, useful when user appears
+    //    in some group chat members list the viewer has loaded.
+    const conversationMembers = this.queryClient.getQueriesData<
+      ConversationDto["members"]
+    >({
+      queryKey: ["conversations", "members"],
+    });
+    for (const [, members] of conversationMembers) {
+      const hit = members?.find((m) => m.userId === userId)?.userInfo?.fullName;
+      if (hit) return hit;
+    }
+
+    return null;
+  }
+
+  private resolveDepartmentName(departmentId: string): string | null {
+    if (!this.queryClient) return null;
+
+    // 1) authStore — current user's own departments (fast, synchronous).
+    const userDepartments = useAuthStore.getState().user?.departments;
+    const own = userDepartments?.find(
+      (d) => d.departmentId === departmentId,
+    )?.departmentName;
+    if (own) return own;
+
+    // 2) categories cache — category.departments[] carries { id, name }.
+    const categories = this.queryClient.getQueryData<CategoryWithUnread[]>([
+      "categories",
+      "list",
+    ]);
+    if (categories) {
+      for (const category of categories) {
+        const hit = category.departments?.find((d) => d.id === departmentId);
+        if (hit?.name) return hit.name;
+      }
+    }
+
+    return null;
+  }
+
+  private showLeaderStatusChangeToast(payload: {
+    departmentId?: string;
+    userId?: string;
+    isLeader?: boolean;
+  }): void {
+    if (!payload?.userId || !payload?.departmentId) return;
+
+    const currentUserId = useAuthStore.getState().user?.id;
+    const isSelf = payload.userId === currentUserId;
+
+    const subject = isSelf
+      ? "Bạn"
+      : this.resolveUserFullName(payload.userId) ?? "Một thành viên";
+    const departmentName =
+      this.resolveDepartmentName(payload.departmentId) ?? "phòng ban";
+
+    const message = payload.isLeader
+      ? `${subject} đã trở thành trưởng nhóm của phòng ban ${departmentName}`
+      : `${subject} đã không còn là trưởng nhóm của phòng ban ${departmentName}`;
+
+    toast.info(message);
+  }
+
+  private refreshLeaderChangeRelatedQueries(): void {
+    if (!this.queryClient) return;
+
+    // Category response carries `departmentLeaders` — leader/staff swap
+    // must refetch so per-category leader gating stays accurate.
+    this.queryClient.invalidateQueries({
+      queryKey: ["categories"],
+      refetchType: "active",
+    });
+
+    // Per-conversation member lists also carry the `role` (leader/staff)
+    // field — refetch whichever one is currently on screen.
+    this.queryClient.invalidateQueries({
+      queryKey: ["conversations", "members"],
+      refetchType: "active",
+    });
+  }
+
   async start(identityAccessToken?: string): Promise<void> {
     if (!IDENTITY_HUB_URL) {
       console.warn(
@@ -708,6 +834,20 @@ class IdentityHubConnection {
         conn.on(SIGNALR_EVENTS.DEPARTMENT_MEMBERS_REMOVED, () => {
           this.refreshDirectMessageRelatedQueries();
         });
+
+        conn.on(
+          SIGNALR_EVENTS.DEPARTMENT_MEMBER_LEADER_STATUS_CHANGED,
+          (payload: {
+            departmentId?: string;
+            userId?: string;
+            isLeader?: boolean;
+          }) => {
+            // Read caches BEFORE invalidating so resolver can still see
+            // current state (demoted user is still in departmentLeaders, etc).
+            this.showLeaderStatusChangeToast(payload);
+            this.refreshLeaderChangeRelatedQueries();
+          },
+        );
 
         conn.onreconnecting((error) => {
           const ts = new Date().toISOString();

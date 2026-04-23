@@ -259,6 +259,16 @@ export const MentionInputInline = forwardRef<
     // Prepends the virtual "@all" entry when it matches the query and hasn't been selected yet.
     const filteredMembers = React.useMemo(() => {
       const mentionedUserIds = new Set(mentions.map((m) => m.userId));
+      const allAlreadyMentioned = mentionedUserIds.has(ALL_MENTION_USER_ID);
+      const targetCount = members.filter(
+        (member) => member.userId !== currentUser?.id,
+      ).length;
+
+      // DM 1-1: @all expands to exactly 1 person, so re-mentioning that same
+      // person individually is redundant. Only block the dropdown in this case.
+      if (allAlreadyMentioned && targetCount === 1) {
+        return [];
+      }
 
       // Filter out current user and already-mentioned users
       const availableMembers = members.filter(
@@ -286,10 +296,6 @@ export const MentionInputInline = forwardRef<
       // Prepend the virtual "@all" entry when enabled and the search query
       // matches. The feature is currently gated behind MENTION_ALL_ENABLED.
       if (MENTION_ALL_ENABLED) {
-        const targetCount = members.filter(
-          (member) => member.userId !== currentUser?.id,
-        ).length;
-        const allAlreadyMentioned = mentionedUserIds.has(ALL_MENTION_USER_ID);
         const queryMatchesAll =
           !mentionSearchQuery ||
           ALL_MENTION_NAME.startsWith(removeDiacritics(mentionSearchQuery));
@@ -583,7 +589,15 @@ export const MentionInputInline = forwardRef<
         emittedUserIds.add(mention.userId);
       }
 
-      // Pass 2: expand @all into individual per-user entries
+      // Pass 2: expand @all into per-user entries, skipping users already
+      // emitted in Pass 1. Each user appears in the payload exactly once:
+      //   - Individually mentioned → mentionText = "@<name>" (from Pass 1)
+      //   - Only covered by @all    → mentionText = "@all"   (from Pass 2)
+      //
+      // Trade-off: when every non-self member is individually mentioned, the
+      // @all range ends up with 0 entries and the "@all" substring in content
+      // renders as plain text (no chip). That's an acceptable edge case —
+      // each user is already highlighted via their dedicated @name chip.
       const allMention = currentMentions.find(
         (m) => m.userId === ALL_MENTION_USER_ID,
       );
@@ -600,7 +614,6 @@ export const MentionInputInline = forwardRef<
               length: allPos.length,
               mentionText: allPos.text,
             });
-            emittedUserIds.add(member.userId);
           }
         }
       }

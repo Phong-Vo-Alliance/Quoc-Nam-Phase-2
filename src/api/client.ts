@@ -56,25 +56,7 @@ apiClient.interceptors.response.use(
 
       // ✅ Show session expired dialog instead of immediate redirect
       // Dialog will handle logout and redirect after user interaction or 10s timeout
-      const reasonMap: Record<
-        string,
-        "token_expired" | "account_disabled" | "unauthorized"
-      > = {
-        "Account is disabled": "account_disabled",
-        "Token expired": "token_expired",
-        Unauthorized: "unauthorized",
-      };
-
-      // Try to detect reason from error message
-      const errorMessage =
-        error.response?.data?.message || error.response?.data?.error || "";
-      const reason = Object.keys(reasonMap).find((key) =>
-        errorMessage.toLowerCase().includes(key.toLowerCase()),
-      );
-
-      useSessionDialogStore
-        .getState()
-        .show(reason ? reasonMap[reason] : "account_disabled");
+      useSessionDialogStore.getState().show("token_expired");
     }
 
     return Promise.reject(error);
