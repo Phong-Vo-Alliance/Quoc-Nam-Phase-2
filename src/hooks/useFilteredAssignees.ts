@@ -4,32 +4,37 @@
  * Filters assignable members based on user role:
  *
  * **Admin (global role — priority over Leader):**
- * - If `category.departmentLeaders` is non-empty: can only assign to those leaders
- *   (intersected with conversation members, excluding self).
- * - If `category.departmentLeaders` is empty/null: can assign to ALL conversation
- *   members (excluding self).
+ * - If `category.departmentLeaders` is empty/null OR `category.departmentIds`
+ *   is empty: can assign to ALL conversation members (excluding self).
+ * - Otherwise per-department evaluation against `categoryDepartmentIds`:
+ *   - Dept has an active leader → assign to those leader(s).
+ *   - Dept has no leader OR every leader has `isActive=false` → assign to that
+ *     dept's members.
+ *   The pool is the union across departments, intersected with conversation
+ *   members, excluding self.
  *
  * **Leader (per-category):**
  * - Leader status is determined by `category.departmentLeaders` (current user's id
  *   must be in the list), NOT by the global role alone.
- * - Candidate pool is conversation members intersected with members of the
- *   departments the user personally leads that are also in `category.departmentIds`
- *   (i.e. the department must be part of the chat's category AND the user must lead
- *   it). Current user is always included.
+ * - Candidate pool is conversation members intersected with members of every
+ *   department the user personally leads that is also in `category.departmentIds`
+ *   (i.e. the department must be part of the chat's category AND the user must
+ *   lead it). Current user is always included.
+ *
+ * **Department info:** every returned `MinimalMember` is populated with the
+ * names of the departments (within the active pool) the user belongs to so the
+ * caller can label rows like "Phòng A • Phòng B".
  *
  * @module hooks/useFilteredAssignees
  */
 
 import { useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { getDepartmentMembers } from "@/api/departments.api";
-import { departmentMembersKeys } from "@/hooks/queries/useDepartmentMembers";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useMultiDepartmentMembers } from "@/hooks/queries/useDepartmentMembers";
 import { useAuthStore } from "@/stores/authStore";
 import { hasRole } from "@/utils/roleUtils";
 import type { MinimalMember } from "@/utils/memberTransform";
-import type { DepartmentMemberDto } from "@/types/identity";
 import type { ConversationMember } from "@/types/conversations";
 import type { CategoryDepartmentLeaderDto } from "@/types/categories";
 
@@ -41,55 +46,24 @@ interface UseFilteredAssigneesOptions {
 }
 
 interface UseFilteredAssigneesResult {
-  /**
-   * Filtered members based on role:
-   * - Admin + category has leaders: only `category.departmentLeaders` ∩ conversation (exclude self)
-   * - Admin + no leaders in category: all conversation members (exclude self)
-   * - Leader: self + (members of the user's leader-depts that are in `category.departmentIds`) ∩ conversation
-   * - Otherwise: self only
-   */
   filteredMembers: MinimalMember[];
-  /** Loading state (true if either API is loading) */
+  /** Loading state (true if any underlying query is loading) */
   isLoading: boolean;
-  /** Error state (true if either API has error) */
+  /** Error state (true if any underlying query has error) */
   isError: boolean;
-  /** Raw department members (for debugging) */
-  departmentMembers?: MinimalMember[];
-  /** Raw conversation members (for debugging) */
-  conversationMembers?: MinimalMember[];
 }
 
-/**
- * Transform DepartmentMemberDto to MinimalMember format
- */
-function transformDeptMember(dto: DepartmentMemberDto): MinimalMember {
-  return {
-    id: dto.userId,
-    name: dto.userFullName || dto.userEmail || "Unknown",
-    role: dto.isLeader ? "Leader" : "Member",
-  };
-}
-
-/**
- * Transform ConversationMember to MinimalMember format
- */
 function transformConvMember(conv: ConversationMember): MinimalMember {
-  // Determine role from API role string
   let role: "Leader" | "Member" | undefined;
-
   if (conv.role) {
-    const normalizedRole = conv.role.toLowerCase();
-    if (
-      normalizedRole === "leader" ||
-      normalizedRole === "admin" ||
-      normalizedRole === "owner"
-    ) {
-      role = "Leader";
-    } else {
-      role = "Member";
-    }
+    const normalized = conv.role.toLowerCase();
+    role =
+      normalized === "leader" ||
+      normalized === "admin" ||
+      normalized === "owner"
+        ? "Leader"
+        : "Member";
   }
-
   return {
     id: conv.userId,
     name:
@@ -101,96 +75,99 @@ function transformConvMember(conv: ConversationMember): MinimalMember {
   };
 }
 
-/**
- * Hook to get filtered assignees for Leader mode
- *
- * For Leaders: finds the user's departments that match the category's departmentIds,
- * fetches members from those departments, and intersects with conversation members.
- *
- * @example
- * ```tsx
- * const { filteredMembers, isLoading } = useFilteredAssignees({
- *   conversationId: "conv-123",
- *   enabled: isLeaderMode,
- * });
- *
- * if (isLoading) return <Spinner />;
- *
- * return (
- *   <select>
- *     <option value="all">Tất cả</option>
- *     {filteredMembers.map(m => (
- *       <option key={m.id} value={m.id}>{m.name}</option>
- *     ))}
- *   </select>
- * );
- * ```
- */
 export function useFilteredAssignees({
   conversationId,
   enabled = true,
 }: UseFilteredAssigneesOptions): UseFilteredAssigneesResult {
   const currentUser = useAuthStore((s) => s.user);
 
-  // Find the category for this conversation, then derive leader status + dept list
   const { data: categories, isLoading: isCategoriesLoading } = useCategories();
-  const { categoryDepartmentIds, categoryDepartmentLeaders, isLeaderOfCategory } =
-    useMemo(() => {
-      const empty = {
-        categoryDepartmentIds: [] as string[],
-        categoryDepartmentLeaders: [] as CategoryDepartmentLeaderDto[],
-        isLeaderOfCategory: false,
-      };
-      if (!categories || !conversationId) return empty;
-      for (const cat of categories) {
-        const hasConv = cat.conversations?.some(
-          (c) => c.conversationId === conversationId,
-        );
-        if (hasConv) {
-          const leaders = cat.departmentLeaders ?? [];
-          const isLeader = leaders.some((l) => l.id === currentUser?.id);
-          return {
-            categoryDepartmentIds: cat.departmentIds || [],
-            categoryDepartmentLeaders: leaders,
-            isLeaderOfCategory: isLeader,
-          };
+
+  // Lookup category info for this conversation
+  const {
+    categoryDepartmentIds,
+    categoryDepartmentLeaders,
+    isLeaderOfCategory,
+    deptIdToName,
+    /**
+     * Department ids inside this category where the current user is leader,
+     * computed from `category.departments[].isLeader` (per-category response —
+     * authoritative source for "do I lead this dept here"). Union with
+     * `currentUser.departments[].isLeader` so we don't lose depts when the
+     * category response omits the per-dept summary.
+     */
+    leaderDepartmentIdsInCategory,
+  } = useMemo(() => {
+    const empty = {
+      categoryDepartmentIds: [] as string[],
+      categoryDepartmentLeaders: [] as CategoryDepartmentLeaderDto[],
+      isLeaderOfCategory: false,
+      deptIdToName: new Map<string, string>(),
+      leaderDepartmentIdsInCategory: [] as string[],
+    };
+    if (!categories || !conversationId) return empty;
+    for (const cat of categories) {
+      const hasConv = cat.conversations?.some(
+        (c) => c.conversationId === conversationId,
+      );
+      if (!hasConv) continue;
+
+      const leaders = cat.departmentLeaders ?? [];
+      const map = new Map<string, string>();
+      cat.departments?.forEach((d) => {
+        if (d.id && d.name) map.set(d.id, d.name);
+      });
+
+      const categoryDeptIds = cat.departmentIds ?? [];
+      const inCategory = new Set(categoryDeptIds);
+
+      // Union of two sources, restricted to depts that belong to this category
+      const userLeaderDepts = new Set<string>();
+      cat.departments?.forEach((d) => {
+        if (d.isLeader && inCategory.has(d.id)) userLeaderDepts.add(d.id);
+      });
+      (currentUser?.departments ?? []).forEach((d) => {
+        if (d.isLeader && inCategory.has(d.departmentId)) {
+          userLeaderDepts.add(d.departmentId);
         }
-      }
-      return empty;
-    }, [categories, conversationId, currentUser?.id]);
+      });
 
-  // Departments to fetch candidate members from.
-  // Admin → none (uses categoryDepartmentLeaders + conversation members directly).
-  // Leader → only depts where THIS user is personally a leader AND the dept is
-  //   part of the chat's category (Identity API returns 403 on
-  //   /departments/{id}/members for non-leaders).
-  // Otherwise → none (falls back to "self only" downstream).
+      return {
+        categoryDepartmentIds: categoryDeptIds,
+        categoryDepartmentLeaders: leaders,
+        isLeaderOfCategory:
+          leaders.some((l) => l.id === currentUser?.id) ||
+          userLeaderDepts.size > 0,
+        deptIdToName: map,
+        leaderDepartmentIdsInCategory: Array.from(userLeaderDepts),
+      };
+    }
+    return empty;
+  }, [categories, conversationId, currentUser?.id, currentUser?.departments]);
+
+  // Departments to fetch members from.
+  // - Admin → ALL `categoryDepartmentIds` so we can evaluate per-dept leader
+  //   status and fall back to dept members when a dept has no active leader.
+  // - Leader → every dept in the category that the user leads (union of
+  //   `category.departments[].isLeader` and `currentUser.departments[].isLeader`).
+  //   Identity API returns 403 on /departments/{id}/members for non-leaders so
+  //   we keep the gate.
+  // - Otherwise → none (only-self pool downstream).
   const fetchDepartmentIds = useMemo(() => {
-    if (hasRole("Admin")) return [];
+    if (hasRole("Admin")) return categoryDepartmentIds;
     if (!isLeaderOfCategory) return [];
+    return leaderDepartmentIdsInCategory;
+  }, [categoryDepartmentIds, isLeaderOfCategory, leaderDepartmentIdsInCategory]);
 
-    const leaderDeptIds = new Set(
-      (currentUser?.departments ?? [])
-        .filter((d) => d.isLeader)
-        .map((d) => d.departmentId),
-    );
-    return categoryDepartmentIds.filter((id) => leaderDeptIds.has(id));
-  }, [categoryDepartmentIds, isLeaderOfCategory, currentUser?.departments]);
-
-  // Fetch department members for all target departments
-  const deptQueries = useQueries({
-    queries: fetchDepartmentIds.map((deptId) => ({
-      queryKey: departmentMembersKeys.list(deptId),
-      queryFn: () => getDepartmentMembers(deptId),
-      staleTime: 1000 * 60 * 5,
-      enabled: enabled && fetchDepartmentIds.length > 0,
-    })),
+  const {
+    data: mergedDeptMembers,
+    isLoading: isDeptLoading,
+    isError: isDeptError,
+  } = useMultiDepartmentMembers({
+    departmentIds: fetchDepartmentIds,
+    enabled: enabled && fetchDepartmentIds.length > 0,
   });
 
-  const isDeptLoading = deptQueries.some((q) => q.isLoading);
-  const isDeptError = deptQueries.some((q) => q.isError);
-
-  // Fetch conversation members
   const {
     data: convMembersRaw,
     isLoading: isConvLoading,
@@ -200,122 +177,146 @@ export function useFilteredAssignees({
     enabled: enabled && !!conversationId,
   });
 
-  // Transform and merge department members from all matching departments (deduplicated)
-  const departmentMembers = useMemo(() => {
-    const allMembers: MinimalMember[] = [];
-    const seen = new Set<string>();
-    for (const q of deptQueries) {
-      if (q.data) {
-        for (const dto of q.data) {
-          if (!seen.has(dto.userId)) {
-            seen.add(dto.userId);
-            allMembers.push(transformDeptMember(dto));
-          }
-        }
-      }
-    }
-    return allMembers;
-  }, [deptQueries]);
-
   const conversationMembers = useMemo(
-    () => convMembersRaw?.map(transformConvMember) || [],
+    () => convMembersRaw?.map(transformConvMember) ?? [],
     [convMembersRaw],
   );
 
-  // Compute filtered members
-  const filteredMembers = useMemo(() => {
+  const filteredMembers = useMemo<MinimalMember[]>(() => {
     const currentUserId = currentUser?.id;
 
-    // 🎯 ADMIN (priority over Leader):
-    // - If category has leaders → can only assign to those leaders (∩ conversation)
-    // - If no leaders in category → can assign to any conversation member
-    // Always excludes self (admin cannot assign to self).
+    const namesFromDeptIds = (deptIds: Iterable<string>) =>
+      Array.from(deptIds)
+        .map((id) => deptIdToName.get(id))
+        .filter((n): n is string => !!n);
+
+    // 🎯 ADMIN (priority over Leader)
     if (hasRole("Admin")) {
-      // Wait for both categories and conversation members to load before deciding
-      // — otherwise we'd briefly fall into the "no leaders" branch and show the
-      // full member list before shrinking to leaders-only.
+      // Wait for categories so we don't briefly fall into the wrong branch
       if (isCategoriesLoading) return [];
       if (!conversationMembers.length) return [];
 
-      const hasLeaders = categoryDepartmentLeaders.length > 0;
-
-      if (hasLeaders) {
-        const leaderIds = new Set(categoryDepartmentLeaders.map((l) => l.id));
-        return conversationMembers.filter(
-          (m) => leaderIds.has(m.id) && m.id !== currentUserId,
-        );
+      // No depts in category at all → keep legacy behavior (open pool)
+      if (categoryDepartmentIds.length === 0) {
+        return conversationMembers.filter((m) => m.id !== currentUserId);
       }
 
-      return conversationMembers.filter((m) => m.id !== currentUserId);
+      // No leaders defined anywhere in this category → keep legacy behavior
+      // (admin can assign to any conversation member, excluding self).
+      if (categoryDepartmentLeaders.length === 0) {
+        return conversationMembers.filter((m) => m.id !== currentUserId);
+      }
+
+      // Per-dept evaluation requires loaded dept members
+      if (isDeptLoading || !mergedDeptMembers) return [];
+
+      const leaderActive = new Map<string, boolean>();
+      for (const l of categoryDepartmentLeaders) {
+        leaderActive.set(l.id, l.isActive);
+      }
+
+      const deptsByUser = new Map<string, Set<string>>();
+      const allow = (userId: string, deptId: string) => {
+        let set = deptsByUser.get(userId);
+        if (!set) {
+          set = new Set();
+          deptsByUser.set(userId, set);
+        }
+        set.add(deptId);
+      };
+
+      for (const deptId of categoryDepartmentIds) {
+        const deptMembers = mergedDeptMembers.filter((m) =>
+          m.memberships.some((ms) => ms.departmentId === deptId),
+        );
+        const activeLeaders = deptMembers.filter(
+          (m) =>
+            m.memberships.some(
+              (ms) => ms.departmentId === deptId && ms.isLeader,
+            ) && leaderActive.get(m.userId) === true,
+        );
+
+        if (activeLeaders.length > 0) {
+          for (const l of activeLeaders) allow(l.userId, deptId);
+        } else {
+          // No active leader → admin can assign to any member of this dept
+          for (const m of deptMembers) allow(m.userId, deptId);
+        }
+      }
+
+      return conversationMembers
+        .filter((cm) => deptsByUser.has(cm.id) && cm.id !== currentUserId)
+        .map((cm) => ({
+          ...cm,
+          departments: namesFromDeptIds(deptsByUser.get(cm.id) ?? []),
+        }));
     }
 
-    // 🚨 Not a leader of this category (and not Admin) — show only self
+    // 🚨 Not Admin and not a leader of this category → only self
     if (!isLeaderOfCategory) {
       console.warn(
         "[useFilteredAssignees] Current user is not a leader of this category - showing only self",
       );
-
       if (!currentUserId) return [];
-
       return [
         {
           id: currentUserId,
-          name: currentUser?.fullName || currentUser.identifier || "Tôi",
-          role: "Leader" as const,
+          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
+          role: "Leader",
         },
       ];
     }
 
-    // Leader of category but no fetchable departments — either the category has
-    // no departmentIds, or this user isn't personally `isLeader` of any of them
-    // (data inconsistency between category.departmentLeaders and user.departments).
-    // Show only self to keep the assignee picker usable without triggering 403s.
+    // Leader of category but no fetchable departments — data inconsistency
     if (!fetchDepartmentIds.length) {
       if (!currentUserId) return [];
       return [
         {
           id: currentUserId,
-          name: currentUser?.fullName || currentUser.identifier || "Tôi",
-          role: "Leader" as const,
+          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
+          role: "Leader",
         },
       ];
     }
 
-    // If APIs have errors → fallback to showing only self
     if (isDeptError || isConvError) {
       console.error(
         "[useFilteredAssignees] API error fetching members - showing only self",
         { isDeptError, isConvError },
       );
-
       if (!currentUserId) return [];
-
       return [
         {
           id: currentUserId,
           name: currentUser?.fullName || currentUser?.identifier || "Tôi",
-          role: "Leader" as const,
+          role: "Leader",
         },
       ];
     }
 
-    // If still loading or no data
-    if (!departmentMembers.length || !conversationMembers.length) {
-      return [];
+    if (!mergedDeptMembers || !conversationMembers.length) return [];
+
+    // Build user → dept ids (within fetched pool) lookup
+    const userDeptIds = new Map<string, Set<string>>();
+    for (const m of mergedDeptMembers) {
+      const set = new Set<string>();
+      for (const ms of m.memberships) set.add(ms.departmentId);
+      userDeptIds.set(m.userId, set);
     }
 
-    // ✅ NORMAL CASE: Intersection of department members ∩ conversation members
-    const deptMemberIds = new Set(departmentMembers.map((m) => m.id));
-    const filtered = conversationMembers.filter((cm) =>
-      deptMemberIds.has(cm.id),
-    );
+    const filtered: MinimalMember[] = conversationMembers
+      .filter((cm) => userDeptIds.has(cm.id))
+      .map((cm) => ({
+        ...cm,
+        departments: namesFromDeptIds(userDeptIds.get(cm.id) ?? []),
+      }));
 
-    // Always include current user if not already in filtered list
     if (currentUserId && !filtered.some((m) => m.id === currentUserId)) {
       filtered.unshift({
         id: currentUserId,
-        name: currentUser.fullName || currentUser.identifier || "Tôi",
-        role: "Leader" as const,
+        name: currentUser?.fullName || currentUser?.identifier || "Tôi",
+        role: "Leader",
+        departments: namesFromDeptIds(leaderDepartmentIdsInCategory),
       });
     }
 
@@ -323,20 +324,22 @@ export function useFilteredAssignees({
   }, [
     isLeaderOfCategory,
     fetchDepartmentIds,
-    departmentMembers,
+    leaderDepartmentIdsInCategory,
+    mergedDeptMembers,
     conversationMembers,
     currentUser,
     isDeptError,
     isConvError,
+    isDeptLoading,
     isCategoriesLoading,
     categoryDepartmentLeaders,
+    categoryDepartmentIds,
+    deptIdToName,
   ]);
 
   return {
     filteredMembers,
     isLoading: isDeptLoading || isConvLoading || isCategoriesLoading,
     isError: isDeptError || isConvError,
-    departmentMembers,
-    conversationMembers,
   };
 }

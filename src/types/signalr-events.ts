@@ -110,6 +110,19 @@ export interface ConversationDeletedEvent {
 }
 
 // Category Events
+export interface CategoryUpdatedEvent {
+  id: string;
+  userId: string;
+  name: string;
+  order: number;
+  conversations: unknown[];
+  createdAt: string;
+  updatedAt: string;
+  departmentIds: string[];
+  departmentLeaders: unknown[];
+  departments: unknown[] | null;
+}
+
 export interface CategoryDepartmentLinkedEvent {
   categoryId: string;
   categoryName: string;

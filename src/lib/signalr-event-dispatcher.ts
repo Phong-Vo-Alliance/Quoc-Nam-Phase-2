@@ -147,6 +147,15 @@ export function registerAllEventHandlers(
     },
   );
 
+  const cleanupCategoryUpdated = chatHub.onWithCleanup(
+    SIGNALR_EVENTS.CATEGORY_UPDATED,
+    (data: any) => {
+      categoryCache
+        .handleCategoryUpdated(categoryCacheCtx, data)
+        .catch(console.error);
+    },
+  );
+
   const cleanupCategoryDeptLinked = chatHub.onWithCleanup(
     SIGNALR_EVENTS.CATEGORY_DEPARTMENT_LINKED,
     (data: any) => {
@@ -199,6 +208,7 @@ export function registerAllEventHandlers(
     cleanupConversationUpdated,
     cleanupMemberAdded,
     cleanupMemberRemoved,
+    cleanupCategoryUpdated,
     cleanupCategoryDeptLinked,
     cleanupCategoryDeptUnlinked,
     cleanupCategoryAssigned,

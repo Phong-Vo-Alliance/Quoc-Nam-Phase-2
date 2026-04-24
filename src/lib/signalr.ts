@@ -95,6 +95,7 @@ export const SIGNALR_EVENTS = {
   CONVERSATION_DELETED: "ConversationDeleted",
 
   // ============= Category Events =============
+  CATEGORY_UPDATED: "CategoryUpdated",
   CATEGORY_DEPARTMENT_LINKED: "CategoryDepartmentLinked",
   CATEGORY_DEPARTMENT_UNLINKED: "CategoryDepartmentUnlinked",
   CATEGORY_ASSIGNED_TO_CONVERSATION: "CategoryAssignedToConversation",

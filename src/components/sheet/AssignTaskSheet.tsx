@@ -122,12 +122,14 @@ export function AssignTaskSheet({
       return assigneeOptions.map((m) => ({
         id: m.id,
         name: m.name,
+        departments: m.departments ?? [],
       }));
     }
     // Fallback to conversation members (ConversationMember format)
     return members.map((m) => ({
       id: m.userId,
       name: m.userInfo?.fullName || m.userInfo?.userName || m.userName,
+      departments: m.departments?.map((d) => d.name) ?? [],
     }));
   }, [assigneeOptions, members]);
 
@@ -488,8 +490,17 @@ export function AssignTaskSheet({
                       value={member.id}
                       data-testid={`task-assignee-item-${member.id}`}
                     >
-                      {member.name}
-                      {member.id === currentUser?.id && " (Tôi)"}
+                      <div className="flex flex-col items-start leading-tight">
+                        <span>
+                          {member.name}
+                          {member.id === currentUser?.id && " (Tôi)"}
+                        </span>
+                        {member.departments.length > 0 && (
+                          <span className="text-[11px] text-gray-500">
+                            {member.departments.join(" • ")}
+                          </span>
+                        )}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>

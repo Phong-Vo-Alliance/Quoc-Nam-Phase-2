@@ -15,6 +15,7 @@ import type { ConversationMember } from "@/types/conversations";
 import type {
   MemberRemovedEvent,
   ConversationDeletedEvent,
+  CategoryUpdatedEvent,
 } from "@/types/signalr-events";
 
 // Dedup: track recently toasted category move events to avoid duplicate toasts
@@ -478,6 +479,32 @@ export async function handleMemberRemoved(
     }
   } catch (error) {
     console.error("[CategoryCache] Error handling MemberRemoved:", error);
+  }
+}
+
+export async function handleCategoryUpdated(
+  ctx: CategoryCacheContext,
+  data: CategoryUpdatedEvent,
+): Promise<void> {
+  const { queryClient } = ctx;
+
+  if (!data?.id || !data?.name) return;
+
+  try {
+    const cachedCategories = queryClient.getQueryData<CategoryWithUnread[]>(
+      categoriesKeys.list(),
+    );
+    const oldName = cachedCategories?.find((cat) => cat.id === data.id)?.name;
+
+    await queryClient.refetchQueries({
+      queryKey: categoriesKeys.list(),
+    });
+
+    if (oldName && oldName !== data.name) {
+      toast.info(`Nhóm chat ${oldName} đã đổi tên thành ${data.name}`);
+    }
+  } catch (error) {
+    console.error("[CategoryCache] Error handling CategoryUpdated:", error);
   }
 }
 
