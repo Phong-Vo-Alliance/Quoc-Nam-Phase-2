@@ -489,6 +489,7 @@ export function AssignTaskSheet({
                       key={member.id}
                       value={member.id}
                       data-testid={`task-assignee-item-${member.id}`}
+                      className="group focus:bg-brand-600 focus:text-white"
                     >
                       <div className="flex flex-col items-start leading-tight">
                         <span>
@@ -496,7 +497,7 @@ export function AssignTaskSheet({
                           {member.id === currentUser?.id && " (Tôi)"}
                         </span>
                         {member.departments.length > 0 && (
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-[11px] text-gray-600 group-focus:text-white/75">
                             {member.departments.join(" • ")}
                           </span>
                         )}
