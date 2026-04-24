@@ -5,7 +5,10 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { X, Search, UserPlus, Loader2, AlertCircle, Check } from "lucide-react";
-import { useDepartmentMembers } from "@/hooks/queries/useDepartmentMembers";
+import {
+  useMultiDepartmentMembers,
+  type MergedDepartmentMember,
+} from "@/hooks/queries/useDepartmentMembers";
 import { useAddGroupMember } from "@/hooks/mutations/useGroupMutations";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { useIsLeaderInCategory } from "@/hooks/useCategoryLeader";
@@ -65,37 +68,67 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   // Per-category leader check: Admin bypass, otherwise user.id ∈ category.departmentLeaders
   const isLeaderOfCategory = useIsLeaderInCategory(selectedCategoryId);
 
-  // Pick a department to fetch candidate members from.
-  // Identity API returns 403 on /departments/{id}/members for non-leaders,
-  // so prefer a department the user is personally `isLeader` of. Only Admin
-  // can safely fall back to an arbitrary category dept.
-  const departmentId = useMemo(() => {
-    if (!selectedCategoryId || !categories) return undefined;
+  // Pick departments to fetch candidate members from.
+  // Identity API returns 403 on /departments/{id}/members for non-leaders.
+  // Priority: Admin > Leader — admins fetch from EVERY dept in the category;
+  // non-admin leaders fetch from EVERY dept they personally lead within the
+  // category (isLeader=true), so a leader of multiple depts sees the union.
+  const poolDepartmentIds = useMemo<string[]>(() => {
+    if (!selectedCategoryId || !categories) return [];
 
     const selectedCategory = categories.find(
       (cat) => cat.id === selectedCategoryId,
     );
     const categoryDeptIds = selectedCategory?.departmentIds;
-    if (!categoryDeptIds?.length) return undefined;
+    if (!categoryDeptIds?.length) return [];
+
+    if (hasRole("Admin")) return categoryDeptIds;
 
     const userDepts = user?.departments;
-    if (userDepts?.length) {
-      const leaderDept = userDepts.find(
+    if (!userDepts?.length) return [];
+
+    return userDepts
+      .filter(
         (dept: any) =>
           dept.isLeader && categoryDeptIds.includes(dept.departmentId),
-      );
-      if (leaderDept) return leaderDept.departmentId;
-    }
-
-    if (hasRole("Admin")) return categoryDeptIds[0];
-
-    return undefined;
+      )
+      .map((dept: any) => dept.departmentId as string);
   }, [selectedCategoryId, categories, user]);
 
-  // Fetch department members
-  const { data, isLoading, isError, error } = useDepartmentMembers({
-    departmentId,
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    failedCount: partialFailureCount,
+    totalCount: partialFailureTotal,
+  } = useMultiDepartmentMembers({
+    departmentIds: poolDepartmentIds,
+    enabled: poolDepartmentIds.length > 0,
   });
+
+  const hasPartialFailure = !isError && partialFailureCount > 0;
+
+  // departmentId -> departmentName lookup from the selected category's
+  // `departments` summary, used to label each user with the dept(s) they
+  // belong to (admin sees multiple; leader view only has one).
+  const deptIdToName = useMemo(() => {
+    const map = new Map<string, string>();
+    const selectedCategory = categories?.find(
+      (cat) => cat.id === selectedCategoryId,
+    );
+    selectedCategory?.departments?.forEach((d) => {
+      if (d.id && d.name) map.set(d.id, d.name);
+    });
+    return map;
+  }, [categories, selectedCategoryId]);
+
+  const getDepartmentLabel = (member: MergedDepartmentMember): string => {
+    const names = member.memberships
+      .map((m) => deptIdToName.get(m.departmentId))
+      .filter((n): n is string => !!n);
+    return names.join(" • ");
+  };
   // Mutation for adding members
   const addMemberMutation = useAddGroupMember();
   const [addingProgress, setAddingProgress] = useState<{
@@ -181,10 +214,9 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
     for (const member of successfullyAdded) {
       if (conversationId) {
         try {
-          const displayInfo = member.userEmail || member.userId;
           const systemMessageData: SendChatMessageRequest = {
             conversationId,
-            content: `${member.userName} (${displayInfo}) đã được thêm vào nhóm`,
+            content: `${member.userName} đã được thêm vào nhóm`,
             messageType: "SYS",
           };
           await sendMessage(systemMessageData);
@@ -266,6 +298,19 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+          {hasPartialFailure && (
+            <div
+              className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
+              data-testid="add-member-partial-failure-warning"
+            >
+              <AlertCircle className="h-4 w-4 flex-shrink-0 text-amber-600 mt-0.5" />
+              <p className="text-xs text-amber-700">
+                Không tải được {partialFailureCount}/{partialFailureTotal} phòng ban.
+                Danh sách dưới đây có thể chưa đầy đủ.
+              </p>
+            </div>
+          )}
+
           {!groupId && (
             <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="add-member-no-group-state">
               <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
@@ -362,6 +407,18 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
                         {member.userEmail}
                       </div>
                     )}
+                    {(() => {
+                      const label = getDepartmentLabel(member);
+                      if (!label) return null;
+                      return (
+                        <div
+                          data-testid={`member-departments-${member.userId}`}
+                          className="text-xs text-gray-400 truncate mt-0.5"
+                        >
+                          {label}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}

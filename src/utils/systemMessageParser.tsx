@@ -25,8 +25,8 @@
  * 7. "Công việc [tên công việc] đã được tạo và giao cho [user]"
  *    → Highlight: user
  *
- * 8. "[username] ([email]) đã được thêm vào nhóm"
- *    → Highlight: username (email)
+ * 8. "[username] đã được thêm vào nhóm"
+ *    → Highlight: username
  *
  * 9. "[content]" đã được tiếp nhận bởi [username] (without time)
  *    → Bold: content, Highlight: username
@@ -111,9 +111,8 @@ export function parseSystemMessageContent(
   const createTaskSimplePattern =
     /^Công việc\s+([\s\S]+?)\s+đã được tạo và giao cho\s+(.+)$/;
 
-  // Pattern 8: "[username] ([email]) đã được thêm vào nhóm"
-  const addMemberWithEmailPattern =
-    /^(.+?)\s+\(([^)]+)\)\s+đã được thêm vào nhóm$/;
+  // Pattern 8: "[username] đã được thêm vào nhóm"
+  const addedToGroupPattern = /^(.+?)\s+đã được thêm vào nhóm$/;
 
   // Pattern 9: "[content] đã được tiếp nhận bởi [username]" (without time)
   const receiveInfoNoTimePattern = /^(.+?)\s+đã được tiếp nhận bởi\s+(.+?)$/;
@@ -247,10 +246,10 @@ export function parseSystemMessageContent(
     return parts;
   }
 
-  // Try Pattern 8: Add Member with Email
-  if ((match = content.match(addMemberWithEmailPattern))) {
-    const [, username, email] = match;
-    parts.push({ type: "highlight", content: `${username} (${email})` });
+  // Try Pattern 8: Added to Group
+  if ((match = content.match(addedToGroupPattern))) {
+    const [, username] = match;
+    parts.push({ type: "highlight", content: username });
     parts.push({ type: "text", content: " đã được thêm vào nhóm" });
     return parts;
   }
