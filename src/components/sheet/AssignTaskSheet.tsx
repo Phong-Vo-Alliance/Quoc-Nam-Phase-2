@@ -118,11 +118,21 @@ export function AssignTaskSheet({
   // Normalize members for display (handle both MinimalMember and ConversationMember types)
   const displayMembers = useMemo(() => {
     if (assigneeOptions) {
-      // Use filtered members (MinimalMember format)
+      // Admin: luôn hiển thị phòng ban đầy đủ từ ConversationMember,
+      // vì nhánh Admin trong useFilteredAssignees có thể trả về member không kèm departments.
+      const convDeptLookup = hasRole("Admin")
+        ? new Map(
+            members.map((m) => [
+              m.userId,
+              m.departments?.map((d) => d.name) ?? [],
+            ]),
+          )
+        : null;
       return assigneeOptions.map((m) => ({
         id: m.id,
         name: m.name,
-        departments: m.departments ?? [],
+        departments:
+          convDeptLookup?.get(m.id) ?? m.departments ?? [],
       }));
     }
     // Fallback to conversation members (ConversationMember format)
