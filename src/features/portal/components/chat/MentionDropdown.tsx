@@ -8,9 +8,6 @@ import { cn } from "@/lib/utils";
 import type { ConversationMember } from "@/types/conversations";
 import { ALL_MENTION_USER_ID } from "./mentionConstants";
 
-/** Threshold above which the @all row shows a "+N" badge. */
-const ALL_MENTION_PLUS_THRESHOLD = 5;
-
 export interface MentionDropdownProps {
   /**
    * List of members to display
@@ -128,13 +125,6 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
             .filter((name): name is string => Boolean(name)) ?? [];
         const departmentLabel = departmentNames.join(" • ");
 
-        // Parse member count from identifier for the @all row ("Thông báo cho N thành viên")
-        const allMemberCount = isAllMention
-          ? Number(identifier.match(/\d+/)?.[0] ?? 0)
-          : 0;
-        const showPlusBadge =
-          isAllMention && allMemberCount > ALL_MENTION_PLUS_THRESHOLD;
-
         return (
           <div
             key={member.userId}
@@ -166,13 +156,8 @@ export const MentionDropdown: React.FC<MentionDropdownProps> = ({
             <div className="flex-1 min-w-0">
               {/* Full name */}
               {isAllMention ? (
-                <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900 truncate">
-                  <span>@all</span>
-                  {showPlusBadge && (
-                    <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
-                      +{allMemberCount - ALL_MENTION_PLUS_THRESHOLD}
-                    </span>
-                  )}
+                <div className="text-sm font-medium text-gray-900 truncate">
+                  @all
                 </div>
               ) : (
                 <div className="text-sm font-medium text-gray-900 truncate">
