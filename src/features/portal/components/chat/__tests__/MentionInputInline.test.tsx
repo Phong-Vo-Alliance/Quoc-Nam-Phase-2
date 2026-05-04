@@ -1,12 +1,12 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MentionInputInline } from "../MentionInputInline";
-import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useMentionMembers } from "@/hooks/queries/useMentionMembers";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 
 // Mock hooks
-vi.mock("@/hooks/queries/useConversationMembers");
+vi.mock("@/hooks/queries/useMentionMembers");
 vi.mock("@/stores/authStore");
 vi.mock("@/stores/quickMessagesStore");
 vi.mock("@/hooks/useQuickMessageReplacement", () => ({
@@ -60,8 +60,8 @@ describe("MentionInputInline - Shortcut Dropdown Integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Mock useConversationMembers
-    vi.mocked(useConversationMembers).mockReturnValue({
+    // Mock useMentionMembers
+    vi.mocked(useMentionMembers).mockReturnValue({
       data: mockMembers,
       isLoading: false,
       isError: false,
@@ -149,7 +149,7 @@ describe("MentionInputInline - Shortcut Dropdown Integration", () => {
     expect(useQuickMessagesStore).toHaveBeenCalled();
   });
 
-  test("loads conversation members from useConversationMembers", () => {
+  test("loads conversation members from useMentionMembers", () => {
     const conversationId = "test-conv";
     render(
       <MentionInputInline
@@ -160,7 +160,7 @@ describe("MentionInputInline - Shortcut Dropdown Integration", () => {
       />,
     );
 
-    expect(useConversationMembers).toHaveBeenCalledWith({
+    expect(useMentionMembers).toHaveBeenCalledWith({
       conversationId,
       enabled: true,
     });
@@ -178,7 +178,7 @@ describe("MentionInputInline - Shortcut Dropdown Integration", () => {
       />,
     );
 
-    expect(useConversationMembers).toHaveBeenCalledWith({
+    expect(useMentionMembers).toHaveBeenCalledWith({
       conversationId: "",
       enabled: false,
     });
@@ -200,7 +200,7 @@ describe("MentionInputInline - Shortcut Dropdown Integration", () => {
  * What we test here:
  * ✅ Component renders correctly
  * ✅ Props are applied (disabled, placeholder, className)
- * ✅ Data hooks are called (useQuickMessagesStore, useConversationMembers)
+ * ✅ Data hooks are called (useQuickMessagesStore, useMentionMembers)
  * ✅ ShortcutDropdown component itself (see ShortcutDropdown.test.tsx)
  *
  * What requires E2E testing:

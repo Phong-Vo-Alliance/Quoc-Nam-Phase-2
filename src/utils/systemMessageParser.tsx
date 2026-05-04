@@ -47,6 +47,12 @@
  *
  * 17. "[name] đã bị xóa khỏi loại việc"
  *    → Danger highlight (red): name
+ *
+ * 18. "[user] đã cập nhật ghi chú cho mục "[name]""
+ *    → Highlight: user, Item-name: name
+ *
+ * 19. "[user] đã thêm ghi chú cho mục "[name]""
+ *    → Highlight: user, Item-name: name
  */
 
 import React from "react";
@@ -164,6 +170,13 @@ export function parseSystemMessageContent(
 
   // Pattern 16: "[leader] đã xóa mục [checklist-name]"
   const checklistItemDeletedPattern = /^(.+?)\s+đã xóa mục\s+(.+)$/;
+
+  // Pattern 18: "[user] đã cập nhật ghi chú cho mục [name]" (with or without quotes)
+  const updateNotePattern =
+    /^(.+?)\s+đã cập nhật ghi chú cho mục\s+(.+)$/;
+
+  // Pattern 19: "[user] đã thêm ghi chú cho mục [name]" (with or without quotes)
+  const addNotePattern = /^(.+?)\s+đã thêm ghi chú cho mục\s+(.+)$/;
 
   let match: RegExpMatchArray | null;
 
@@ -374,6 +387,30 @@ export function parseSystemMessageContent(
     parts.push({ type: "item-name", content: cleanNewItemName });
     parts.push({ type: "text", content: " vào công việc " });
     parts.push({ type: "task-name", content: cleanTaskName });
+    return parts;
+  }
+
+  // Try Pattern 18: Update Note for Item
+  if ((match = content.match(updateNotePattern))) {
+    const [, username, itemName] = match;
+    const cleanItemName = itemName.trim().replace(/^\s*["']|["']\s*$/g, "");
+
+    parts.push({ type: "highlight", content: username.trim() });
+    parts.push({ type: "text", content: ' đã cập nhật ghi chú cho mục "' });
+    parts.push({ type: "task-name", content: cleanItemName });
+    parts.push({ type: "text", content: '"' });
+    return parts;
+  }
+
+  // Try Pattern 19: Add Note for Item
+  if ((match = content.match(addNotePattern))) {
+    const [, username, itemName] = match;
+    const cleanItemName = itemName.trim().replace(/^\s*["']|["']\s*$/g, "");
+
+    parts.push({ type: "highlight", content: username.trim() });
+    parts.push({ type: "text", content: ' đã thêm ghi chú cho mục "' });
+    parts.push({ type: "task-name", content: cleanItemName });
+    parts.push({ type: "text", content: '"' });
     return parts;
   }
 

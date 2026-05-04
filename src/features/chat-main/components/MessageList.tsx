@@ -1,6 +1,7 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 import MessageDateSeparator from "@/components/chat/MessageDateSeparator";
+import UnreadSeparator from "@/components/chat/UnreadSeparator";
 import { MessageBubbleSimple } from "@/features/portal/components/chat/MessageBubbleSimple";
 import { SystemMessageBubble } from "@/features/portal/components/chat/SystemMessageBubble";
 import type { GroupedMessage } from "@/utils/messageGrouping";
@@ -26,6 +27,7 @@ interface MessageListProps {
   confirmedMessageMap: Map<string, { userId: string; name?: string }>;
   confirmingMessageId: string | null;
   openThreadMessageId?: string;
+  firstUnreadMessageId?: string | null;
   threadUnreadCounts?: Record<string, number>;
   threadCurrentSessionCounts?: Record<string, number>;
   onLoadMore: () => void;
@@ -54,6 +56,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   confirmedMessageMap,
   confirmingMessageId,
   openThreadMessageId,
+  firstUnreadMessageId,
   threadUnreadCounts,
   threadCurrentSessionCounts,
   onLoadMore,
@@ -103,53 +106,59 @@ export const MessageList: React.FC<MessageListProps> = ({
 
             {dateGroup.messages.map((groupedMsg) => {
               const message = groupedMsg.message;
+              const showUnreadSeparator =
+                !!firstUnreadMessageId && message.id === firstUnreadMessageId;
 
               if (message.contentType === "SYS") {
                 return (
-                  <SystemMessageBubble
-                    key={message.id}
-                    message={message}
-                    formatTime={formatTime}
-                  />
+                  <React.Fragment key={message.id}>
+                    {showUnreadSeparator && <UnreadSeparator />}
+                    <SystemMessageBubble
+                      message={message}
+                      formatTime={formatTime}
+                    />
+                  </React.Fragment>
                 );
               }
 
               return (
-                <MessageBubbleSimple
-                  key={message.id}
-                  message={message}
-                  isOwn={message.senderId === userId}
-                  formatTime={formatTime}
-                  onFilePreviewClick={onFilePreviewClick}
-                  onImageClick={onImageClick}
-                  onToggleStar={onToggleStar}
-                  onCreateTask={isDirect ? undefined : onCreateTask}
-                  onConfirmInfo={isDirect ? undefined : onConfirmInfo}
-                  hasConfirmedInfo={confirmedMessageMap.has(message.id)}
-                  confirmedByName={confirmedMessageMap.get(message.id)?.name}
-                  confirmedByUserId={
-                    confirmedMessageMap.get(message.id)?.userId
-                  }
-                  isConfirming={confirmingMessageId === message.id}
-                  onRetry={onRetry}
-                  onScrollToQuoted={onScrollToQuoted}
-                  onTaskLogClick={onTaskLogClick}
-                  threadUnreadCount={
-                    message.linkedTaskId
-                      ? (threadUnreadCounts?.[message.linkedTaskId] ?? 0)
-                      : 0
-                  }
-                  currentSessionCount={
-                    message.linkedTaskId
-                      ? (threadCurrentSessionCounts?.[message.linkedTaskId] ??
-                        0)
-                      : 0
-                  }
-                  isThreadOpen={message.id === openThreadMessageId}
-                  isFirstInGroup={groupedMsg.isFirstInGroup}
-                  isMiddleInGroup={groupedMsg.isMiddleInGroup}
-                  isLastInGroup={groupedMsg.isLastInGroup}
-                />
+                <React.Fragment key={message.id}>
+                  {showUnreadSeparator && <UnreadSeparator />}
+                  <MessageBubbleSimple
+                    message={message}
+                    isOwn={message.senderId === userId}
+                    formatTime={formatTime}
+                    onFilePreviewClick={onFilePreviewClick}
+                    onImageClick={onImageClick}
+                    onToggleStar={onToggleStar}
+                    onCreateTask={isDirect ? undefined : onCreateTask}
+                    onConfirmInfo={isDirect ? undefined : onConfirmInfo}
+                    hasConfirmedInfo={confirmedMessageMap.has(message.id)}
+                    confirmedByName={confirmedMessageMap.get(message.id)?.name}
+                    confirmedByUserId={
+                      confirmedMessageMap.get(message.id)?.userId
+                    }
+                    isConfirming={confirmingMessageId === message.id}
+                    onRetry={onRetry}
+                    onScrollToQuoted={onScrollToQuoted}
+                    onTaskLogClick={onTaskLogClick}
+                    threadUnreadCount={
+                      message.linkedTaskId
+                        ? (threadUnreadCounts?.[message.linkedTaskId] ?? 0)
+                        : 0
+                    }
+                    currentSessionCount={
+                      message.linkedTaskId
+                        ? (threadCurrentSessionCounts?.[message.linkedTaskId] ??
+                          0)
+                        : 0
+                    }
+                    isThreadOpen={message.id === openThreadMessageId}
+                    isFirstInGroup={groupedMsg.isFirstInGroup}
+                    isMiddleInGroup={groupedMsg.isMiddleInGroup}
+                    isLastInGroup={groupedMsg.isLastInGroup}
+                  />
+                </React.Fragment>
               );
             })}
           </React.Fragment>

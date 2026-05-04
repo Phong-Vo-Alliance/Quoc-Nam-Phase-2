@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import { MentionDropdown } from "./MentionDropdown";
 import { ShortcutDropdown } from "./ShortcutDropdown";
-import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useMentionMembers } from "@/hooks/queries/useMentionMembers";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuickMessageReplacement } from "@/hooks/useQuickMessageReplacement";
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
@@ -198,8 +198,8 @@ export const MentionInputInline = forwardRef<
       [updateFixedPosition],
     );
 
-    // Fetch conversation members
-    const { data: members = [] } = useConversationMembers({
+    // Source mention members from the categories cache (mention.members).
+    const { data: members = [] } = useMentionMembers({
       conversationId: conversationId || "",
       enabled: !!conversationId,
     });

@@ -35,6 +35,7 @@ export interface TemplateItemDto {
   id: string;
   content: string | null;
   order: number;
+  note: string | null;
 }
 
 export interface CheckListTemplateResponse {
@@ -58,6 +59,7 @@ export interface CheckItemDto {
   order: number;
   isCompleted: boolean;
   completedAt: string | null;
+  note: string | null;
 }
 
 export interface AttachmentDto {

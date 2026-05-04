@@ -96,6 +96,36 @@ export interface LastMessageDto {
 }
 
 /**
+ * Member entry returned in `ConversationInfoDto.mention.members`.
+ * Used as the source of truth for the @mention dropdown.
+ */
+export interface MentionMemberDto {
+  /** Membership row id (UUID) */
+  id: string;
+  /** Underlying user id (UUID) */
+  userId: string;
+  /** Full display name */
+  userFullName: string;
+  /** Username / handle */
+  userIdentifier: string;
+  /** Email address */
+  userEmail: string;
+  /** Whether the member is a leader of the chat/department */
+  isLeader: boolean;
+  /** Joined-at timestamp (ISO 8601) */
+  joinedAt: string;
+  /** Roles assigned to the user */
+  userRoles: string[];
+}
+
+/**
+ * Mention payload for a conversation
+ */
+export interface ConversationMentionDto {
+  members: MentionMemberDto[];
+}
+
+/**
  * 🆕 NEW (CBN-002): Conversation info for category-based navigation
  * Lightweight conversation reference within category
  */
@@ -110,6 +140,8 @@ export interface ConversationInfoDto {
   lastMessage: LastMessageDto | null;
   /** Number of unread messages (from API) */
   unreadCount: number;
+  /** Members eligible for @mention in this conversation */
+  mention?: ConversationMentionDto;
 }
 
 /**

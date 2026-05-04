@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Edit2,
   Trash2,
   Loader2,
@@ -116,8 +117,34 @@ export const TaskCard: React.FC<{
     null,
   );
   const [newLabel, setNewLabel] = React.useState("");
+  const [newNote, setNewNote] = React.useState("");
   const [deleteItemTarget, setDeleteItemTarget] =
     React.useState<ChecklistItem | null>(null);
+  const [expandedNoteIds, setExpandedNoteIds] = React.useState<Set<string>>(
+    new Set(),
+  );
+  const [overflowingNoteIds, setOverflowingNoteIds] = React.useState<
+    Set<string>
+  >(new Set());
+  const noteRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const overflowingNoteIdsRef = React.useRef(overflowingNoteIds);
+
+  React.useEffect(() => {
+    overflowingNoteIdsRef.current = overflowingNoteIds;
+  }, [overflowingNoteIds]);
+
+  const toggleNoteExpanded = React.useCallback((id: string) => {
+    setExpandedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Guards against double-submit when Enter on input + Click on button fire in the same tick
+  // (TanStack Query's isPending updates async via state, so it can't block synchronous double-fires)
+  const isSubmittingItemRef = React.useRef(false);
 
   // Mutation hooks for API calls
   const addCheckItemMutation = useAddCheckItem();
@@ -152,6 +179,89 @@ export const TaskCard: React.FC<{
   const isLeaderOfGroup = useIsLeaderInConversation(conversationId);
   const canEditStructure = isLeaderOfGroup && t.status.code === "todo";
 
+  // Inline note editing: staff at todo/doing OR leader at doing
+  // Status need_to_verified / finished → read-only for both
+  const canInlineEditNote =
+    (t.status.code === "todo" || t.status.code === "doing") &&
+    (!isLeaderOfGroup || t.status.code === "doing");
+
+  const [inlineNoteEditingId, setInlineNoteEditingId] = React.useState<
+    string | null
+  >(null);
+  const [inlineNoteValue, setInlineNoteValue] = React.useState("");
+  const inlineNoteInputRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  const openInlineNoteEditor = React.useCallback(
+    (item: ChecklistItem) => {
+      if (!canInlineEditNote) return;
+      setInlineNoteEditingId(item.id);
+      setInlineNoteValue((item.note ?? "").slice(0, 500));
+    },
+    [canInlineEditNote],
+  );
+
+  const closeInlineNoteEditor = React.useCallback(() => {
+    setInlineNoteEditingId(null);
+    setInlineNoteValue("");
+  }, []);
+
+  const handleSaveInlineNote = async (item: ChecklistItem) => {
+    if (updateCheckItemMutation.isPending) return;
+    const trimmedNote = inlineNoteValue.trim().slice(0, 500);
+    const noteValue = trimmedNote.length > 0 ? trimmedNote : null;
+    const previousNote = (item.note ?? "").trim();
+    if (noteValue === (previousNote.length > 0 ? previousNote : null)) {
+      closeInlineNoteEditor();
+      return;
+    }
+
+    try {
+      await updateCheckItemMutation.mutateAsync({
+        taskId: t.id,
+        itemId: item.id,
+        content: item.label,
+        note: noteValue,
+      });
+
+      closeInlineNoteEditor();
+
+      if (conversationId && t.messageId) {
+        const action = previousNote.length === 0 ? "thêm" : "cập nhật";
+        const messageContent = `${currentUserFullName} đã ${action} ghi chú cho mục "${item.label}"`;
+        try {
+          await sendMessageMutation.mutateAsync({
+            conversationId,
+            content: messageContent,
+            messageType: "SYS",
+            parentMessageId: t.messageId,
+          });
+        } catch (error) {
+          // Silently fail - don't show error to user
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update checklist note:", error);
+      toast.error("Cập nhật ghi chú thất bại. Thử lại sau");
+    }
+  };
+
+  React.useEffect(() => {
+    if (!inlineNoteEditingId) return;
+    const el = inlineNoteInputRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inlineNoteEditingId]);
+
+  React.useEffect(() => {
+    const el = inlineNoteInputRef.current;
+    if (!el || !inlineNoteEditingId) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inlineNoteValue, inlineNoteEditingId]);
+
   const permissions = t.permissions;
 
   // Checklist can only be toggled when task is in "doing" status
@@ -169,6 +279,82 @@ export const TaskCard: React.FC<{
         return "Task đã hoàn thành";
       default:
         return "Không thể chỉnh sửa checklist";
+    }
+  };
+
+  // Helper: check if label is valid (contains at least one alphanumeric character)
+  const isValidLabel = (text: string) => {
+    const trimmed = text.trim();
+    // Check if has at least one letter or number (not just special chars)
+    return trimmed.length > 0 && /[\p{L}\p{N}]/u.test(trimmed);
+  };
+
+  // Handler: Submit checklist item (add new or update existing)
+  // Single entry point used by both Enter-on-input and Click-on-Save-button
+  // to prevent double API calls when both events fire in the same tick.
+  const handleSubmitChecklistItem = async () => {
+    if (!editingItem) return;
+    if (!isValidLabel(newLabel)) return;
+    if (isSubmittingItemRef.current) return;
+    if (
+      addCheckItemMutation.isPending ||
+      updateCheckItemMutation.isPending
+    ) {
+      return;
+    }
+
+    isSubmittingItemRef.current = true;
+    const trimmedLabel = newLabel.trim();
+    const trimmedNote = newNote.trim().slice(0, 500);
+    const noteValue = trimmedNote.length > 0 ? trimmedNote : null;
+    const isNew = editingItem.id === "new";
+    const previousLabel = editingItem.label;
+
+    try {
+      if (isNew) {
+        await addCheckItemMutation.mutateAsync({
+          taskId: t.id,
+          content: trimmedLabel,
+          note: noteValue,
+        });
+      } else {
+        await updateCheckItemMutation.mutateAsync({
+          taskId: t.id,
+          itemId: editingItem.id,
+          content: trimmedLabel,
+          note: noteValue,
+        });
+      }
+
+      setEditingItem(null);
+      setNewLabel("");
+      setNewNote("");
+      setOpen(true);
+
+      if (conversationId && t.messageId) {
+        const messageContent = isNew
+          ? `${currentUserFullName} đã thêm mục ${trimmedLabel} vào công việc ${t.title}`
+          : `${currentUserFullName} đã cập nhật mục ${previousLabel} thành ${trimmedLabel} vào công việc ${t.title}`;
+        try {
+          await sendMessageMutation.mutateAsync({
+            conversationId,
+            content: messageContent,
+            messageType: "SYS",
+            parentMessageId: t.messageId,
+          });
+        } catch (error) {
+          // Silently fail - don't show error to user
+        }
+      }
+    } catch (error) {
+      console.error(
+        isNew
+          ? "Failed to add checklist item:"
+          : "Failed to update checklist item:",
+        error,
+      );
+    } finally {
+      isSubmittingItemRef.current = false;
     }
   };
 
@@ -205,12 +391,57 @@ export const TaskCard: React.FC<{
     setDeleteItemTarget(null);
   };
 
-  // Helper: check if label is valid (contains at least one alphanumeric character)
-  const isValidLabel = (text: string) => {
-    const trimmed = text.trim();
-    // Check if has at least one letter or number (not just special chars)
-    return trimmed.length > 0 && /[\p{L}\p{N}]/u.test(trimmed);
-  };
+  // Detect which checklist note rows actually wrap to more than 1 line
+  React.useEffect(() => {
+    if (!t.checklist || t.checklist.length === 0) {
+      setOverflowingNoteIds((prev) => (prev.size === 0 ? prev : new Set()));
+      return;
+    }
+
+    const compute = () => {
+      const next = new Set<string>();
+      for (const item of t.checklist || []) {
+        if (!item.note?.trim()) continue;
+        if (expandedNoteIds.has(item.id)) {
+          if (overflowingNoteIdsRef.current.has(item.id)) next.add(item.id);
+          continue;
+        }
+        const el = noteRefs.current[item.id];
+        if (el && el.scrollHeight > el.clientHeight + 1) {
+          next.add(item.id);
+        }
+      }
+      setOverflowingNoteIds((prev) => {
+        if (prev.size === next.size) {
+          let same = true;
+          for (const id of next) {
+            if (!prev.has(id)) {
+              same = false;
+              break;
+            }
+          }
+          if (same) return prev;
+        }
+        return next;
+      });
+    };
+
+    compute();
+
+    const observers: ResizeObserver[] = [];
+    if (typeof ResizeObserver !== "undefined") {
+      for (const item of t.checklist || []) {
+        const el = noteRefs.current[item.id];
+        if (!el) continue;
+        const ro = new ResizeObserver(() => compute());
+        ro.observe(el);
+        observers.push(ro);
+      }
+    }
+    return () => {
+      observers.forEach((o) => o.disconnect());
+    };
+  }, [t.checklist, expandedNoteIds, open]);
 
   // Sort checklist: unchecked first, then by order field from API
   const sortedChecklist = React.useMemo(() => {
@@ -249,133 +480,69 @@ export const TaskCard: React.FC<{
               value={newLabel}
               autoFocus
               onChange={(e) => setNewLabel(e.target.value)}
-              onKeyDown={async (e) => {
-                if (
-                  e.key === "Enter" &&
-                  isValidLabel(newLabel) &&
-                  !addCheckItemMutation.isPending &&
-                  !updateCheckItemMutation.isPending
-                ) {
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
                   e.preventDefault();
-                  if (editingItem?.id === "new") {
-                    const addedLabel = newLabel.trim();
-                    try {
-                      await addCheckItemMutation.mutateAsync({
-                        taskId: t.id,
-                        content: addedLabel,
-                      });
-
-                      // Send system message about adding checklist item
-                      if (conversationId && t.messageId) {
-                        try {
-                          await sendMessageMutation.mutateAsync({
-                            conversationId,
-                            content: `${currentUserFullName} đã thêm mục ${addedLabel} vào công việc ${t.title}`,
-                            messageType: "SYS",
-                            parentMessageId: t.messageId,
-                          });
-                        } catch (error) {
-                          // Silently fail - don't show error to user
-                        }
-                      }
-
-                      setEditingItem(null);
-                      setNewLabel("");
-                      setOpen(true);
-                    } catch (error) {
-                      console.error("Failed to add checklist item:", error);
-                    }
-                  } else if (editingItem) {
-                    try {
-                      await updateCheckItemMutation.mutateAsync({
-                        taskId: t.id,
-                        itemId: editingItem.id,
-                        content: newLabel.trim(),
-                      });
-                      setEditingItem(null);
-                      setNewLabel("");
-                      setOpen(true);
-                    } catch (error) {
-                      console.error("Failed to update checklist item:", error);
-                    }
-                  }
+                  handleSubmitChecklistItem();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditingItem(null);
+                  setNewLabel("");
+                  setNewNote("");
                 }
               }}
+            />
+
+            <div className="mt-2 flex items-center justify-between text-[11px] font-medium text-gray-600">
+              <span>Ghi chú (tuỳ chọn)</span>
+              <span
+                className={
+                  newNote.length >= 500 ? "text-rose-500" : "text-gray-400"
+                }
+              >
+                {newNote.length}/500
+              </span>
+            </div>
+            <textarea
+              data-testid="checklist-item-note-input"
+              className="mt-1 w-full rounded border px-2 py-1 text-sm resize-none"
+              rows={3}
+              maxLength={500}
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value.slice(0, 500))}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditingItem(null);
+                  setNewLabel("");
+                  setNewNote("");
+                }
+              }}
+              placeholder="Thêm ghi chú cho mục này..."
             />
 
             <div className="flex justify-end gap-2 mt-3">
               <button
                 data-testid="checklist-cancel-button"
                 className="text-xs px-2 py-1 rounded bg-gray-100"
-                onClick={() => setEditingItem(null)}
+                onClick={() => {
+                  setEditingItem(null);
+                  setNewLabel("");
+                  setNewNote("");
+                }}
               >
                 Huỷ
               </button>
               <button
                 data-testid="checklist-save-button"
+                type="button"
                 className="text-xs px-3 py-1 rounded bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={
                   addCheckItemMutation.isPending ||
                   updateCheckItemMutation.isPending ||
                   !isValidLabel(newLabel)
                 }
-                onClick={async () => {
-                  if (!isValidLabel(newLabel)) return;
-
-                  if (editingItem.id === "new") {
-                    try {
-                      await addCheckItemMutation.mutateAsync({
-                        taskId: t.id,
-                        content: newLabel.trim(),
-                      });
-                      setEditingItem(null);
-                      setNewLabel("");
-                      setOpen(true);
-                    } catch (error) {
-                      console.error("Failed to add checklist item:", error);
-                    }
-
-                    try {
-                      const messageContent = `${currentUserFullName} đã thêm mục ${newLabel.trim()} vào công việc ${t.title}`;
-                      if (conversationId && t.messageId) {
-                        sendMessageMutation.mutateAsync({
-                          conversationId,
-                          content: messageContent,
-                          messageType: "SYS",
-                          parentMessageId: t.messageId,
-                        });
-                      }
-                    } catch (error) {
-                      // Silently fail - don't show error to user
-                    }
-                  } else {
-                    try {
-                      await updateCheckItemMutation.mutateAsync({
-                        taskId: t.id,
-                        itemId: editingItem.id,
-                        content: newLabel.trim(),
-                      });
-                      setEditingItem(null);
-                      setNewLabel("");
-                      setOpen(true);
-                    } catch (error) {
-                      console.error("Failed to update checklist item:", error);
-                    }
-                    try {
-                      const messageContent = `${currentUserFullName} đã cập nhật mục ${editingItem.label} thành ${newLabel.trim()} vào công việc ${t.title}`;
-                      if (conversationId && t.messageId) {
-                        sendMessageMutation.mutateAsync({
-                          conversationId,
-                          content: messageContent,
-                          messageType: "SYS",
-                          parentMessageId: t.messageId,
-                        });
-                      }
-                    } catch (error) {
-                      // Silently fail - don't show error to user
-                    }
-                  }
-                }}
+                onClick={handleSubmitChecklistItem}
               >
                 {addCheckItemMutation.isPending ||
                 updateCheckItemMutation.isPending
@@ -581,6 +748,7 @@ export const TaskCard: React.FC<{
                       onClick={() => {
                         setEditingItem({ id: "new", label: "", done: false });
                         setNewLabel("");
+                        setNewNote("");
                         setOpen(true);
                       }}
                     >
@@ -591,10 +759,16 @@ export const TaskCard: React.FC<{
 
                 {open && (
                   <ul className="mt-2 space-y-1" data-testid="checklist-list">
-                    {sortedChecklist.map((c) => (
+                    {sortedChecklist.map((c) => {
+                      const note = c.note?.trim();
+                      const isNoteExpanded = expandedNoteIds.has(c.id);
+                      const isOverflowing = overflowingNoteIds.has(c.id);
+                      const showToggle =
+                        !!note && (isOverflowing || isNoteExpanded);
+                      return (
                       <li
                         key={c.id}
-                        className="group flex items-center gap-2 text-[12px] leading-none rounded-md px-2 py-1.5 hover:bg-gray-50 transition-all"
+                        className="group flex items-start gap-2 text-[12px] leading-none rounded-md px-2 py-1.5 hover:bg-gray-50 transition-all"
                         data-testid={`checklist-item-${c.id}`}
                       >
                         <button
@@ -668,67 +842,265 @@ export const TaskCard: React.FC<{
                           {c.done && <Check className="w-3 h-3" />}
                         </button>
 
-                        <span
-                          data-testid={`checklist-label-${c.id}`}
-                          className={`
-                            ${c.done ? "text-gray-400 line-through" : "text-gray-700"}
-                            flex-1 select-none transition-colors leading-none
-                            ${canToggleChecklist ? "cursor-pointer hover:text-emerald-600" : "cursor-not-allowed"}
-                          `}
-                          onClick={async () => {
-                            if (
-                              !canToggleChecklist ||
-                              toggleCheckItemMutation.isPending ||
-                              sendMessageMutation.isPending
-                            )
-                              return;
-                            try {
-                              // Toggle the checklist item
-                              await toggleCheckItemMutation.mutateAsync({
-                                taskId: t.id,
-                                itemId: c.id,
-                              });
+                        <div className="flex-1 min-w-0 flex flex-col gap-1">
+                          <span
+                            data-testid={`checklist-label-${c.id}`}
+                            className={`
+                              ${c.done ? "text-gray-400 line-through" : "text-gray-700"}
+                              select-none transition-colors leading-none break-words
+                              ${canToggleChecklist ? "cursor-pointer hover:text-emerald-600" : "cursor-not-allowed"}
+                            `}
+                            onClick={async () => {
+                              if (
+                                !canToggleChecklist ||
+                                toggleCheckItemMutation.isPending ||
+                                sendMessageMutation.isPending
+                              )
+                                return;
+                              try {
+                                // Toggle the checklist item
+                                await toggleCheckItemMutation.mutateAsync({
+                                  taskId: t.id,
+                                  itemId: c.id,
+                                });
 
-                              // Send system message about the toggle
-                              const newDoneState = !c.done;
-                              const action = newDoneState
-                                ? "đánh dấu"
-                                : "bỏ đánh dấu";
-                              const messageContent = `${currentUserFullName} đã ${action} mục "${c.label}"`;
+                                // Send system message about the toggle
+                                const newDoneState = !c.done;
+                                const action = newDoneState
+                                  ? "đánh dấu"
+                                  : "bỏ đánh dấu";
+                                const messageContent = `${currentUserFullName} đã ${action} mục "${c.label}"`;
 
-                              if (conversationId && t.messageId) {
-                                try {
-                                  await sendMessageMutation.mutateAsync({
-                                    conversationId,
-                                    content: messageContent,
-                                    messageType: "SYS",
-                                    parentMessageId: t.messageId,
-                                  });
-                                } catch (error) {
-                                  console.error(
-                                    "Failed to send system message:",
-                                    error,
-                                  );
-                                  // Silently fail - don't show error to user
+                                if (conversationId && t.messageId) {
+                                  try {
+                                    await sendMessageMutation.mutateAsync({
+                                      conversationId,
+                                      content: messageContent,
+                                      messageType: "SYS",
+                                      parentMessageId: t.messageId,
+                                    });
+                                  } catch (error) {
+                                    console.error(
+                                      "Failed to send system message:",
+                                      error,
+                                    );
+                                    // Silently fail - don't show error to user
+                                  }
                                 }
+                              } catch (error) {
+                                console.error(
+                                  "Failed to toggle checklist item:",
+                                  error,
+                                );
                               }
-                            } catch (error) {
-                              console.error(
-                                "Failed to toggle checklist item:",
-                                error,
-                              );
+                            }}
+                            title={
+                              !canToggleChecklist
+                                ? getChecklistDisabledTooltip()
+                                : c.done
+                                  ? "Nhấn để bỏ chọn"
+                                  : "Nhấn để hoàn thành"
                             }
-                          }}
-                          title={
-                            !canToggleChecklist
-                              ? getChecklistDisabledTooltip()
-                              : c.done
-                                ? "Nhấn để bỏ chọn"
-                                : "Nhấn để hoàn thành"
-                          }
-                        >
-                          {c.label}
-                        </span>
+                          >
+                            {c.label}
+                          </span>
+                          {inlineNoteEditingId === c.id ? (
+                            <div
+                              data-testid={`checklist-note-edit-${c.id}`}
+                              className="border-l-2 border-brand-400 pl-2"
+                            >
+                              <textarea
+                                ref={inlineNoteInputRef}
+                                data-testid={`checklist-note-input-${c.id}`}
+                                className="w-full rounded border px-2 py-1 text-[11px] italic text-gray-700 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-brand-400"
+                                rows={1}
+                                maxLength={500}
+                                value={inlineNoteValue}
+                                onChange={(e) =>
+                                  setInlineNoteValue(
+                                    e.target.value.slice(0, 500),
+                                  )
+                                }
+                                onInput={(e) => {
+                                  const el = e.currentTarget;
+                                  el.style.height = "auto";
+                                  el.style.height = `${el.scrollHeight}px`;
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    closeInlineNoteEditor();
+                                  } else if (
+                                    e.key === "Enter" &&
+                                    (e.metaKey || e.ctrlKey)
+                                  ) {
+                                    e.preventDefault();
+                                    handleSaveInlineNote(c);
+                                  }
+                                }}
+                                placeholder="Thêm ghi chú cho mục này..."
+                              />
+                              <div className="mt-1 flex items-center justify-between">
+                                <span
+                                  className={`text-[10px] ${
+                                    inlineNoteValue.length >= 500
+                                      ? "text-rose-500"
+                                      : "text-gray-400"
+                                  }`}
+                                >
+                                  {inlineNoteValue.length}/500
+                                </span>
+                                <div className="flex gap-1">
+                                  <button
+                                    type="button"
+                                    data-testid={`checklist-note-cancel-${c.id}`}
+                                    className="text-[11px] px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200"
+                                    onClick={closeInlineNoteEditor}
+                                    disabled={
+                                      updateCheckItemMutation.isPending
+                                    }
+                                  >
+                                    Huỷ
+                                  </button>
+                                  <button
+                                    type="button"
+                                    data-testid={`checklist-note-save-${c.id}`}
+                                    className="text-[11px] px-2 py-0.5 rounded bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700"
+                                    onClick={() => handleSaveInlineNote(c)}
+                                    disabled={
+                                      updateCheckItemMutation.isPending
+                                    }
+                                  >
+                                    {updateCheckItemMutation.isPending
+                                      ? "Đang lưu..."
+                                      : "Lưu"}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : note ? (
+                            <div
+                              data-testid={`checklist-note-${c.id}`}
+                              className="border-l-2 border-brand-400 pl-2"
+                            >
+                              <div className="flex items-start gap-1">
+                                <div
+                                  ref={(el) => {
+                                    noteRefs.current[c.id] = el;
+                                  }}
+                                  className={`flex-1 min-w-0 text-[11px] italic text-gray-500 leading-relaxed break-words ${
+                                    isNoteExpanded
+                                      ? "whitespace-pre-wrap"
+                                      : "line-clamp-1"
+                                  } ${
+                                    canInlineEditNote
+                                      ? "cursor-text hover:bg-brand-50/40 rounded-sm"
+                                      : showToggle
+                                        ? "cursor-pointer"
+                                        : ""
+                                  }`}
+                                  onClick={
+                                    canInlineEditNote
+                                      ? () => openInlineNoteEditor(c)
+                                      : showToggle
+                                        ? () => toggleNoteExpanded(c.id)
+                                        : undefined
+                                  }
+                                  role={
+                                    canInlineEditNote || showToggle
+                                      ? "button"
+                                      : undefined
+                                  }
+                                  tabIndex={
+                                    canInlineEditNote || showToggle
+                                      ? 0
+                                      : undefined
+                                  }
+                                  onKeyDown={
+                                    canInlineEditNote
+                                      ? (e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault();
+                                            openInlineNoteEditor(c);
+                                          }
+                                        }
+                                      : showToggle
+                                        ? (e) => {
+                                            if (
+                                              e.key === "Enter" ||
+                                              e.key === " "
+                                            ) {
+                                              e.preventDefault();
+                                              toggleNoteExpanded(c.id);
+                                            }
+                                          }
+                                        : undefined
+                                  }
+                                  aria-label={
+                                    canInlineEditNote
+                                      ? "Nhấn để chỉnh sửa ghi chú"
+                                      : showToggle
+                                        ? isNoteExpanded
+                                          ? "Thu gọn ghi chú"
+                                          : "Xem đầy đủ ghi chú"
+                                        : undefined
+                                  }
+                                  title={
+                                    canInlineEditNote
+                                      ? "Nhấn để chỉnh sửa ghi chú"
+                                      : showToggle
+                                        ? isNoteExpanded
+                                          ? "Nhấn để thu gọn"
+                                          : "Nhấn để mở rộng"
+                                        : undefined
+                                  }
+                                >
+                                  {note}
+                                </div>
+                                {showToggle && (
+                                  <button
+                                    type="button"
+                                    data-testid={`checklist-note-toggle-${c.id}`}
+                                    className="flex-shrink-0 text-gray-400 hover:text-gray-600 border-0 bg-transparent p-0 cursor-pointer focus:outline-none"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleNoteExpanded(c.id);
+                                    }}
+                                    aria-expanded={isNoteExpanded}
+                                    aria-label={
+                                      isNoteExpanded
+                                        ? "Thu gọn ghi chú"
+                                        : "Xem đầy đủ ghi chú"
+                                    }
+                                    title={
+                                      isNoteExpanded
+                                        ? "Nhấn để thu gọn"
+                                        : "Nhấn để mở rộng"
+                                    }
+                                  >
+                                    {isNoteExpanded ? (
+                                      <ChevronUp className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <ChevronDown className="h-3.5 w-3.5" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ) : canInlineEditNote ? (
+                            <button
+                              type="button"
+                              data-testid={`checklist-note-add-${c.id}`}
+                              onClick={() => openInlineNoteEditor(c)}
+                              className="self-start border-0 bg-transparent p-0 text-[11px] italic text-emerald-700 hover:text-emerald-800 hover:underline focus:outline-none"
+                            >
+                              + Thêm ghi chú
+                            </button>
+                          ) : null}
+                        </div>
 
                         {canEditStructure && (
                           <div className="flex gap-1 ml-auto opacity-0 group-hover:opacity-100 transition items-center">
@@ -738,6 +1110,7 @@ export const TaskCard: React.FC<{
                               onClick={() => {
                                 setEditingItem(c);
                                 setNewLabel(c.label);
+                                setNewNote((c.note ?? "").slice(0, 500));
                               }}
                             />
 
@@ -754,7 +1127,8 @@ export const TaskCard: React.FC<{
                           </div>
                         )}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -773,6 +1147,7 @@ export const TaskCard: React.FC<{
                     onClick={() => {
                       setEditingItem({ id: "new", label: "", done: false });
                       setNewLabel("");
+                      setNewNote("");
                     }}
                   >
                     + Thêm

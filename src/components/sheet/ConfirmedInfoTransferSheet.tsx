@@ -35,6 +35,8 @@ import {
   AlertCircle,
   ClipboardList,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import axios from "axios";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -107,6 +109,23 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   const [inlineError, setInlineError] = React.useState<string | null>(null);
   const pendingMessageIdRef = React.useRef<string | null>(null);
 
+  const [expandedNoteIds, setExpandedNoteIds] = React.useState<Set<string>>(
+    new Set(),
+  );
+  const [overflowingNoteIds, setOverflowingNoteIds] = React.useState<
+    Set<string>
+  >(new Set());
+  const noteRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+
+  const toggleNoteExpanded = React.useCallback((id: string) => {
+    setExpandedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   // Fetch categories
   const { data: categoriesData, isLoading: categoriesLoading } =
     useCategories();
@@ -146,9 +165,15 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   const { data: checklistTemplatesData, isLoading: checklistTemplatesLoading } =
     useChecklistTemplates(selectedConversationId || undefined);
 
-  const checklistTemplates = checklistTemplatesData || [];
-  const selectedTemplate = checklistTemplates.find(
-    (t) => t.id === selectedChecklistTemplateId,
+  const checklistTemplates = React.useMemo(
+    () => checklistTemplatesData || [],
+    [checklistTemplatesData],
+  );
+  const selectedTemplate = React.useMemo(
+    () =>
+      checklistTemplates.find((t) => t.id === selectedChecklistTemplateId) ||
+      null,
+    [checklistTemplates, selectedChecklistTemplateId],
   );
 
   // Filter members by department (including leader/self)
@@ -340,10 +365,12 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     if (membersLoading) return;
     if (filteredMembers.length === 0) return;
 
-    const selfInList = !!currentUser?.id
-      && filteredMembers.some((m) => m.userId === currentUser.id);
-    const currentInList = selectedAssigneeId
-      && filteredMembers.some((m) => m.userId === selectedAssigneeId);
+    const selfInList =
+      !!currentUser?.id &&
+      filteredMembers.some((m) => m.userId === currentUser.id);
+    const currentInList =
+      selectedAssigneeId &&
+      filteredMembers.some((m) => m.userId === selectedAssigneeId);
 
     if (currentInList) return;
 
@@ -358,6 +385,69 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   React.useEffect(() => {
     setSelectedChecklistTemplateId("");
   }, [selectedConversationId]);
+
+  // Collapse expanded notes when switching templates
+  React.useEffect(() => {
+    setExpandedNoteIds(new Set());
+  }, [selectedChecklistTemplateId]);
+
+  // Detect which note rows actually wrap to more than 1 line
+  React.useEffect(() => {
+    if (!selectedTemplate?.items) {
+      setOverflowingNoteIds((prev) => (prev.size === 0 ? prev : new Set()));
+      return;
+    }
+
+    const compute = () => {
+      const next = new Set<string>();
+      for (const item of selectedTemplate.items) {
+        if (expandedNoteIds.has(item.id)) {
+          // While expanded the element is no longer clamped, so reuse the
+          // previous decision instead of re-measuring.
+          if (overflowingNoteIdsRef.current.has(item.id)) next.add(item.id);
+          continue;
+        }
+        const el = noteRefs.current[item.id];
+        if (el && el.scrollHeight > el.clientHeight + 1) {
+          next.add(item.id);
+        }
+      }
+      setOverflowingNoteIds((prev) => {
+        if (prev.size === next.size) {
+          let same = true;
+          for (const id of next) {
+            if (!prev.has(id)) {
+              same = false;
+              break;
+            }
+          }
+          if (same) return prev;
+        }
+        return next;
+      });
+    };
+
+    compute();
+
+    const observers: ResizeObserver[] = [];
+    if (typeof ResizeObserver !== "undefined") {
+      for (const item of selectedTemplate.items) {
+        const el = noteRefs.current[item.id];
+        if (!el) continue;
+        const ro = new ResizeObserver(() => compute());
+        ro.observe(el);
+        observers.push(ro);
+      }
+    }
+    return () => {
+      observers.forEach((o) => o.disconnect());
+    };
+  }, [selectedTemplate, expandedNoteIds]);
+
+  const overflowingNoteIdsRef = React.useRef(overflowingNoteIds);
+  React.useEffect(() => {
+    overflowingNoteIdsRef.current = overflowingNoteIds;
+  }, [overflowingNoteIds]);
 
   // Auto-select default template when templates load
   React.useEffect(() => {
@@ -489,12 +579,15 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
         if (!isSubmitting) onClose();
       }}
     >
-      <SheetContent side="right" className="w-[400px] sm:max-w-[400px]">
-        <SheetHeader>
+      <SheetContent
+        side="right"
+        className="w-[400px] sm:max-w-[400px] flex flex-col p-0"
+      >
+        <SheetHeader className="px-6 pt-6">
           <SheetTitle>Giao việc</SheetTitle>
         </SheetHeader>
 
-        <div className="mt-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 space-y-4">
           {/* Display confirmed information */}
           <div>
             <Label className="text-sm text-gray-600">
@@ -674,18 +767,90 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
                       <p className="text-xs text-gray-500 font-medium mb-2">
                         Các mục checklist ({selectedTemplate.items.length})
                       </p>
-                      <ul className="space-y-1">
+                      <ul className="space-y-1.5 pr-2">
                         {[...selectedTemplate.items]
                           .sort((a, b) => a.order - b.order)
-                          .map((item) => (
-                            <li
-                              key={item.id}
-                              className="flex items-center gap-2 text-sm text-gray-700"
-                            >
-                              <CheckCircle2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                              {item.content}
-                            </li>
-                          ))}
+                          .map((item) => {
+                            const note = item.note?.trim();
+                            const isExpanded = expandedNoteIds.has(item.id);
+                            const isOverflowing = overflowingNoteIds.has(
+                              item.id,
+                            );
+                            const showToggle =
+                              !!note && (isOverflowing || isExpanded);
+                            return (
+                              <li
+                                key={item.id}
+                                className="flex items-start gap-2 text-xs text-gray-600"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div>{item.content}</div>
+                                  {note && (
+                                    <div className="mt-1 border-l-2 border-brand-400 pl-2">
+                                      <div
+                                        className={`flex items-start gap-1 ${
+                                          showToggle ? "cursor-pointer" : ""
+                                        }`}
+                                        onClick={
+                                          showToggle
+                                            ? () => toggleNoteExpanded(item.id)
+                                            : undefined
+                                        }
+                                        role={showToggle ? "button" : undefined}
+                                        tabIndex={showToggle ? 0 : undefined}
+                                        onKeyDown={
+                                          showToggle
+                                            ? (e) => {
+                                                if (
+                                                  e.key === "Enter" ||
+                                                  e.key === " "
+                                                ) {
+                                                  e.preventDefault();
+                                                  toggleNoteExpanded(item.id);
+                                                }
+                                              }
+                                            : undefined
+                                        }
+                                        aria-expanded={
+                                          showToggle ? isExpanded : undefined
+                                        }
+                                        aria-label={
+                                          showToggle
+                                            ? isExpanded
+                                              ? "Thu gọn ghi chú"
+                                              : "Xem đầy đủ ghi chú"
+                                            : undefined
+                                        }
+                                      >
+                                        <div
+                                          ref={(el) => {
+                                            noteRefs.current[item.id] = el;
+                                          }}
+                                          className={`flex-1 min-w-0 text-[11px] italic text-gray-500 leading-relaxed break-words ${
+                                            isExpanded
+                                              ? "whitespace-pre-wrap"
+                                              : "line-clamp-1"
+                                          }`}
+                                        >
+                                          {note}
+                                        </div>
+                                        {showToggle && (
+                                          <span className="flex-shrink-0 text-gray-400">
+                                            {isExpanded ? (
+                                              <ChevronUp className="h-3.5 w-3.5" />
+                                            ) : (
+                                              <ChevronDown className="h-3.5 w-3.5" />
+                                            )}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
                       </ul>
                     </div>
                   )}
@@ -693,16 +858,16 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
               )}
             </div>
           )}
+
+          {inlineError && (
+            <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-700 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{inlineError}</span>
+            </div>
+          )}
         </div>
 
-        {inlineError && (
-          <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-700 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <span>{inlineError}</span>
-          </div>
-        )}
-
-        <SheetFooter className="mt-6">
+        <SheetFooter className="px-6 py-4 border-t bg-white">
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Hủy
           </Button>

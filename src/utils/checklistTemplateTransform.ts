@@ -10,6 +10,7 @@ export function transformTemplateItem(item: TemplateItemDto): ChecklistTemplateI
   return {
     id: item.id,
     label: item.content || '',
+    note: item.note ?? null,
   };
 }
 

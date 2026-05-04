@@ -1,6 +1,6 @@
 import React from "react";
 import { ChecklistTemplateItem, ChecklistVariant } from "../types";
-import { Plus, X as XIcon, Trash, Save } from "lucide-react";
+import { Plus, X as XIcon, Trash, Save, StickyNote } from "lucide-react";
 import {
   Select,
   SelectTrigger,
@@ -65,7 +65,12 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
     React.useState<string>("");
 
   const [items, setItems] = React.useState<ChecklistTemplateItem[]>(template);
+  const [expandedNoteIds, setExpandedNoteIds] = React.useState<Set<string>>(
+    new Set(),
+  );
   const inputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
+  const noteRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const [focusedNoteId, setFocusedNoteId] = React.useState<string | null>(null);
   const newItemRef = React.useRef<HTMLInputElement | null>(null);
   const [selectedVariantId, setSelectedVariantId] = React.useState(
     activeVariantId ?? checklistVariants?.[0]?.id ?? "",
@@ -95,6 +100,7 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
       setSelectedTemplateName("");
       setSelectedTemplateDescription("");
       setItems([]);
+      setExpandedNoteIds(new Set());
 
       // Force refetch once per dialog open to get latest data
       if (conversationId && !hasRefetchedRef.current) {
@@ -147,16 +153,56 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
     setItems((prev) => prev.map((c) => (c.id === id ? { ...c, label } : c)));
   };
 
+  const updateNote = (id: string, note: string) => {
+    setItems((prev) => prev.map((c) => (c.id === id ? { ...c, note } : c)));
+  };
+
   const remove = (id: string) => {
     setItems((prev) => prev.filter((c) => c.id !== id));
+    setExpandedNoteIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
+
+  const toggleNote = (id: string) => {
+    let opened = false;
+    setExpandedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        opened = true;
+      }
+      return next;
+    });
+    if (opened) {
+      setFocusedNoteId(id);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!focusedNoteId) return;
+    const el = noteRefs.current[focusedNoteId];
+    if (el) {
+      el.focus();
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [focusedNoteId]);
+
+  const isNoteVisible = (item: ChecklistTemplateItem) =>
+    expandedNoteIds.has(item.id) || !!item.note?.trim();
 
   const add = () => {
     const newId = "tpl_" + Date.now().toString(36);
 
     setItems((prev) => [
       ...prev.map((item) => ({ ...item, label: item.label.trim() })),
-      { id: newId, label: "" },
+      { id: newId, label: "", note: null },
     ]);
 
     // Sau khi state cập nhật, focus vào input mới
@@ -173,16 +219,12 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
     // If a template is selected from API, update it via API
     if (selectedApiTemplateId && selectedApiTemplateId !== "new") {
       try {
-        const itemLabels = items
-          .map((item) => item.label)
-          .filter((label) => label.trim() !== "");
-
-        // Transform string[] items to proper checklist item format
-        const transformedItems = itemLabels.map((label, index) => ({
-          content: label,
-          order: index,
-          isRequired: false,
-        }));
+        const transformedItems = items
+          .filter((item) => item.label.trim() !== "")
+          .map((item) => ({
+            content: item.label.trim(),
+            note: item.note?.trim() ? item.note.trim() : null,
+          }));
 
         // Get isDefault property from selected template
         const selectedTemplate = apiTemplates?.find(
@@ -197,10 +239,7 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
             description: selectedTemplateDescription || undefined,
             conversationId: conversationId || undefined,
             isDefault: selectedTemplate?.isDefault ?? false,
-            items:
-              transformedItems.length > 0
-                ? transformedItems.map((item) => item.content)
-                : undefined,
+            items: transformedItems.length > 0 ? transformedItems : undefined,
           },
         });
 
@@ -315,85 +354,193 @@ export const ChecklistTemplateSlideOver: React.FC<Props> = ({
         <div className="flex-1 overflow-auto px-4 pt-5 pb-2">
           {items.length > 0 ? (
             <div className="space-y-2">
-              {items.map((it) => (
-                <div
-                  key={it.id}
-                  className="
-                    group
-                    flex items-center justify-between
-                    rounded-md border border-gray-200 bg-white
-                    hover:bg-emerald-50/40 transition-colors
-                    px-3 py-1.5
-                    relative z-0 overflow-visible
-                    min-w-full
-                  "
-                >
-                  <input
-                    ref={(el) => {
-                      // Gán ref cho tất cả inputs để có thể focus
-                      inputRefs.current[it.id] = el;
-                      // Nếu là item cuối thì cũng gán vào newItemRef
-                      if (items[items.length - 1]?.id === it.id) {
-                        newItemRef.current = el;
-                      }
-                    }}
+              {items.map((it) => {
+                const noteVisible = isNoteVisible(it);
+                const hasNote = !!it.note?.trim();
+                return (
+                  <div
+                    key={it.id}
                     className="
-                      flex-grow bg-transparent border-none px-0
-                      focus:outline-none focus:ring-0
-                      text-[12px] text-gray-800 placeholder:text-gray-400 min-w-0                  
+                      group
+                      rounded-md border border-gray-200 bg-white
+                      hover:border-brand-300 hover:bg-brand-50/40
+                      focus-within:border-brand-400
+                      transition-colors
+                      px-3 py-1.5
+                      relative z-0 overflow-visible
+                      min-w-full
                     "
-                    value={it.label}
-                    onChange={(e) => update(it.id, e.target.value)}
-                    onBlur={() => update(it.id, it.label.trim())}
-                    placeholder="Tên mục..."
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const isLast = items[items.length - 1]?.id === it.id;
-                        const trimmedLabel = it.label.trim();
-                        const hasValue = trimmedLabel !== "";
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <input
+                        ref={(el) => {
+                          inputRefs.current[it.id] = el;
+                          if (items[items.length - 1]?.id === it.id) {
+                            newItemRef.current = el;
+                          }
+                        }}
+                        className="
+                          flex-grow bg-transparent border-none px-0
+                          focus:outline-none focus:ring-0
+                          text-[12px] text-gray-800 placeholder:text-gray-400 min-w-0
+                        "
+                        value={it.label}
+                        onChange={(e) => update(it.id, e.target.value)}
+                        onBlur={() => update(it.id, it.label.trim())}
+                        placeholder="Tên mục..."
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const isLast =
+                              items[items.length - 1]?.id === it.id;
+                            const trimmedLabel = it.label.trim();
+                            const hasValue = trimmedLabel !== "";
 
-                        // Chỉ thêm mục mới nếu là item cuối và đã có tên
-                        if (isLast && hasValue) {
-                          const newId = "tpl_" + Date.now().toString(36);
+                            if (isLast && hasValue) {
+                              const newId = "tpl_" + Date.now().toString(36);
 
-                          setItems((prev) => [
-                            ...prev.map((item) =>
-                              item.id === it.id
-                                ? { ...item, label: trimmedLabel }
-                                : item,
-                            ),
-                            { id: newId, label: "" },
-                          ]);
+                              setItems((prev) => [
+                                ...prev.map((item) =>
+                                  item.id === it.id
+                                    ? { ...item, label: trimmedLabel }
+                                    : item,
+                                ),
+                                { id: newId, label: "", note: null },
+                              ]);
 
-                          // báo rằng item mới cần được focus
-                          requestAnimationFrame(() => {
-                            if (newItemRef.current) {
-                              newItemRef.current.focus();
+                              requestAnimationFrame(() => {
+                                if (newItemRef.current) {
+                                  newItemRef.current.focus();
+                                }
+                              });
                             }
-                          });
-                        }
-                      }
-                    }}
-                  />
+                          }
+                        }}
+                      />
 
-                  <div className="relative group shrink-0">
-                    <button
-                      onClick={() => remove(it.id)}
-                      className="
-                        shrink-0
-                        opacity-0 group-hover:opacity-100
-                        text-gray-400 hover:text-rose-500
-                        p-1 rounded-full
-                        transition
-                      "
-                      title="Xoá mục"
-                    >
-                      <Trash className="h-3 h-3" />
-                    </button>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleNote(it.id)}
+                          aria-pressed={noteVisible}
+                          aria-label={
+                            noteVisible ? "Ẩn ghi chú" : "Thêm ghi chú"
+                          }
+                          title={
+                            hasNote
+                              ? "Ghi chú"
+                              : noteVisible
+                                ? "Ẩn ghi chú"
+                                : "Thêm ghi chú"
+                          }
+                          className={`
+                            shrink-0 p-1 rounded-full transition
+                            ${
+                              hasNote
+                                ? "text-brand-500 hover:text-brand-600 opacity-100"
+                                : noteVisible
+                                  ? "text-brand-600 opacity-100"
+                                  : "text-gray-400 hover:text-brand-600 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            }
+                          `}
+                        >
+                          <StickyNote className="h-3 w-3" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => remove(it.id)}
+                          className="
+                            shrink-0
+                            opacity-0 group-hover:opacity-100 focus:opacity-100
+                            text-gray-400 hover:text-rose-500
+                            p-1 rounded-full transition
+                          "
+                          title="Xoá mục"
+                          aria-label="Xoá mục"
+                        >
+                          <Trash className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {noteVisible && (
+                      <div className="mt-1.5 border-l-2 border-brand-400">
+                        <div className="flex items-center">
+                          {focusedNoteId === it.id ? (
+                            <textarea
+                              ref={(el) => {
+                                noteRefs.current[it.id] = el;
+                              }}
+                              value={it.note ?? ""}
+                              maxLength={500}
+                              autoFocus
+                              onChange={(e) =>
+                                updateNote(it.id, e.target.value.slice(0, 500))
+                              }
+                              onBlur={() => {
+                                updateNote(it.id, (it.note ?? "").trim());
+                                setFocusedNoteId((curr) =>
+                                  curr === it.id ? null : curr,
+                                );
+                              }}
+                              placeholder="Ghi chú thêm cho mục này..."
+                              rows={1}
+                              className="
+                                w-full resize-none bg-transparent
+                                text-[11px] text-gray-600 italic
+                                placeholder:text-gray-400 placeholder:not-italic
+                                border-none px-2 py-0
+                                focus:outline-none focus:ring-0
+                                leading-relaxed self-center
+                              "
+                              onInput={(e) => {
+                                const el = e.currentTarget;
+                                el.style.height = "auto";
+                                el.style.height = `${el.scrollHeight}px`;
+                              }}
+                            />
+                          ) : (
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setFocusedNoteId(it.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setFocusedNoteId(it.id);
+                                }
+                              }}
+                              className={`
+                                w-full px-2 py-0 truncate cursor-text
+                                text-[11px] leading-relaxed
+                                ${
+                                  it.note?.trim()
+                                    ? "text-gray-600 italic"
+                                    : "text-gray-400"
+                                }
+                              `}
+                              title={it.note?.trim() || undefined}
+                            >
+                              {it.note?.trim() ||
+                                "Ghi chú thêm cho mục này..."}
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className={`px-2 pb-0.5 text-[10px] text-right ${
+                            (it.note?.length ?? 0) >= 500
+                              ? "text-rose-500"
+                              : "text-gray-400"
+                          }`}
+                        >
+                          Tối đa: {it.note?.length ?? 0}/500 ký tự
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-400">

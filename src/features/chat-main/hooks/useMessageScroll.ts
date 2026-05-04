@@ -8,10 +8,44 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { getMessagesAfter } from "@/api/messages.api";
 import { messageKeys } from "@/hooks/queries/keys/messageKeys";
+import { categoriesKeys } from "@/hooks/queries/useCategories";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import type { UseInfiniteQueryResult } from "@tanstack/react-query";
 import type { ChatMessage } from "@/types/messages";
+import type { CategoryWithUnread } from "@/types/categories";
+
+const UNREAD_DIVIDER_STORAGE_PREFIX = "chat-unread-divider:";
+const LAST_VISITED_CONVERSATION_KEY = "chat-last-visited-conversation";
+
+function readDividerFromStorage(conversationId: string): string | null {
+  if (typeof sessionStorage === "undefined") return null;
+  return sessionStorage.getItem(UNREAD_DIVIDER_STORAGE_PREFIX + conversationId);
+}
+
+function writeDividerToStorage(conversationId: string, messageId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  sessionStorage.setItem(
+    UNREAD_DIVIDER_STORAGE_PREFIX + conversationId,
+    messageId,
+  );
+}
+
+function clearDividerFromStorage(conversationId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  sessionStorage.removeItem(UNREAD_DIVIDER_STORAGE_PREFIX + conversationId);
+}
+
+function readLastVisitedConversation(): string | null {
+  if (typeof sessionStorage === "undefined") return null;
+  return sessionStorage.getItem(LAST_VISITED_CONVERSATION_KEY);
+}
+
+function writeLastVisitedConversation(conversationId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  sessionStorage.setItem(LAST_VISITED_CONVERSATION_KEY, conversationId);
+}
 
 interface UseMessageScrollOptions {
   conversationId: string;
@@ -34,11 +68,37 @@ export function useMessageScroll({
 }: UseMessageScrollOptions) {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
+  const isVisible = usePageVisibility();
 
   const [showGoToBottom, setShowGoToBottom] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingClearUnread, setPendingClearUnread] = useState(false);
+  const [firstUnreadMessageId, setFirstUnreadMessageIdState] = useState<
+    string | null
+  >(() => {
+    const lastVisited = readLastVisitedConversation();
+    if (lastVisited !== null && lastVisited !== conversationId) {
+      clearDividerFromStorage(conversationId);
+      writeLastVisitedConversation(conversationId);
+      return null;
+    }
+    writeLastVisitedConversation(conversationId);
+    return readDividerFromStorage(conversationId);
+  });
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const setFirstUnreadMessageId = useCallback(
+    (messageId: string | null) => {
+      setFirstUnreadMessageIdState(messageId);
+      if (messageId) {
+        writeDividerToStorage(conversationId, messageId);
+      } else {
+        clearDividerFromStorage(conversationId);
+      }
+    },
+    [conversationId],
+  );
 
   // 🆕 NEW: Handler for loading newer messages (scroll-down pagination)
   const handleLoadNewerMessages = useCallback(async () => {
@@ -242,13 +302,57 @@ export function useMessageScroll({
   const prevConversationIdForScrollRef = useRef<string | undefined>(undefined);
   const lastMessageIdRef = useRef<string | undefined>(undefined);
   const shouldScrollOnLoadRef = useRef<boolean>(false);
+  const initialUnreadCountRef = useRef<number>(0);
+  const initialUnreadAppliedRef = useRef<boolean>(true);
 
   useEffect(() => {
-    if (conversationId !== prevConversationIdForScrollRef.current) {
+    const prevConversationId = prevConversationIdForScrollRef.current;
+    if (conversationId !== prevConversationId) {
+      if (prevConversationId) {
+        clearDividerFromStorage(prevConversationId);
+      }
+      clearDividerFromStorage(conversationId);
+      setFirstUnreadMessageIdState(null);
+      setPendingClearUnread(false);
+      writeLastVisitedConversation(conversationId);
       prevConversationIdForScrollRef.current = conversationId;
       shouldScrollOnLoadRef.current = true;
+
+      // Capture unread count from categories cache BEFORE mark-as-read fires
+      const categories = queryClient.getQueryData<CategoryWithUnread[]>(
+        categoriesKeys.list(),
+      );
+      let unread = 0;
+      if (categories) {
+        for (const cat of categories) {
+          const conv = cat.conversations.find(
+            (c) => c.conversationId === conversationId,
+          );
+          if (conv) {
+            unread = conv.unreadCount;
+            break;
+          }
+        }
+      }
+      initialUnreadCountRef.current = unread;
+      initialUnreadAppliedRef.current = unread <= 0;
     }
-  }, [conversationId]);
+  }, [conversationId, queryClient]);
+
+  // Show unread separator when entering a conversation that has unread messages
+  useEffect(() => {
+    if (initialUnreadAppliedRef.current) return;
+    if (!messagesQuery.isSuccess || messages.length === 0) return;
+
+    const unreadCount = initialUnreadCountRef.current;
+    const idx = Math.max(0, messages.length - unreadCount);
+    const firstUnread = messages[idx];
+    if (!firstUnread) return;
+
+    initialUnreadAppliedRef.current = true;
+    setFirstUnreadMessageId(firstUnread.id);
+    setPendingClearUnread(true);
+  }, [messages, messagesQuery.isSuccess, setFirstUnreadMessageId]);
 
   // 🆕 FIX: Instant scroll to bottom using useLayoutEffect (before paint)
   useLayoutEffect(() => {
@@ -282,6 +386,41 @@ export function useMessageScroll({
     }
   }, [conversationId, messagesQuery.isSuccess, messages]);
 
+  // Clear unread separator after user returns to the tab
+  const prevIsVisibleRef = useRef(isVisible);
+  useEffect(() => {
+    const wasHidden = !prevIsVisibleRef.current;
+    prevIsVisibleRef.current = isVisible;
+
+    if (wasHidden && isVisible) {
+      setPendingClearUnread(true);
+    }
+  }, [isVisible]);
+
+  // Scroll-aware clearing: only run the 3s hide timer when the user is at the
+  // bottom and the tab is visible. If the user is scrolled up reading older
+  // messages while new ones arrive, keep the separator visible.
+  useEffect(() => {
+    if (!pendingClearUnread) return;
+    if (!firstUnreadMessageId) {
+      setPendingClearUnread(false);
+      return;
+    }
+    if (showGoToBottom || !isVisible) return;
+
+    const timer = setTimeout(() => {
+      setFirstUnreadMessageId(null);
+      setPendingClearUnread(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [
+    pendingClearUnread,
+    showGoToBottom,
+    isVisible,
+    firstUnreadMessageId,
+    setFirstUnreadMessageId,
+  ]);
+
   // 🆕 NEW: Handle new messages from others (not own messages)
   useEffect(() => {
     if (messages.length > 0) {
@@ -290,9 +429,15 @@ export function useMessageScroll({
       const isFromOtherUser = lastMessage.senderId !== user?.id;
 
       if (isNewMessage && isFromOtherUser) {
+        const userIsAway = !isVisible || showGoToBottom;
+        if (userIsAway && !firstUnreadMessageId) {
+          setFirstUnreadMessageId(lastMessage.id);
+          setPendingClearUnread(true);
+        }
+
         if (showGoToBottom) {
           setUnreadCount((prev) => prev + 1);
-        } else {
+        } else if (isVisible) {
           setTimeout(() => {
             bottomRef.current?.scrollIntoView({ behavior: "smooth" });
           }, 100);
@@ -301,11 +446,19 @@ export function useMessageScroll({
         lastMessageIdRef.current = lastMessage.id;
       }
     }
-  }, [messages, user?.id, showGoToBottom]);
+  }, [
+    messages,
+    user?.id,
+    showGoToBottom,
+    isVisible,
+    firstUnreadMessageId,
+    setFirstUnreadMessageId,
+  ]);
 
   return {
     showGoToBottom,
     unreadCount,
+    firstUnreadMessageId,
     bottomRef,
     messagesContainerRef,
     handleGoToBottom,

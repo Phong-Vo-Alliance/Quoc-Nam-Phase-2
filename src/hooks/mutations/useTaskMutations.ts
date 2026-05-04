@@ -28,11 +28,13 @@ export function useAddCheckItem() {
       taskId,
       content,
       order,
+      note,
     }: {
       taskId: string;
       content: string;
       order?: number;
-    }) => addCheckItem(taskId, content, order),
+      note?: string | null;
+    }) => addCheckItem(taskId, content, order, note),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
       queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
@@ -69,11 +71,13 @@ export function useUpdateCheckItem() {
       taskId,
       itemId,
       content,
+      note,
     }: {
       taskId: string;
       itemId: string;
       content: string;
-    }) => updateCheckItem(taskId, itemId, content),
+      note?: string | null;
+    }) => updateCheckItem(taskId, itemId, content, note),
     onSuccess: () => {
       // Invalidate and refetch tasks queries
       queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
@@ -166,7 +170,12 @@ export function useCreateChecklistTemplate() {
       name: string;
       description?: string | null;
       conversationId: string;
-      items: Array<{ content: string; order: number; isRequired: boolean }>;
+      items: Array<{
+        content: string;
+        order: number;
+        isRequired: boolean;
+        note?: string | null;
+      }>;
       isDefault?: boolean;
     }) => createChecklistTemplate(data),
     onSuccess: (_data, variables) => {
@@ -196,7 +205,7 @@ export function useUpdateChecklistTemplate() {
         name: string;
         description?: string | null;
         conversationId?: string;
-        items?: Array<string>;
+        items?: Array<{ content: string; note?: string | null }>;
         isDefault?: boolean;
       };
     }) => updateChecklistTemplate(templateId, payload),

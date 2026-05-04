@@ -30,7 +30,7 @@ import { useCreateTask } from "@/hooks/mutations/useCreateTask";
 import { useLinkTaskToMessage } from "@/hooks/mutations/useLinkTaskToMessage";
 import { useAuthStore } from "@/stores/authStore";
 import { hasRole } from "@/utils/roleUtils";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { taskKeys } from "@/hooks/queries/keys/taskKeys";
 import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
 import { toast } from "sonner";
@@ -267,6 +267,24 @@ export function AssignTaskSheet({
 
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
+  // Track which template item notes are expanded in the preview
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set());
+
+  // Track which notes overflow (and therefore need an expand button)
+  const [overflowingNoteIds, setOverflowingNoteIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const noteRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const toggleNoteExpanded = useCallback((id: string) => {
+    setExpandedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   // Get selected template for displaying items
   const selectedTemplate = useMemo(() => {
     if (!formData.checklistTemplateId || !templates) return null;
@@ -339,8 +357,30 @@ export function AssignTaskSheet({
         checklistTemplateId: "",
       });
       setFormErrors({});
+      setExpandedNoteIds(new Set());
     }
   }, [open]);
+
+  // Collapse all expanded notes when switching templates
+  useEffect(() => {
+    setExpandedNoteIds(new Set());
+  }, [formData.checklistTemplateId]);
+
+  // Detect which note rows actually overflow so the expand button only shows when needed
+  useEffect(() => {
+    if (!selectedTemplate?.items) {
+      setOverflowingNoteIds(new Set());
+      return;
+    }
+    const next = new Set<string>();
+    for (const item of selectedTemplate.items) {
+      const el = noteRefs.current[item.id];
+      if (el && el.scrollWidth > el.clientWidth + 1) {
+        next.add(item.id);
+      }
+    }
+    setOverflowingNoteIds(next);
+  }, [selectedTemplate, expandedNoteIds]);
 
   // Validate form
   const validateForm = (): boolean => {
@@ -413,10 +453,10 @@ export function AssignTaskSheet({
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent
         side="right"
-        className="w-[420px] overflow-y-auto"
+        className="w-[420px] sm:max-w-[420px] flex flex-col p-0"
         data-testid="create-task-dialog"
       >
-        <SheetHeader className="pb-3 border-b border-gray-100">
+        <SheetHeader className="px-6 pt-6 pb-3 border-b border-gray-100">
           <SheetTitle className="text-base font-semibold text-gray-900">
             Giao công việc
           </SheetTitle>
@@ -427,13 +467,13 @@ export function AssignTaskSheet({
 
         {configLoading || membersLoading ? (
           <div
-            className="flex items-center justify-center py-8"
+            className="flex-1 flex items-center justify-center py-8"
             data-testid="task-sheet-loading"
           >
             <Loader2 className="h-6 w-6 animate-spin text-brand-600" />
           </div>
         ) : (
-          <div className="mt-4 space-y-4">
+          <div className="flex-1 overflow-y-auto px-6 mt-4 space-y-4">
             {/* Task Name */}
             <div className="space-y-2">
               <Label
@@ -582,27 +622,96 @@ export function AssignTaskSheet({
                     Các mục checklist ({selectedTemplate.items.length})
                   </div>
                   <ul
-                    className="space-y-1.5 max-h-40 overflow-y-auto"
+                    className="space-y-1.5 pr-2"
                     data-testid="checklist-preview-items"
                   >
                     {selectedTemplate.items
                       .sort((a, b) => a.order - b.order)
-                      .map((item) => (
-                        <li
-                          key={item.id}
-                          className="flex items-start gap-2 text-xs text-gray-600"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
-                          <span>{item.content}</span>
-                        </li>
-                      ))}
+                      .map((item) => {
+                        const note = item.note?.trim();
+                        const isExpanded = expandedNoteIds.has(item.id);
+                        const isOverflowing = overflowingNoteIds.has(item.id);
+                        const showToggle = !!note && (isOverflowing || isExpanded);
+                        return (
+                          <li
+                            key={item.id}
+                            className="flex items-start gap-2 text-xs text-gray-600"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div>{item.content}</div>
+                              {note && (
+                                <div className="mt-1 border-l-2 border-brand-400 pl-2">
+                                  <div
+                                    className={`flex items-start gap-1 ${
+                                      showToggle ? "cursor-pointer" : ""
+                                    }`}
+                                    onClick={
+                                      showToggle
+                                        ? () => toggleNoteExpanded(item.id)
+                                        : undefined
+                                    }
+                                    role={showToggle ? "button" : undefined}
+                                    tabIndex={showToggle ? 0 : undefined}
+                                    onKeyDown={
+                                      showToggle
+                                        ? (e) => {
+                                            if (
+                                              e.key === "Enter" ||
+                                              e.key === " "
+                                            ) {
+                                              e.preventDefault();
+                                              toggleNoteExpanded(item.id);
+                                            }
+                                          }
+                                        : undefined
+                                    }
+                                    aria-expanded={
+                                      showToggle ? isExpanded : undefined
+                                    }
+                                    aria-label={
+                                      showToggle
+                                        ? isExpanded
+                                          ? "Thu gọn ghi chú"
+                                          : "Xem đầy đủ ghi chú"
+                                        : undefined
+                                    }
+                                  >
+                                    <div
+                                      ref={(el) => {
+                                        noteRefs.current[item.id] = el;
+                                      }}
+                                      className={`flex-1 min-w-0 text-[11px] italic text-gray-500 leading-relaxed ${
+                                        isExpanded
+                                          ? "whitespace-pre-wrap break-words"
+                                          : "truncate"
+                                      }`}
+                                    >
+                                      {note}
+                                    </div>
+                                    {showToggle && (
+                                      <span className="flex-shrink-0 text-gray-400">
+                                        {isExpanded ? (
+                                          <ChevronUp className="h-3.5 w-3.5" />
+                                        ) : (
+                                          <ChevronDown className="h-3.5 w-3.5" />
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
                   </ul>
                 </div>
               )}
           </div>
         )}
 
-        <SheetFooter className="mt-6">
+        <SheetFooter className="px-6 py-4 border-t bg-white">
           <Button
             variant="outline"
             onClick={onClose}

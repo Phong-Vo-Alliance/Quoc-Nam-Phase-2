@@ -139,6 +139,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   const {
     showGoToBottom,
     unreadCount,
+    firstUnreadMessageId,
     bottomRef,
     messagesContainerRef,
     handleGoToBottom,
@@ -431,6 +432,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           confirmedMessageMap={confirmedMessageMap}
           confirmingMessageId={confirmingMessageId}
           openThreadMessageId={openThreadMessageId}
+          firstUnreadMessageId={firstUnreadMessageId}
           threadUnreadCounts={threadUnreadCounts}
           threadCurrentSessionCounts={threadCurrentSessionCounts}
           onLoadMore={handleLoadMore}

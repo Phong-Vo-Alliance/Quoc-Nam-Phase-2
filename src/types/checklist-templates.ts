@@ -14,8 +14,19 @@ export interface TemplateItemDto {
   content: string;
   /** Display order */
   order: number;
+  /** Optional note for the item */
+  note: string | null;
   /** Is this item required (optional field) */
   isRequired?: boolean;
+}
+
+/**
+ * Payload shape for sending a template item in create/update requests.
+ * Server assigns id/order; client supplies content + optional note.
+ */
+export interface TemplateItemPayload {
+  content: string;
+  note?: string | null;
 }
 
 /**
@@ -51,8 +62,8 @@ export interface CreateCheckListTemplateRequest {
   description?: string | null;
   /** Associated conversation ID (UUID, required for conversation-specific templates) */
   conversationId?: string | null;
-  /** Template items as simple string array (at least 1 required) */
-  items: string[];
+  /** Template items with optional note (at least 1 required) */
+  items: TemplateItemPayload[];
   /** Mark this template as default for its conversation */
   isDefault?: boolean;
 }
@@ -69,8 +80,8 @@ export interface UpdateCheckListTemplateRequest {
   description?: string | null;
   /** Associated conversation ID (UUID) */
   conversationId?: string | null;
-  /** Updated template items as simple string array */
-  items: string[];
+  /** Updated template items with optional note */
+  items: TemplateItemPayload[];
   /** Mark this template as default for its conversation */
   isDefault?: boolean;
 }

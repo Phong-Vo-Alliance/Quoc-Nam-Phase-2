@@ -188,40 +188,31 @@ export const WorkTypeEditor: React.FC<WorkTypeEditorProps> = ({
   }) => {
     try {
       if (editingTemplate) {
-        // Update existing template - transform string[] to ChecklistItem[]
-        const transformedItems = data.items.map((item, index) => ({
-          content: item,
-          order: index,
-          isRequired: false,
-        }));
-
         await updateMutation.mutateAsync({
           templateId: editingTemplate.id,
           payload: {
             id: editingTemplate.id,
             name: data.name,
             description: data.description,
-            items: transformedItems.map((item) => item.content), // API expects string[] for items
+            items: data.items.map((content) => ({ content, note: null })),
           },
         });
       } else {
-        // Create new template - transform string[] to ChecklistItem[]
         if (!selectedConversation?.id) {
           console.error("No conversation selected");
           return;
         }
 
-        const transformedItems = data.items.map((item, index) => ({
-          content: item,
-          order: index,
-          isRequired: false,
-        }));
-
         await createMutation.mutateAsync({
           conversationId: selectedConversation.id,
           name: data.name,
           description: data.description,
-          items: transformedItems,
+          items: data.items.map((content, index) => ({
+            content,
+            order: index,
+            isRequired: false,
+            note: null,
+          })),
         });
       }
       setShowTemplateDialog(false);

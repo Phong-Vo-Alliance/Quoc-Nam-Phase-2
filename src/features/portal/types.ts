@@ -48,6 +48,7 @@ export interface ChecklistItem {
   doneAt?: ISODate;
   doneById?: ID;
   order?: number; // Order from API
+  note?: string | null;
 }
 
 // CheckItemDto from API
@@ -57,6 +58,7 @@ export interface CheckItemDto {
   order: number;
   isCompleted: boolean;
   completedAt: string | null;
+  note: string | null;
 }
 
 export interface ChecklistTemplate {
@@ -400,6 +402,7 @@ export interface ReceivedInfo {
 export type ChecklistTemplateItem = {
   id: string; // id template
   label: string; // tên checklist mặc định
+  note?: string | null; // ghi chú thêm cho mục checklist
 };
 
 export type ChecklistTemplateMap = Record<
@@ -422,6 +425,7 @@ export function convertCheckItemToLegacy(item: CheckItemDto): ChecklistItem {
     done: item.isCompleted,
     doneAt: item.completedAt || undefined,
     order: item.order,
+    note: item.note,
   };
 }
 
@@ -435,6 +439,7 @@ export function convertLegacyToCheckItem(item: ChecklistItem): CheckItemDto {
     order: 0, // Order will be set by API
     isCompleted: item.done,
     completedAt: item.doneAt || null,
+    note: item.note ?? null,
   };
 }
 

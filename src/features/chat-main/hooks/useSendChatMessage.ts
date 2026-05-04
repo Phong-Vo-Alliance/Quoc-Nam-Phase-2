@@ -7,6 +7,7 @@ import { useUploadFilesBatch } from "@/hooks/mutations/useUploadFilesBatch";
 import { useTypingIndicators } from "@/hooks/useTypingIndicators";
 import { useSendTypingIndicator } from "@/hooks/useSendTypingIndicator";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useReplyStore } from "@/stores/replyStore";
 import { extractSuccessfulUploads } from "@/utils/fileHelpers";
 import { formatAttachment } from "@/utils/formatAttachment";
@@ -70,6 +71,7 @@ export function useSendChatMessage({
 
   // Network status
   const { isOnline, wasOffline } = useNetworkStatus();
+  const isVisible = usePageVisibility();
 
   // File upload mutations
   const uploadFilesMutation = useUploadFiles();
@@ -84,6 +86,9 @@ export function useSendChatMessage({
     if (!conversationId || !lastMessageId) {
       return;
     }
+    if (!isVisible) {
+      return;
+    }
 
     const alreadyMarked =
       lastMarkedConversationRef.current === conversationId &&
@@ -95,7 +100,7 @@ export function useSendChatMessage({
       lastMarkedMessageIdRef.current = lastMessageId;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, lastMessageId]);
+  }, [conversationId, lastMessageId, isVisible]);
 
   // 🆕 v1.3.0: Clear reply state when switching conversations
   useEffect(() => {

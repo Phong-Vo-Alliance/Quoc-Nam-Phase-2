@@ -112,6 +112,7 @@ function transformCheckItem(item: CheckItemDto): ChecklistItem {
     doneAt: item.completedAt || undefined,
     doneById: undefined, // Not provided by API
     order: item.order, // ✅ Preserve order from API for sorting
+    note: item.note,
   };
 }
 

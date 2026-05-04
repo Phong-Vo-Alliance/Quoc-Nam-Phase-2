@@ -1,5 +1,14 @@
-import { useState, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Loader2, X, Download } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  X,
+  Download,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -85,6 +94,16 @@ export default function ImagePreviewModal({
   const [canDownload, setCanDownload] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Zoom & pan state
+  const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef({ x: 0, y: 0, translateX: 0, translateY: 0 });
+
+  const MIN_SCALE = 1;
+  const MAX_SCALE = 5;
+  const ZOOM_STEP = 0.25;
+
   // ✅ Local Gallery Cache - Cache blob URLs for this modal session
   const [imageCache, setImageCache] = useState<Map<string, string>>(new Map());
 
@@ -98,22 +117,93 @@ export default function ImagePreviewModal({
     : fileName;
   const hasMultipleImages = isGalleryMode && images.length > 1;
 
+  // Reset zoom & pan helper
+  const resetZoom = useCallback(() => {
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
+  }, []);
+
   // Reset index when modal opens with new images
   useEffect(() => {
     if (open) {
       setCurrentIndex(initialIndex);
+      resetZoom();
     }
-  }, [open, initialIndex]);
+  }, [open, initialIndex, resetZoom]);
+
+  // Reset zoom when current file changes
+  useEffect(() => {
+    resetZoom();
+  }, [currentFileId, resetZoom]);
 
   // Navigation handlers
   const handlePrev = () => {
     if (!isGalleryMode) return;
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
+    resetZoom();
   };
 
   const handleNext = () => {
     if (!isGalleryMode) return;
     setCurrentIndex((prev) => (prev < images!.length - 1 ? prev + 1 : prev));
+    resetZoom();
+  };
+
+  // Zoom handlers
+  const clampScale = (value: number) =>
+    Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+
+  const handleZoomIn = () => {
+    setScale((prev) => {
+      const next = clampScale(prev + ZOOM_STEP);
+      if (next === MIN_SCALE) setTranslate({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleZoomOut = () => {
+    setScale((prev) => {
+      const next = clampScale(prev - ZOOM_STEP);
+      if (next === MIN_SCALE) setTranslate({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const contentAreaRef = useRef<HTMLDivElement>(null);
+
+  const handleDoubleClick = () => {
+    if (scale > 1) {
+      resetZoom();
+    } else {
+      setScale(2);
+    }
+  };
+
+  // Pan handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (scale <= 1) return;
+    e.preventDefault();
+    setIsPanning(true);
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      translateX: translate.x,
+      translateY: translate.y,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    setTranslate({
+      x: panStartRef.current.translateX + dx,
+      y: panStartRef.current.translateY + dy,
+    });
+  };
+
+  const handleMouseUp = () => {
+    if (isPanning) setIsPanning(false);
   };
 
   // Download handler
@@ -229,26 +319,57 @@ export default function ImagePreviewModal({
     loadPreview();
   }, [open, currentFileId, imageCache]);
 
-  // Keyboard navigation
+  // Native wheel listener with passive: false to prevent browser/page zoom
   useEffect(() => {
-    if (!open || !hasMultipleImages) return;
+    if (!open) return;
+    const el = contentAreaRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (!imageUrl) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+      setScale((prev) => {
+        const next = clampScale(prev + delta);
+        if (next === MIN_SCALE) setTranslate({ x: 0, y: 0 });
+        return next;
+      });
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [open, imageUrl]);
+
+  // Keyboard navigation & zoom
+  useEffect(() => {
+    if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Prevent navigation while downloading
       if (isDownloading) return;
 
-      if (e.key === "ArrowLeft") {
+      if (hasMultipleImages && e.key === "ArrowLeft") {
         e.preventDefault();
         handlePrev();
-      } else if (e.key === "ArrowRight") {
+      } else if (hasMultipleImages && e.key === "ArrowRight") {
         e.preventDefault();
         handleNext();
+      } else if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        handleZoomIn();
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        handleZoomOut();
+      } else if (e.key === "0") {
+        e.preventDefault();
+        resetZoom();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, currentIndex, hasMultipleImages, images, isDownloading]);
+  }, [open, currentIndex, hasMultipleImages, images, isDownloading, resetZoom]);
 
   // ✅ Cleanup all cached blob URLs when modal closes
   useEffect(() => {
@@ -308,6 +429,46 @@ export default function ImagePreviewModal({
 
           {/* Button Container */}
           <div className="flex items-center gap-2">
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-1">
+              <button
+                onClick={handleZoomOut}
+                disabled={isLoading || hasError || scale <= MIN_SCALE}
+                aria-label="Thu nhỏ"
+                title="Thu nhỏ (-)"
+                data-testid="image-zoom-out-button"
+                className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </button>
+              <span
+                className="min-w-[3rem] text-center text-xs font-medium text-gray-700 tabular-nums"
+                data-testid="image-zoom-level"
+              >
+                {Math.round(scale * 100)}%
+              </span>
+              <button
+                onClick={handleZoomIn}
+                disabled={isLoading || hasError || scale >= MAX_SCALE}
+                aria-label="Phóng to"
+                title="Phóng to (+)"
+                data-testid="image-zoom-in-button"
+                className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </button>
+              <button
+                onClick={resetZoom}
+                disabled={isLoading || hasError || scale === MIN_SCALE}
+                aria-label="Khôi phục kích thước"
+                title="Khôi phục kích thước (0)"
+                data-testid="image-zoom-reset-button"
+                className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            </div>
+
             {/* Download Button - Conditional */}
             {canDownload && (
               <button
@@ -344,7 +505,8 @@ export default function ImagePreviewModal({
 
         {/* Content Area */}
         <div
-          className="flex-1 overflow-y-auto bg-gray-50"
+          ref={contentAreaRef}
+          className="flex-1 overflow-hidden bg-gray-50"
           data-testid="image-preview-content-area"
         >
           {/* Loading State */}
@@ -372,11 +534,28 @@ export default function ImagePreviewModal({
 
           {/* Image Display */}
           {!isLoading && !hasError && imageUrl && (
-            <div className="flex h-full items-center justify-center p-4">
+            <div
+              className="flex h-full items-center justify-center p-4 select-none"
+              style={{
+                cursor:
+                  scale > 1 ? (isPanning ? "grabbing" : "grab") : "zoom-in",
+              }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onDoubleClick={handleDoubleClick}
+            >
               <img
                 src={imageUrl}
                 alt={currentFileName || "Preview"}
                 className="max-h-full max-w-full object-contain"
+                style={{
+                  transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+                  transition: isPanning ? "none" : "transform 0.15s ease-out",
+                  transformOrigin: "center center",
+                  willChange: "transform",
+                }}
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
                 data-testid="image-preview-image"

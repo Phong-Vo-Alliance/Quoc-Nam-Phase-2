@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   X,
   ChevronLeft,
@@ -11,6 +11,9 @@ import {
   Download,
   Loader2,
   Play,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from "lucide-react";
 import {
   downloadFile,
@@ -124,6 +127,76 @@ export default function FilePreviewModal({
   } = usePdfPreview(!isVideoFile && !isPhase5File ? fileId : null);
 
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Zoom & pan state (applies to PDF/Image preview, not video)
+  const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef({ x: 0, y: 0, translateX: 0, translateY: 0 });
+  const contentAreaRef = useRef<HTMLDivElement>(null);
+
+  const MIN_SCALE = 1;
+  const MAX_SCALE = 5;
+  const ZOOM_STEP = 0.25;
+
+  const clampScale = (value: number) =>
+    Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+
+  const resetZoom = useCallback(() => {
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
+  }, []);
+
+  const handleZoomIn = () => {
+    setScale((prev) => {
+      const next = clampScale(prev + ZOOM_STEP);
+      if (next === MIN_SCALE) setTranslate({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleZoomOut = () => {
+    setScale((prev) => {
+      const next = clampScale(prev - ZOOM_STEP);
+      if (next === MIN_SCALE) setTranslate({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleDoubleClick = () => {
+    if (scale > 1) {
+      resetZoom();
+    } else {
+      setScale(2);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (scale <= 1) return;
+    e.preventDefault();
+    setIsPanning(true);
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      translateX: translate.x,
+      translateY: translate.y,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    setTranslate({
+      x: panStartRef.current.translateX + dx,
+      y: panStartRef.current.translateY + dy,
+    });
+  };
+
+  const handleMouseUp = () => {
+    if (isPanning) setIsPanning(false);
+  };
+
   const canDownload = isVideoFile ? videoCanDownload : canPreviewDownload;
   const currentPage = isVideoFile ? 1 : previewCurrentPage;
   const totalPages = isVideoFile ? 1 : previewTotalPages;
@@ -252,7 +325,7 @@ export default function FilePreviewModal({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
 
-  // Arrow key navigation
+  // Arrow key navigation & zoom shortcuts
   useEffect(() => {
     if (!isOpen || isLoading || error || !totalPages) return;
 
@@ -263,12 +336,57 @@ export default function FilePreviewModal({
       } else if (e.key === "ArrowRight" && currentPage < totalPages) {
         e.preventDefault();
         navigateToPage(currentPage + 1);
+      } else if (!isVideoFile && (e.key === "+" || e.key === "=")) {
+        e.preventDefault();
+        handleZoomIn();
+      } else if (!isVideoFile && (e.key === "-" || e.key === "_")) {
+        e.preventDefault();
+        handleZoomOut();
+      } else if (!isVideoFile && e.key === "0") {
+        e.preventDefault();
+        resetZoom();
       }
     };
 
     document.addEventListener("keydown", handleArrowKeys);
     return () => document.removeEventListener("keydown", handleArrowKeys);
-  }, [isOpen, isLoading, error, currentPage, totalPages, navigateToPage]);
+  }, [
+    isOpen,
+    isLoading,
+    error,
+    currentPage,
+    totalPages,
+    navigateToPage,
+    isVideoFile,
+    resetZoom,
+  ]);
+
+  // Native wheel listener with passive: false to prevent browser/page zoom
+  useEffect(() => {
+    if (!isOpen || isVideoFile) return;
+    const el = contentAreaRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (!imageUrl) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+      setScale((prev) => {
+        const next = clampScale(prev + delta);
+        if (next === MIN_SCALE) setTranslate({ x: 0, y: 0 });
+        return next;
+      });
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [isOpen, isVideoFile, imageUrl]);
+
+  // Reset zoom when changing page or reopening
+  useEffect(() => {
+    resetZoom();
+  }, [currentPage, fileId, isOpen, resetZoom]);
 
   // Focus trap & initial focus
   useEffect(() => {
@@ -322,6 +440,48 @@ export default function FilePreviewModal({
             </h2>
           </div>
           <div className="flex items-center gap-2">
+            {/* Zoom Controls - hidden for video */}
+            {!isVideoFile && (
+              <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-1">
+                <button
+                  onClick={handleZoomOut}
+                  disabled={isLoading || !!error || scale <= MIN_SCALE}
+                  aria-label="Thu nhỏ"
+                  title="Thu nhỏ (-)"
+                  data-testid="file-zoom-out-button"
+                  className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <span
+                  className="min-w-[3rem] text-center text-xs font-medium text-gray-700 tabular-nums"
+                  data-testid="file-zoom-level"
+                >
+                  {Math.round(scale * 100)}%
+                </span>
+                <button
+                  onClick={handleZoomIn}
+                  disabled={isLoading || !!error || scale >= MAX_SCALE}
+                  aria-label="Phóng to"
+                  title="Phóng to (+)"
+                  data-testid="file-zoom-in-button"
+                  className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={resetZoom}
+                  disabled={isLoading || !!error || scale === MIN_SCALE}
+                  aria-label="Khôi phục kích thước"
+                  title="Khôi phục kích thước (0)"
+                  data-testid="file-zoom-reset-button"
+                  className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
             {canDownload && (
               <button
                 onClick={handleDownload}
@@ -351,7 +511,8 @@ export default function FilePreviewModal({
 
         {/* Content Area */}
         <div
-          className="flex-1 overflow-y-auto bg-gray-50"
+          ref={contentAreaRef}
+          className={`flex-1 bg-gray-50 ${isVideoFile ? "overflow-y-auto" : "overflow-hidden"}`}
           data-testid="file-preview-content-area"
         >
           {/* Loading State */}
@@ -409,13 +570,28 @@ export default function FilePreviewModal({
           {/* Success State - Display Image */}
           {!isLoading && !error && imageUrl && (
             <div
-              className="flex h-full items-center justify-center p-6"
+              className="flex h-full items-center justify-center p-6 select-none"
+              style={{
+                cursor:
+                  scale > 1 ? (isPanning ? "grabbing" : "grab") : "zoom-in",
+              }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onDoubleClick={handleDoubleClick}
               data-testid="file-preview-image-container"
             >
               <img
                 src={imageUrl}
                 alt={`Trang ${currentPage} của ${fileName}`}
                 className="max-h-full max-w-full object-contain"
+                style={{
+                  transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+                  transition: isPanning ? "none" : "transform 0.15s ease-out",
+                  transformOrigin: "center center",
+                  willChange: "transform",
+                }}
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
                 data-testid="file-preview-image"

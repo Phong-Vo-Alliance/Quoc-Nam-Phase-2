@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import ChatInput from "@/features/portal/components/ChatInput";
 import { MentionDropdown } from "./MentionDropdown";
-import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useMentionMembers } from "@/hooks/queries/useMentionMembers";
 import { useAuthStore } from "@/stores/authStore";
 import type { ConversationMember } from "@/types/conversations";
 import type { MentionInputDto } from "@/types/messages";
@@ -125,8 +125,8 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(
     // Expose the internal ref to parent via forwardedRef
     useImperativeHandle(forwardedRef, () => inputRef.current!);
 
-    // Fetch conversation members
-    const { data: members = [] } = useConversationMembers({
+    // Source mention members from the categories cache (mention.members).
+    const { data: members = [] } = useMentionMembers({
       conversationId: conversationId || "",
       enabled: !!conversationId,
     });

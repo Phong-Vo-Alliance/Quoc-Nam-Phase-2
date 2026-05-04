@@ -4,16 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { vi, describe, test, expect, beforeEach, afterEach } from "vitest";
 import { MentionInput } from "../MentionInput";
 import { useAuthStore } from "@/stores/authStore";
-import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useMentionMembers } from "@/hooks/queries/useMentionMembers";
 import type { ConversationMember } from "@/types/conversations";
 import type { AuthUser } from "@/stores/authStore";
 
 // Mock dependencies
 vi.mock("@/stores/authStore");
-vi.mock("@/hooks/queries/useConversationMembers");
+vi.mock("@/hooks/queries/useMentionMembers");
 
 const mockUseAuthStore = vi.mocked(useAuthStore);
-const mockUseConversationMembers = vi.mocked(useConversationMembers);
+const mockUseMentionMembers = vi.mocked(useMentionMembers);
 
 // Mock data
 const mockCurrentUser: AuthUser = {
@@ -114,13 +114,13 @@ describe("MentionInput", () => {
       setLoading: vi.fn(),
     });
 
-    // Mock useConversationMembers
-    mockUseConversationMembers.mockReturnValue({
+    // Mock useMentionMembers
+    mockUseMentionMembers.mockReturnValue({
       data: mockMembers,
       isLoading: false,
+      isError: false,
       error: null,
-      refetch: vi.fn(),
-    } as any);
+    });
   });
 
   afterEach(() => {

@@ -150,10 +150,12 @@ export const addCheckItem = async (
   taskId: string,
   content: string,
   order?: number,
+  note?: string | null,
 ): Promise<void> => {
   await taskApiClient.post(`/api/tasks/${taskId}/check-items`, {
     content,
     order: order ?? null,
+    note: note ?? null,
   });
 };
 
@@ -187,9 +189,11 @@ export const updateCheckItem = async (
   taskId: string,
   itemId: string,
   content: string,
+  note?: string | null,
 ): Promise<void> => {
   await taskApiClient.patch(`/api/tasks/${taskId}/check-items/${itemId}`, {
     content,
+    note: note ?? null,
   });
 };
 
@@ -236,7 +240,12 @@ export const createChecklistTemplate = async (data: {
   name: string;
   description?: string | null;
   conversationId: string;
-  items: Array<{ content: string; order: number; isRequired: boolean }>;
+  items: Array<{
+    content: string;
+    order: number;
+    isRequired: boolean;
+    note?: string | null;
+  }>;
 }): Promise<any> => {
   const response = await taskApiClient.post("/api/checklist-templates", data);
   return response.data;
@@ -257,7 +266,7 @@ export const updateChecklistTemplate = async (
     name: string;
     description?: string | null;
     conversationId?: string;
-    items?: Array<string>;
+    items?: Array<{ content: string; note?: string | null }>;
     isDefault?: boolean;
   },
 ): Promise<any> => {
