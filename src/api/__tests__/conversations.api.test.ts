@@ -39,33 +39,17 @@ describe("conversations.api", () => {
           },
         },
       ],
-      nextCursor: null,
-      hasMore: false,
     };
 
-    it("should fetch conversations without cursor", async () => {
+    it("should fetch all conversations in one call", async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce({
         data: mockConversationsResponse,
       });
 
       const result = await getConversations();
 
-      expect(apiClient.get).toHaveBeenCalledWith("/api/conversations", {
-        params: {},
-      });
+      expect(apiClient.get).toHaveBeenCalledWith("/api/conversations");
       expect(result).toEqual(mockConversationsResponse);
-    });
-
-    it("should fetch conversations with cursor for pagination", async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
-        data: mockConversationsResponse,
-      });
-
-      await getConversations("cursor-xyz");
-
-      expect(apiClient.get).toHaveBeenCalledWith("/api/conversations", {
-        params: { cursor: "cursor-xyz" },
-      });
     });
 
     it("should throw error when API fails", async () => {

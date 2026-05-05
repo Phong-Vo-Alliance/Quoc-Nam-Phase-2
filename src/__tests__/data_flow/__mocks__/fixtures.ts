@@ -105,8 +105,5 @@ export function mockInfiniteMessageData(
 export function mockInfiniteDirectsData(
   directs: DirectConversation[] = [mockDirectConversation()],
 ) {
-  return {
-    pages: [{ items: directs, hasMore: false, nextCursor: null }],
-    pageParams: [undefined],
-  };
+  return { items: directs };
 }

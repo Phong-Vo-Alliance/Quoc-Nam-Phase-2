@@ -125,16 +125,10 @@ export function classifyError(error: unknown): ClassifiedError {
     if (status === 400) {
       const serverMessage = error.response.data?.message;
 
-      // Check if error is related to file validation
-      if (
-        serverMessage &&
-        (serverMessage.includes("File extension") ||
-          serverMessage.includes("not allowed") ||
-          serverMessage.includes("Invalid file"))
-      ) {
+      if (serverMessage) {
         return {
-          type: "UNSUPPORTED_FILE_TYPE",
-          message: "Định dạng file không được hỗ trợ",
+          type: "BAD_REQUEST",
+          message: serverMessage,
           isRetryable: false,
           statusCode: status,
         };
@@ -142,7 +136,7 @@ export function classifyError(error: unknown): ClassifiedError {
 
       return {
         type: "BAD_REQUEST",
-        message: serverMessage || "Định dạng file không được hỗ trợ",
+        message: "Đã xảy ra lỗi. Vui lòng thử lại",
         isRetryable: false,
         statusCode: status,
       };

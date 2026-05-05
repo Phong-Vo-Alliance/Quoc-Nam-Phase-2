@@ -12,17 +12,9 @@ import type { ConversationDto } from "@/types/categories";
  * GET /api/conversations
  * Fetch list of direct message (DM) conversations
  */
-export const getConversations = async (
-  cursor?: string,
-): Promise<GetConversationsResponse> => {
-  const params: Record<string, unknown> = {};
-  if (cursor) {
-    params.cursor = cursor;
-  }
-
+export const getConversations = async (): Promise<GetConversationsResponse> => {
   const response = await apiClient.get<GetConversationsResponse>(
     "/api/conversations",
-    { params },
   );
   return response.data;
 };

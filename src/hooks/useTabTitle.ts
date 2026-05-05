@@ -36,9 +36,10 @@ export function useTabTitle(options: UseTabTitleOptions = {}) {
 
     // Calculate total unread count from DMs
     const dmUnread =
-      directConversations?.pages
-        .flatMap((page) => page.items)
-        .reduce((sum, dm) => sum + (dm.unreadCount || 0), 0) ?? 0;
+      directConversations?.items.reduce(
+        (sum, dm) => sum + (dm.unreadCount || 0),
+        0,
+      ) ?? 0;
 
     // Calculate total unread count from group conversations
     const groupUnread =

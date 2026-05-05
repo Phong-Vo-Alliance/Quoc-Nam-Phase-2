@@ -347,7 +347,7 @@ describe("edge-cases (Section 7)", () => {
       const directData: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(directData.pages[0].items[0].unreadCount).toBe(0);
+      expect(directData.items[0].unreadCount).toBe(0);
     });
 
     it("lastMessage reflects most recent after multiple rapid messages", () => {
@@ -390,7 +390,7 @@ describe("edge-cases (Section 7)", () => {
       const directData: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(directData.pages[0].items[0].lastMessage.content).toBe(
+      expect(directData.items[0].lastMessage.content).toBe(
         "Message 4",
       );
     });
@@ -550,7 +550,7 @@ describe("edge-cases (Section 7)", () => {
       const directData: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(directData.pages[0].items).toHaveLength(0);
+      expect(directData.items).toHaveLength(0);
     });
   });
 

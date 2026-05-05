@@ -112,8 +112,6 @@ export interface GetGroupsResponse {
 
 export interface GetConversationsResponse {
   items: DirectConversation[];
-  nextCursor: string | null;
-  hasMore: boolean;
 }
 
 // =============================================================

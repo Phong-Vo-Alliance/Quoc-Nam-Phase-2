@@ -1266,16 +1266,6 @@ export const ConversationListSidebar: React.FC<
                 </li>
               ))}
 
-              {directsQuery.hasNextPage && (
-                <button
-                  onClick={() => directsQuery.fetchNextPage()}
-                  disabled={directsQuery.isFetchingNextPage}
-                  className="w-full py-3 text-sm text-brand-600 hover:bg-brand-50"
-                  data-testid="load-more-directs"
-                >
-                  {directsQuery.isFetchingNextPage ? "Đang tải..." : "Tải thêm"}
-                </button>
-              )}
             </ul>
           ) : (
             <ul className="divide-y">

@@ -99,8 +99,8 @@ describe("conversation-cache: handleConversationCreated", () => {
     });
 
     const data: any = queryClient.getQueryData(conversationKeys.directs());
-    expect(data.pages[0].items).toHaveLength(1);
-    expect(data.pages[0].items[0].id).toBe("new-dm");
+    expect(data.items).toHaveLength(1);
+    expect(data.items[0].id).toBe("new-dm");
   });
 
   // ── §1.4 Scenario 3: DM toast (Vietnamese) ──
@@ -319,7 +319,7 @@ describe("conversation-cache: handleConversationCreated", () => {
     });
 
     const data: any = queryClient.getQueryData(conversationKeys.directs());
-    const dm = data.pages[0].items[0];
+    const dm = data.items[0];
     expect(dm.lastMessage.id).toBe("lm-1");
     expect(dm.lastMessage.content).toBe("Hey");
   });

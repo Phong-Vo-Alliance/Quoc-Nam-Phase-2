@@ -181,7 +181,7 @@ describe("Integration: Full Message Flow", () => {
     const dirData: any = queryClient.getQueryData(
       conversationKeys.directs(),
     );
-    const dm = dirData.pages[0].items[0];
+    const dm = dirData.items[0];
     expect(dm.lastMessage.id).toBe("new-msg-1");
     // Active conversation -> unread should NOT increment
     expect(dm.unreadCount).toBe(0);
@@ -225,7 +225,7 @@ describe("Integration: Full Message Flow", () => {
     const dirData: any = queryClient.getQueryData(
       conversationKeys.directs(),
     );
-    expect(dirData.pages[0].items[0].unreadCount).toBe(1);
+    expect(dirData.items[0].unreadCount).toBe(1);
   });
 
   // ── 6.1.2 Send message and switch conversation ──
@@ -370,7 +370,7 @@ describe("Integration: Full Message Flow", () => {
     const dirData: any = queryClient.getQueryData(
       conversationKeys.directs(),
     );
-    expect(dirData.pages[0].items[0].unreadCount).toBe(0);
-    expect(dirData.pages[0].items[0].lastMessage.id).toBe("own-msg");
+    expect(dirData.items[0].unreadCount).toBe(0);
+    expect(dirData.items[0].lastMessage.id).toBe("own-msg");
   });
 });

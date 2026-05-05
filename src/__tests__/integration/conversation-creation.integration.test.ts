@@ -194,8 +194,8 @@ describe("Integration: Full Conversation Creation Flow", () => {
     const dirData: any = queryClient.getQueryData(
       conversationKeys.directs(),
     );
-    expect(dirData.pages[0].items).toHaveLength(1);
-    expect(dirData.pages[0].items[0].id).toBe(dmConvId);
+    expect(dirData.items).toHaveLength(1);
+    expect(dirData.items[0].id).toBe(dmConvId);
 
     // Act: receive a message in the DM
     const dmMsg = mockMessage({
@@ -214,7 +214,7 @@ describe("Integration: Full Conversation Creation Flow", () => {
     const dirDataAfter: any = queryClient.getQueryData(
       conversationKeys.directs(),
     );
-    const dm = dirDataAfter.pages[0].items[0];
+    const dm = dirDataAfter.items[0];
     expect(dm.lastMessage.id).toBe("dm-msg-1");
     expect(dm.lastMessage.content).toBe("Hey there!");
     expect(dm.unreadCount).toBe(1);
@@ -241,7 +241,7 @@ describe("Integration: Full Conversation Creation Flow", () => {
     const dirData: any = queryClient.getQueryData(
       conversationKeys.directs(),
     );
-    const dm = dirData.pages[0].items[0];
+    const dm = dirData.items[0];
     expect(dm.members).toHaveLength(1);
     expect(dm.members[0].userId).toBe(OTHER_USER_ID);
   });

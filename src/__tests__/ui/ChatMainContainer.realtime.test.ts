@@ -271,8 +271,8 @@ describe("ChatMainContainer realtime behavior", () => {
 
       // Verify DM in cache
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      expect(data.pages[0].items).toHaveLength(1);
-      expect(data.pages[0].items[0].id).toBe("new-dm-1");
+      expect(data.items).toHaveLength(1);
+      expect(data.items[0].id).toBe("new-dm-1");
 
       // Verify Vietnamese toast
       expect(toast.info).toHaveBeenCalledWith(

@@ -23,11 +23,9 @@ export function useGroupSync() {
       }),
     );
 
-    directsData?.pages?.forEach((page) =>
-      page.items?.forEach((dm) => {
-        if (dm.id) desiredGroups.add(dm.id);
-      }),
-    );
+    directsData?.items?.forEach((dm) => {
+      if (dm.id) desiredGroups.add(dm.id);
+    });
 
     groupManager.syncGroups(desiredGroups);
   }, [categories, directsData, isConnected]);

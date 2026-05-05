@@ -4,10 +4,7 @@ import { categoriesKeys } from "@/hooks/queries/useCategories"; // 🆕 NEW: Upd
 import { messageKeys } from "@/hooks/queries/keys/messageKeys"; // 🆕 NEW: Update messages cache for thread unread
 import { markConversationAsRead as markConversationAsReadApi } from "@/api/conversations.api"; // 🆕 NEW: API call
 import type { InfiniteData } from "@tanstack/react-query";
-import type {
-  GroupConversation,
-  DirectConversation,
-} from "@/types/conversations";
+import type { GetConversationsResponse } from "@/types/conversations";
 import type { CategoryWithUnread } from "@/types/categories"; // 🆕 NEW
 import type { GetMessagesResponse } from "@/types/messages"; // 🆕 NEW: For messages cache
 
@@ -16,12 +13,6 @@ interface MarkAsReadVariables {
   messageId?: string; // 🆕 NEW: Optional - mark as read up to this message
   parentMessageId?: string; // 🆕 NEW: For thread - the parent message to update unreadReplyCount
 }
-
-type ConversationPage = {
-  items: (GroupConversation | DirectConversation)[];
-  nextCursor: string | null;
-  hasMore: boolean;
-};
 
 /**
  * Mutation hook để mark conversation as read
@@ -67,9 +58,10 @@ export function useMarkConversationAsRead() {
       await queryClient.cancelQueries({ queryKey: messageKeys.all }); // 🆕 NEW: Cancel messages queries
 
       // Snapshot previous value
-      const previousDirects = queryClient.getQueryData<
-        InfiniteData<ConversationPage>
-      >(conversationKeys.directs());
+      const previousDirects =
+        queryClient.getQueryData<GetConversationsResponse>(
+          conversationKeys.directs(),
+        );
       const previousCategories = queryClient.getQueryData<CategoryWithUnread[]>(
         categoriesKeys.list(),
       ); // 🆕 NEW
@@ -94,16 +86,13 @@ export function useMarkConversationAsRead() {
 
       // Optimistically update directs
       if (previousDirects) {
-        queryClient.setQueryData<InfiniteData<ConversationPage>>(
+        queryClient.setQueryData<GetConversationsResponse>(
           conversationKeys.directs(),
           {
             ...previousDirects,
-            pages: previousDirects.pages.map((page) => ({
-              ...page,
-              items: (page.items || []).map((conv) =>
-                conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv,
-              ),
-            })),
+            items: (previousDirects.items || []).map((conv) =>
+              conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv,
+            ),
           },
         );
       }

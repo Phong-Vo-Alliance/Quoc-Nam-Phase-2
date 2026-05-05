@@ -242,7 +242,7 @@ describe("ConversationListSidebar realtime behavior", () => {
 
       // Assert
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      const lastMsg = data.pages[0].items[0].lastMessage;
+      const lastMsg = data.items[0].lastMessage;
       expect(lastMsg).toBeTruthy();
       expect(lastMsg.id).toBe("dm-msg-1");
       expect(lastMsg.content).toBe("Hey there");
@@ -280,7 +280,7 @@ describe("ConversationListSidebar realtime behavior", () => {
 
       // Assert
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      expect(data.pages[0].items[0].unreadCount).toBe(2);
+      expect(data.items[0].unreadCount).toBe(2);
     });
 
     it("2.2.3 DM unread resets on read", () => {
@@ -299,7 +299,7 @@ describe("ConversationListSidebar realtime behavior", () => {
 
       // Assert
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      expect(data.pages[0].items[0].unreadCount).toBe(0);
+      expect(data.items[0].unreadCount).toBe(0);
     });
 
     it("2.2.4 new DM conversation appears + toast in Vietnamese", async () => {
@@ -320,8 +320,8 @@ describe("ConversationListSidebar realtime behavior", () => {
 
       // Assert - DM appears in cache
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      expect(data.pages[0].items).toHaveLength(1);
-      expect(data.pages[0].items[0].id).toBe("new-dm-conv");
+      expect(data.items).toHaveLength(1);
+      expect(data.items[0].id).toBe("new-dm-conv");
 
       // Assert - Vietnamese toast
       expect(toast.info).toHaveBeenCalledWith(
@@ -336,14 +336,10 @@ describe("ConversationListSidebar realtime behavior", () => {
         id: CONV_ID_2,
         unreadCount: 0,
       });
-      const multiPageData = {
-        pages: [
-          { items: [dmPage1], hasMore: true, nextCursor: "cursor-1" },
-          { items: [dmPage2], hasMore: false, nextCursor: null },
-        ],
-        pageParams: [undefined, "cursor-1"],
-      };
-      queryClient.setQueryData(conversationKeys.directs(), multiPageData);
+      queryClient.setQueryData(
+        conversationKeys.directs(),
+        mockInfiniteDirectsData([dmPage1, dmPage2]),
+      );
 
       // Act
       directCacheHandleMessageSent(
@@ -356,15 +352,15 @@ describe("ConversationListSidebar realtime behavior", () => {
         }),
       );
 
-      // Assert - page 2 DM updated
+      // Assert - target DM updated
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      expect(data.pages[1].items[0].unreadCount).toBe(1);
-      expect(data.pages[1].items[0].lastMessage.content).toBe(
-        "Page 2 message",
-      );
+      const target = data.items.find((dm: any) => dm.id === CONV_ID_2);
+      expect(target.unreadCount).toBe(1);
+      expect(target.lastMessage.content).toBe("Page 2 message");
 
-      // Assert - page 1 DM untouched
-      expect(data.pages[0].items[0].unreadCount).toBe(0);
+      // Assert - other DM untouched
+      const other = data.items.find((dm: any) => dm.id !== CONV_ID_2);
+      expect(other.unreadCount).toBe(0);
     });
 
     it("2.2.6 GROUP message does not affect DM list (existsInDirects check)", () => {
@@ -387,8 +383,8 @@ describe("ConversationListSidebar realtime behavior", () => {
 
       // Assert - DM list unchanged
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      expect(data.pages[0].items[0].unreadCount).toBe(0);
-      expect(data.pages[0].items[0].lastMessage).toBeNull();
+      expect(data.items[0].unreadCount).toBe(0);
+      expect(data.items[0].lastMessage).toBeNull();
     });
   });
 
@@ -425,7 +421,7 @@ describe("ConversationListSidebar realtime behavior", () => {
 
       // Assert - when user switches to DM tab, cache already has correct unread
       const data: any = queryClient.getQueryData(conversationKeys.directs());
-      expect(data.pages[0].items[0].unreadCount).toBe(2);
+      expect(data.items[0].unreadCount).toBe(2);
     });
 
     it("2.3.2 switch to Group tab shows correct unread", () => {

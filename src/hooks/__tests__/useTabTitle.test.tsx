@@ -51,16 +51,11 @@ describe("useTabTitle", () => {
     // Setup: 0 unread
     const mockData: GetConversationsResponse = {
       items: [createMockDM("dm-1", 0), createMockDM("dm-2", 0)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     // Mock useDirectMessages to return data
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle(), { wrapper });
@@ -72,15 +67,10 @@ describe("useTabTitle", () => {
     // Setup: 3 unread total (2 + 1)
     const mockData: GetConversationsResponse = {
       items: [createMockDM("dm-1", 2), createMockDM("dm-2", 1)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle(), { wrapper });
@@ -94,15 +84,10 @@ describe("useTabTitle", () => {
     // Setup: 150 unread
     const mockData: GetConversationsResponse = {
       items: [createMockDM("dm-1", 150)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle(), { wrapper });
@@ -116,15 +101,10 @@ describe("useTabTitle", () => {
     // Initial: 1 unread
     const mockData1: GetConversationsResponse = {
       items: [createMockDM("dm-1", 1)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData1],
-        pageParams: [undefined],
-      },
+      data: mockData1,
     } as any);
 
     const { rerender } = renderHook(() => useTabTitle(), { wrapper });
@@ -136,15 +116,10 @@ describe("useTabTitle", () => {
     // Update: 3 unread (2 + 1)
     const mockData2: GetConversationsResponse = {
       items: [createMockDM("dm-1", 2), createMockDM("dm-2", 1)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData2],
-        pageParams: [undefined],
-      },
+      data: mockData2,
     } as any);
 
     rerender();
@@ -157,15 +132,10 @@ describe("useTabTitle", () => {
   test("TC-1.5: respects enabled flag", () => {
     const mockData: GetConversationsResponse = {
       items: [createMockDM("dm-1", 5)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle({ enabled: false }), { wrapper });
@@ -177,15 +147,10 @@ describe("useTabTitle", () => {
   test("TC-1.6: restores base title on unmount", async () => {
     const mockData: GetConversationsResponse = {
       items: [createMockDM("dm-1", 5)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     const { unmount } = renderHook(() => useTabTitle(), { wrapper });
@@ -199,25 +164,18 @@ describe("useTabTitle", () => {
     expect(document.title).toBe("Quoc Nam Portal");
   });
 
-  test("TC-1.7: handles multiple pages of conversations", async () => {
-    // Setup: Multiple pages with unread counts
-    const mockPage1: GetConversationsResponse = {
-      items: [createMockDM("dm-1", 2), createMockDM("dm-2", 3)],
-      nextCursor: "cursor-1",
-      hasMore: true,
-    };
-
-    const mockPage2: GetConversationsResponse = {
-      items: [createMockDM("dm-3", 1), createMockDM("dm-4", 4)],
-      nextCursor: null,
-      hasMore: false,
+  test("TC-1.7: sums unread counts across many conversations", async () => {
+    const mockData: GetConversationsResponse = {
+      items: [
+        createMockDM("dm-1", 2),
+        createMockDM("dm-2", 3),
+        createMockDM("dm-3", 1),
+        createMockDM("dm-4", 4),
+      ],
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockPage1, mockPage2],
-        pageParams: [undefined, "cursor-1"],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle(), { wrapper });
@@ -235,15 +193,10 @@ describe("useTabTitle", () => {
         { ...createMockDM("dm-2", 0), unreadCount: null as any },
         createMockDM("dm-3", 2),
       ],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle(), { wrapper });
@@ -257,15 +210,10 @@ describe("useTabTitle", () => {
   test("TC-1.9: handles empty conversations list", () => {
     const mockData: GetConversationsResponse = {
       items: [],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle(), { wrapper });
@@ -287,15 +235,10 @@ describe("useTabTitle", () => {
   test("TC-1.11: uses custom base title", async () => {
     const mockData: GetConversationsResponse = {
       items: [createMockDM("dm-1", 3)],
-      nextCursor: null,
-      hasMore: false,
     };
 
     vi.mocked(useDirectMessages).mockReturnValue({
-      data: {
-        pages: [mockData],
-        pageParams: [undefined],
-      },
+      data: mockData,
     } as any);
 
     renderHook(() => useTabTitle({ baseTitle: "Custom Portal" }), { wrapper });

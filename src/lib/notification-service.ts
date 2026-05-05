@@ -1,10 +1,9 @@
-import type { InfiniteData } from "@tanstack/react-query";
 import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import { categoriesKeys } from "@/hooks/queries/useCategories";
 import { queryClient } from "@/lib/queryClient";
 import { useNotificationStore } from "@/stores/notificationStore";
 import type { CategoryWithUnread } from "@/types/categories";
-import type { DirectConversation } from "@/types/conversations";
+import type { GetConversationsResponse } from "@/types/conversations";
 import type { ChatMessage } from "@/types/messages";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -16,12 +15,6 @@ const BODY_MAX_LENGTH = 100;
 let lastSoundAt = 0;
 let unreadCount = 0;
 const recentNotifications = new Map<string, number>();
-
-type DirectsPage = {
-  items: DirectConversation[];
-  nextCursor: string | null;
-  hasMore: boolean;
-};
 
 type NotificationMessageMeta = ChatMessage & {
   type?: "DM" | "GRP";
@@ -160,15 +153,13 @@ function isDirectNotification(message: NotificationMessageMeta): boolean {
   if (message.type === "GRP" || message.conversationType === "GRP")
     return false;
 
-  const directsData = queryClient.getQueryData<InfiniteData<DirectsPage>>(
+  const directsData = queryClient.getQueryData<GetConversationsResponse>(
     conversationKeys.directs(),
   );
 
   return (
-    directsData?.pages.some((page) =>
-      page.items.some(
-        (conversation) => conversation.id === message.conversationId,
-      ),
+    directsData?.items.some(
+      (conversation) => conversation.id === message.conversationId,
     ) ?? false
   );
 }

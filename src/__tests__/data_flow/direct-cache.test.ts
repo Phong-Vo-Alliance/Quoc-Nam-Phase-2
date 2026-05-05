@@ -58,7 +58,7 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      const updatedDm = data.pages[0].items[0];
+      const updatedDm = data.items[0];
       expect(updatedDm.unreadCount).toBe(1);
       expect(updatedDm.lastMessage).toBeTruthy();
     });
@@ -78,23 +78,19 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(data.pages[0].items[0].unreadCount).toBe(0);
+      expect(data.items[0].unreadCount).toBe(0);
     });
 
-    it("updates correct DM in page 2 of multi-page data", () => {
-      const dm1 = mockDirectConversation({ id: "dm-page1" });
+    it("updates correct DM when multiple DMs are present", () => {
+      const dm1 = mockDirectConversation({ id: "dm-other" });
       const dm2 = mockDirectConversation({
         id: CONV_ID_2,
         unreadCount: 0,
       });
-      const multiPageData = {
-        pages: [
-          { items: [dm1], hasMore: true, nextCursor: "cursor-1" },
-          { items: [dm2], hasMore: false, nextCursor: null },
-        ],
-        pageParams: [undefined, "cursor-1"],
-      };
-      queryClient.setQueryData(conversationKeys.directs(), multiPageData);
+      queryClient.setQueryData(
+        conversationKeys.directs(),
+        mockInfiniteDirectsData([dm1, dm2]),
+      );
 
       handleMessageSent(
         ctx,
@@ -107,7 +103,8 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(data.pages[1].items[0].unreadCount).toBe(1);
+      const updated = data.items.find((dm: any) => dm.id === CONV_ID_2);
+      expect(updated.unreadCount).toBe(1);
     });
 
     it("skips gracefully when DM not in cache", () => {
@@ -142,7 +139,7 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(data.pages[0].items[0].unreadCount).toBe(0);
+      expect(data.items[0].unreadCount).toBe(0);
     });
 
     it("does not increment unreadCount for active DM", () => {
@@ -163,7 +160,7 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(data.pages[0].items[0].unreadCount).toBe(0);
+      expect(data.items[0].unreadCount).toBe(0);
     });
 
     it("updates lastMessage with full LastMessage object", () => {
@@ -186,7 +183,7 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      const lastMsg = data.pages[0].items[0].lastMessage;
+      const lastMsg = data.items[0].lastMessage;
       expect(lastMsg.id).toBe("new-msg");
       expect(lastMsg.content).toBe("Hello DM");
       expect(lastMsg.senderId).toBe(OTHER_USER_ID);
@@ -219,7 +216,7 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(data.pages[0].items[0].unreadCount).toBe(0);
+      expect(data.items[0].unreadCount).toBe(0);
     });
 
     it("does not crash when DM not in cache", () => {
@@ -251,7 +248,7 @@ describe("direct-cache", () => {
       const data: any = queryClient.getQueryData(
         conversationKeys.directs(),
       );
-      expect(data.pages[0].items[0].unreadCount).toBe(3);
+      expect(data.items[0].unreadCount).toBe(3);
     });
 
     it("handles no directs cache gracefully", () => {

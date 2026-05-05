@@ -1,19 +1,16 @@
-import type { QueryClient, InfiniteData } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { categoriesKeys } from "@/hooks/queries/useCategories";
 import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import { getConversationMembers } from "@/api/conversations.api";
 import { toast } from "sonner";
-import type { DirectConversation } from "@/types/conversations";
+import type {
+  DirectConversation,
+  GetConversationsResponse,
+} from "@/types/conversations";
 import type {
   CategoryWithUnread,
   ConversationInfoDto,
 } from "@/types/categories";
-
-type ConversationPage = {
-  items: any[];
-  nextCursor: string | null;
-  hasMore: boolean;
-};
 
 export interface ConversationCacheContext {
   queryClient: QueryClient;
@@ -76,9 +73,9 @@ export async function handleConversationCreated(
       queryClient.invalidateQueries({ queryKey: categoriesKeys.all });
     }
   } else {
-    const directsData = queryClient.getQueryData<
-      InfiniteData<ConversationPage>
-    >(conversationKeys.directs());
+    const directsData = queryClient.getQueryData<GetConversationsResponse>(
+      conversationKeys.directs(),
+    );
 
     if (directsData) {
       try {
@@ -121,18 +118,13 @@ export async function handleConversationCreated(
           members: members,
         };
 
-        const updatedPages = [...directsData.pages];
-        if (updatedPages[0]) {
-          updatedPages[0] = {
-            ...updatedPages[0],
-            items: [newDirectConversation, ...updatedPages[0].items],
-          };
-        }
-
-        queryClient.setQueryData(conversationKeys.directs(), {
-          ...directsData,
-          pages: updatedPages,
-        });
+        queryClient.setQueryData<GetConversationsResponse>(
+          conversationKeys.directs(),
+          {
+            ...directsData,
+            items: [newDirectConversation, ...directsData.items],
+          },
+        );
       } catch (error) {
         console.error(
           "[ConversationCache] Failed to fetch members:",
