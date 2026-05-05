@@ -14,21 +14,24 @@ interface UseMentionMembersOptions {
 }
 
 function toConversationMember(m: MentionMemberDto): ConversationMember {
-  const role = m.isLeader ? "Leader" : (m.userRoles?.[0] ?? "Member");
+  const roles = m.userRoles ?? [];
+  const identifier = m.userIdentifier ?? "";
+  const fullName = m.userFullName ?? identifier;
   return {
     userId: m.userId,
-    userName: m.userIdentifier,
-    role,
-    joinedAt: m.joinedAt,
+    userName: identifier,
+    role: m.isLeader ? "Leader" : (roles[0] ?? "Member"),
+    joinedAt: m.joinedAt ?? "",
     isMuted: false,
     userInfo: {
       id: m.userId,
-      userName: m.userIdentifier,
-      fullName: m.userFullName,
-      identifier: m.userIdentifier,
-      roles: (m.userRoles ?? []).join(","),
+      userName: identifier,
+      fullName,
+      identifier,
+      roles: roles.join(","),
       avatarUrl: null,
     },
+    departments: m.departments ?? undefined,
   };
 }
 
@@ -56,8 +59,9 @@ export function useMentionMembers({
       const conv = category.conversations?.find(
         (c) => c.conversationId === conversationId,
       );
-      if (conv?.mention?.members?.length) {
-        return conv.mention.members.map(toConversationMember);
+      const members = conv?.mention?.members;
+      if (members?.length) {
+        return members.filter((m) => m?.userId).map(toConversationMember);
       }
     }
     return [];

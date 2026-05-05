@@ -60,6 +60,8 @@ export function useConfirmedInfo({
   // 🆕 NEW: Create Map of message IDs to confirmed info with userName + userId.
   // We track userId so callers can gate actions (e.g. "Giao việc") on whether
   // the current viewer is the confirmer.
+  // Prefer `confirmedByName` from backend; fall back to conversation member
+  // lookup for older payloads that don't include the name.
   const confirmedMessageMap = useMemo(() => {
     const map = new Map<string, { userId: string; name?: string }>();
     if (confirmedInfoData?.data) {
@@ -68,6 +70,8 @@ export function useConfirmedInfo({
 
         if (info.confirmedBy === user?.id) {
           confirmedByName = "Bạn";
+        } else if (info.confirmedByName) {
+          confirmedByName = info.confirmedByName;
         } else {
           const member = conversationMembers?.find(
             (m) =>

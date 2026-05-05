@@ -186,9 +186,8 @@ export const ConversationDetailPanel: React.FC<
   // `departmentLeaders`, so Admins that aren't department leaders would 403.
   const isDepartmentLeaderOfGroup =
     useIsDepartmentLeaderInConversation(groupId);
-  // Information-confirmed is a department-leader-only feature; Admin has no
-  // UI for it, so skip the API call entirely even if the admin happens to be
-  // listed in `departmentLeaders`.
+  // Information-confirmed: từ 2026-04-29, Admin cũng được tiếp nhận thông tin
+  // như leader, nên fetch luôn cho cả Admin và department leader của group.
   const isAdmin = hasRole("Admin");
 
   /* =============== Dynamic Tabs =============== */
@@ -272,13 +271,13 @@ export const ConversationDetailPanel: React.FC<
     isError: templatesError,
   } = useChecklistTemplates(groupId);
 
-  // Fetch confirmed information for this conversation (leader only)
+  // Fetch confirmed information for this conversation (Admin + department leader)
   const { data: confirmedInfoData } = useInformationConfirmed(
     {
       conversationId: groupId,
       isFinished: false, // Only show unfinished confirmed info
     },
-    { enabled: !!groupId && !isAdmin && isDepartmentLeaderOfGroup },
+    { enabled: !!groupId && (isAdmin || isDepartmentLeaderOfGroup) },
   );
 
   const confirmedInfos = confirmedInfoData?.data || [];

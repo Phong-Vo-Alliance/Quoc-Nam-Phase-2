@@ -43,10 +43,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCategories } from "@/hooks/queries/useCategories";
 import { useCategoryConversations } from "@/hooks/queries/useCategoryConversations";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useFilteredAssignees } from "@/hooks/useFilteredAssignees";
 import { sendMessage } from "@/api/messages.api";
 import { useCreateTask } from "@/hooks/mutations/useCreateTask";
 import { useLinkTaskToMessage } from "@/hooks/mutations/useLinkTaskToMessage";
 import { useAuthStore } from "@/stores/authStore";
+import { hasRole } from "@/utils/roleUtils";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useChecklistTemplates } from "@/hooks/queries/useChecklistTemplates";
 import { taskKeys } from "@/hooks/queries/keys/taskKeys";
@@ -130,10 +132,12 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
   const { data: categoriesData, isLoading: categoriesLoading } =
     useCategories();
 
-  // Only categories where current user is in `departmentLeaders` — a leader
-  // may only transfer the received info into a category they also lead.
+  // Admin: see all categories. Leader/Staff: only categories where the
+  // current user is in `departmentLeaders` (can only transfer into a
+  // category they also lead).
   const categories = React.useMemo(() => {
     const all = categoriesData || [];
+    if (hasRole("Admin")) return all;
     const uid = currentUser?.id;
     if (!uid) return [];
     return all.filter((cat) =>
@@ -176,23 +180,42 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     [checklistTemplates, selectedChecklistTemplateId],
   );
 
-  // Filter members by department (including leader/self)
-  // Use departmentId from UserDepartmentDto, not id (user-dept relationship ID)
-  const currentUserDepartmentIds = React.useMemo(
-    () => currentUser?.departments?.map((d) => d.departmentId) ?? [],
-    [currentUser?.departments],
-  );
+  // Role-aware assignee filtering — same logic as AssignTaskSheet:
+  // - Admin: per-category leader-of-department, fallback to dept members when
+  //   no active leader; falls back to all conversation members when category
+  //   has no `departmentLeaders` defined. Self excluded.
+  // - Leader: members of departments the user leads, plus self.
+  // - Staff: only self.
+  const { filteredMembers: assigneeOptions } = useFilteredAssignees({
+    conversationId: selectedConversationId,
+    enabled: !!selectedConversationId && open,
+  });
 
-  const filteredMembers = React.useMemo(() => {
-    if (currentUserDepartmentIds.length === 0) return members;
-
-    return members.filter((member) => {
-      const memberDepartmentIds = member.departments?.map((d) => d.id) ?? [];
-      return memberDepartmentIds.some((deptId) =>
-        currentUserDepartmentIds.includes(deptId),
-      );
-    });
-  }, [members, currentUserDepartmentIds]);
+  // Normalize for display (handle MinimalMember + ConversationMember shapes).
+  // For Admin, overlay department names from ConversationMember because
+  // useFilteredAssignees' Admin branch may not always populate departments.
+  const displayMembers = React.useMemo(() => {
+    if (assigneeOptions) {
+      const convDeptLookup = hasRole("Admin")
+        ? new Map(
+            members.map((m) => [
+              m.userId,
+              m.departments?.map((d) => d.name) ?? [],
+            ]),
+          )
+        : null;
+      return assigneeOptions.map((m) => ({
+        id: m.id,
+        name: m.name,
+        departments: convDeptLookup?.get(m.id) ?? m.departments ?? [],
+      }));
+    }
+    return members.map((m) => ({
+      id: m.userId,
+      name: m.userInfo?.fullName || m.userInfo?.userName || m.userName,
+      departments: m.departments?.map((d) => d.name) ?? [],
+    }));
+  }, [assigneeOptions, members]);
 
   // Mutations
   const sendMessageMutation = useMutation({
@@ -240,12 +263,12 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
           }
         }
 
-        const selectedAssignee = filteredMembers.find(
-          (m) => m.userId === selectedAssigneeId,
+        const selectedAssignee = displayMembers.find(
+          (m) => m.id === selectedAssigneeId,
         );
 
         toast.success(
-          `Đã giao việc thành công cho ${selectedAssignee?.userInfo?.fullName || selectedAssignee?.userName}`,
+          `Đã giao việc thành công cho ${selectedAssignee?.name}`,
         );
 
         // Send system message about task creation
@@ -253,10 +276,7 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
           try {
             const creatorName =
               currentUser?.fullName || currentUser?.identifier || "người dùng";
-            const assigneeName =
-              selectedAssignee?.userInfo?.fullName ||
-              selectedAssignee?.userName ||
-              "người dùng";
+            const assigneeName = selectedAssignee?.name || "người dùng";
 
             const systemMessageData: SendChatMessageRequest = {
               conversationId: selectedConversationId,
@@ -360,26 +380,33 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     }
   }, [conversations, selectedConversationId, conversationsLoading]);
 
-  // Auto-select assignee: prefer self if in list, otherwise first member
+  // Auto-select assignee:
+  // - Admin: first member in list (self is excluded by useFilteredAssignees).
+  // - Leader/Staff: prefer self if in list, otherwise first member.
   React.useEffect(() => {
     if (membersLoading) return;
-    if (filteredMembers.length === 0) return;
+    if (displayMembers.length === 0) return;
+
+    const currentInList =
+      selectedAssigneeId &&
+      displayMembers.some((m) => m.id === selectedAssigneeId);
+    if (currentInList) return;
+
+    if (hasRole("Admin")) {
+      setSelectedAssigneeId(displayMembers[0].id);
+      return;
+    }
 
     const selfInList =
       !!currentUser?.id &&
-      filteredMembers.some((m) => m.userId === currentUser.id);
-    const currentInList =
-      selectedAssigneeId &&
-      filteredMembers.some((m) => m.userId === selectedAssigneeId);
-
-    if (currentInList) return;
+      displayMembers.some((m) => m.id === currentUser.id);
 
     if (selfInList) {
       setSelectedAssigneeId(currentUser!.id);
     } else {
-      setSelectedAssigneeId(filteredMembers[0].userId);
+      setSelectedAssigneeId(displayMembers[0].id);
     }
-  }, [filteredMembers, selectedAssigneeId, membersLoading, currentUser?.id]);
+  }, [displayMembers, selectedAssigneeId, membersLoading, currentUser?.id]);
 
   // Reset checklist template when conversation changes
   React.useEffect(() => {
@@ -474,8 +501,8 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     const selectedConversation = conversations.find(
       (c) => c.id === selectedConversationId,
     );
-    const selectedAssignee = filteredMembers.find(
-      (m) => m.userId === selectedAssigneeId,
+    const selectedAssignee = displayMembers.find(
+      (m) => m.id === selectedAssigneeId,
     );
 
     if (!selectedCategory || !selectedConversation || !selectedAssignee) {
@@ -548,7 +575,7 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
     !!selectedConversationId &&
     !membersLoading &&
     !membersError &&
-    filteredMembers.length === 0;
+    displayMembers.length === 0;
   const needsChecklistSelection =
     !!selectedConversationId &&
     !checklistTemplatesLoading &&
@@ -697,7 +724,7 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
                 <div className="mt-1 p-2 rounded-md bg-red-50 border border-red-200 text-sm text-red-700">
                   ⚠️ Không thể tải danh sách thành viên
                 </div>
-              ) : filteredMembers.length === 0 ? (
+              ) : displayMembers.length === 0 ? (
                 <div className="mt-1 p-2 rounded-md bg-yellow-50 border border-yellow-200 text-sm text-gray-700">
                   Không có thành viên khả dụng
                 </div>
@@ -711,10 +738,23 @@ export const ConfirmedInfoTransferSheet: React.FC<Props> = ({
                     <SelectValue placeholder="Chọn thành viên" />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredMembers.map((member) => (
-                      <SelectItem key={member.userId} value={member.userId}>
-                        {member.userInfo?.fullName || member.userName}
-                        {member.userId === currentUser?.id && " (Bạn)"}
+                    {displayMembers.map((member) => (
+                      <SelectItem
+                        key={member.id}
+                        value={member.id}
+                        className="group focus:bg-brand-600 focus:text-white"
+                      >
+                        <div className="flex flex-col items-start leading-tight">
+                          <span>
+                            {member.name}
+                            {member.id === currentUser?.id && " (Bạn)"}
+                          </span>
+                          {member.departments.length > 0 && (
+                            <span className="text-[11px] text-gray-600 group-focus:text-white/75">
+                              {member.departments.join(" • ")}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>

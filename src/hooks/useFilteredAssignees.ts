@@ -16,10 +16,10 @@
  * **Leader (per-category):**
  * - Leader status is determined by `category.departmentLeaders` (current user's id
  *   must be in the list), NOT by the global role alone.
- * - Candidate pool is conversation members intersected with members of every
- *   department the user personally leads that is also in `category.departmentIds`
- *   (i.e. the department must be part of the chat's category AND the user must
- *   lead it). Current user is always included.
+ * - Candidate pool is ALL conversation members of the category — no department
+ *   restriction. A leader of one department can assign to members and leaders
+ *   of other departments as long as they belong to this category's
+ *   conversation. Current user is always included.
  *
  * **Department info:** every returned `MinimalMember` is populated with the
  * names of the departments (within the active pool) the user belongs to so the
@@ -148,16 +148,14 @@ export function useFilteredAssignees({
   // Departments to fetch members from.
   // - Admin → ALL `categoryDepartmentIds` so we can evaluate per-dept leader
   //   status and fall back to dept members when a dept has no active leader.
-  // - Leader → every dept in the category that the user leads (union of
-  //   `category.departments[].isLeader` and `currentUser.departments[].isLeader`).
-  //   Identity API returns 403 on /departments/{id}/members for non-leaders so
-  //   we keep the gate.
+  // - Leader → none. Leaders may assign to any conversation member of the
+  //   category (no department intersection), so per-dept membership data is
+  //   not needed here.
   // - Otherwise → none (only-self pool downstream).
   const fetchDepartmentIds = useMemo(() => {
     if (hasRole("Admin")) return categoryDepartmentIds;
-    if (!isLeaderOfCategory) return [];
-    return leaderDepartmentIdsInCategory;
-  }, [categoryDepartmentIds, isLeaderOfCategory, leaderDepartmentIdsInCategory]);
+    return [];
+  }, [categoryDepartmentIds]);
 
   const {
     data: mergedDeptMembers,
@@ -254,62 +252,43 @@ export function useFilteredAssignees({
 
     // 🚨 Not Admin and not a leader of this category → only self
     if (!isLeaderOfCategory) {
-      console.warn(
-        "[useFilteredAssignees] Current user is not a leader of this category - showing only self",
+      if (!currentUserId) return [];
+      return [
+        {
+          id: currentUserId,
+          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
+          role: "Leader",
+        },
+      ];
+    }
+
+    // 🎯 LEADER of this category — pool is ALL conversation members (any
+    // department, including leaders of other departments).
+    if (isConvError) {
+      if (!currentUserId) return [];
+      return [
+        {
+          id: currentUserId,
+          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
+          role: "Leader",
+        },
+      ];
+    }
+
+    if (!conversationMembers.length) return [];
+
+    const convDeptLookup = new Map<string, string[]>();
+    for (const cm of convMembersRaw ?? []) {
+      convDeptLookup.set(
+        cm.userId,
+        cm.departments?.map((d) => d.name) ?? [],
       );
-      if (!currentUserId) return [];
-      return [
-        {
-          id: currentUserId,
-          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
-          role: "Leader",
-        },
-      ];
     }
 
-    // Leader of category but no fetchable departments — data inconsistency
-    if (!fetchDepartmentIds.length) {
-      if (!currentUserId) return [];
-      return [
-        {
-          id: currentUserId,
-          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
-          role: "Leader",
-        },
-      ];
-    }
-
-    if (isDeptError || isConvError) {
-      console.error(
-        "[useFilteredAssignees] API error fetching members - showing only self",
-        { isDeptError, isConvError },
-      );
-      if (!currentUserId) return [];
-      return [
-        {
-          id: currentUserId,
-          name: currentUser?.fullName || currentUser?.identifier || "Tôi",
-          role: "Leader",
-        },
-      ];
-    }
-
-    if (!mergedDeptMembers || !conversationMembers.length) return [];
-
-    // Build user → dept ids (within fetched pool) lookup
-    const userDeptIds = new Map<string, Set<string>>();
-    for (const m of mergedDeptMembers) {
-      const set = new Set<string>();
-      for (const ms of m.memberships) set.add(ms.departmentId);
-      userDeptIds.set(m.userId, set);
-    }
-
-    const filtered: MinimalMember[] = conversationMembers
-      .filter((cm) => userDeptIds.has(cm.id))
-      .map((cm) => ({
-        ...cm,
-        departments: namesFromDeptIds(userDeptIds.get(cm.id) ?? []),
-      }));
+    const filtered: MinimalMember[] = conversationMembers.map((cm) => ({
+      ...cm,
+      departments: convDeptLookup.get(cm.id) ?? [],
+    }));
 
     if (currentUserId && !filtered.some((m) => m.id === currentUserId)) {
       filtered.unshift({
@@ -323,14 +302,13 @@ export function useFilteredAssignees({
     return filtered;
   }, [
     isLeaderOfCategory,
-    fetchDepartmentIds,
     leaderDepartmentIdsInCategory,
     mergedDeptMembers,
     conversationMembers,
+    convMembersRaw,
     currentUser,
-    isDeptError,
-    isConvError,
     isDeptLoading,
+    isConvError,
     isCategoriesLoading,
     categoryDepartmentLeaders,
     categoryDepartmentIds,

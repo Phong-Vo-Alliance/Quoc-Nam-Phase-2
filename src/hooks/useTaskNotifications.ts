@@ -19,7 +19,6 @@ import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import type { ConversationMember } from "@/types/conversations";
 import type { TaskDetailResponse } from "@/types/tasks_api";
 import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
-import type { InformationConfirmedPagedResponse } from "@/types/information_confirmed";
 
 // Vietnamese labels for task statuses
 const STATUS_LABELS_VI: Record<string, string> = {
@@ -106,27 +105,7 @@ export function useTaskNotifications() {
         queryKey: tasksKeys.all,
       });
 
-      // Capture confirmed info content from cache BEFORE any refetch (for toast later)
-      let matchedConfirmedContent: string | null = null;
-
       if (payload.changeType === "created") {
-        // Read confirmed info from cache BEFORE refetching (item will be gone after refetch)
-        const confirmedInfoQueries =
-          queryClient.getQueriesData<InformationConfirmedPagedResponse>({
-            queryKey: informationConfirmedKeys.all,
-          });
-        for (const [, data] of confirmedInfoQueries) {
-          const match = data?.data?.find(
-            (ci) =>
-              ci.messageId === payload.task.messageId &&
-              ci.confirmedBy === currentUserId,
-          );
-          if (match) {
-            matchedConfirmedContent = match.content;
-            break;
-          }
-        }
-
         queryClient.setQueryData<{
           pages: GetMessagesResponse[];
           pageParams: (string | undefined)[];
@@ -197,21 +176,11 @@ export function useTaskNotifications() {
 
       switch (payload.changeType) {
         case "created": {
-          // Skip toast if current user created the task (they already see success toast in UI)
           if (isMyAction) {
             break;
           }
           if (isAssignedToMe) {
             toast.success(`Công việc mới được giao: ${taskTitle}`);
-          } else {
-            // Show toast only to the user who confirmed (tiếp nhận) this info
-            // matchedConfirmedContent was captured from cache BEFORE refetch
-            if (matchedConfirmedContent) {
-              const creatorName = getUserName(payload.changedByUserId);
-              toast.info(
-                `Thông tin "${matchedConfirmedContent}" đã được tạo công việc bởi ${creatorName}`,
-              );
-            }
           }
           break;
         }

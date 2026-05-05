@@ -116,6 +116,8 @@ export interface MentionMemberDto {
   joinedAt: string;
   /** Roles assigned to the user */
   userRoles: string[];
+  /** Departments the user belongs to within this conversation */
+  departments?: CategoryDepartmentDto[];
 }
 
 /**

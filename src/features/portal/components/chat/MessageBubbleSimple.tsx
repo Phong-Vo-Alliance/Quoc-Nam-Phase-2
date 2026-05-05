@@ -31,7 +31,6 @@ import { useAuthStore } from "@/stores/authStore";
 import { useConversationStore } from "@/stores";
 import { useContentProtection } from "@/hooks/useContentProtection";
 import { renderMessageWithMentions } from "@/utils/mentionHighlight";
-import { hasRole } from "@/utils/roleUtils";
 
 /**
  * Format file size from bytes to human-readable format
@@ -150,12 +149,11 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
     (s) => s.selectedConversation?.id ?? null,
   );
   const isLeaderOfGroup = useIsLeaderInConversation(selectedConversationId);
-  // Admin users cannot receive info themselves — only category leaders can.
+  // Receiving info: any leader of the group (admin included) may receive.
   // Assigning a task from a message:
   //  - before it's been received: any leader (admin included) may assign
   //  - after it's been received: only the confirmer may assign
-  const isAdmin = hasRole("Admin");
-  const canReceiveInfo = isLeaderOfGroup && !isAdmin;
+  const canReceiveInfo = isLeaderOfGroup;
   const isConfirmerOfMessage =
     hasConfirmedInfo && !!confirmedByUserId && confirmedByUserId === currentUserId;
   const canAssignTaskFromMessage = hasConfirmedInfo

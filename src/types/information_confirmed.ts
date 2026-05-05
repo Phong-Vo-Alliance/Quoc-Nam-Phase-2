@@ -14,6 +14,7 @@ export interface InformationConfirmedDto {
   statusCode: string | null;
   statusName: string | null;
   confirmedBy: string;
+  confirmedByName?: string; // Name of the confirmer (from backend)
   isFinished: boolean;
   createdAt: string;
   updatedAt: string | null;

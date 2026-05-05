@@ -77,7 +77,6 @@ export const useConversationStore = create<ConversationState>()(
 
       // Clear selected conversation
       clearSelectedConversation: () => {
-        console.log("[ConversationStore] clearSelectedConversation called");
         set({ selectedConversation: null });
         // Sync legacy localStorage keys
         clearStorageConversation();

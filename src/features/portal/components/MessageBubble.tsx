@@ -1,7 +1,6 @@
 import React from "react";
 import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
 import { useConversationStore } from "@/stores";
-import { hasRole } from "@/utils/roleUtils";
 import { createPortal } from "react-dom";
 import type { Message, TaskLogMessage } from "../types";
 import {
@@ -112,13 +111,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     (s) => s.selectedConversation?.id ?? null,
   );
   const isLeaderOfGroup = useIsLeaderInConversation(selectedConversationId);
-  // Admins cannot receive info — only category leaders can.
+  // Receiving info: any leader of the group (admin included) may receive.
   // "Giao Task":
   //  - before receiving: any leader (admin included) may assign
   //  - after receiving:  only the receiver (in this wireframe path,
   //    `isReceived` already represents the current viewer).
-  const isAdmin = hasRole("Admin");
-  const canReceiveInfo = isLeaderOfGroup && !isAdmin;
+  const canReceiveInfo = isLeaderOfGroup;
   const canAssignTaskFromMessage = isReceived || isLeaderOfGroup;
 
   // Mobile-like overlay popup (preview + menu)

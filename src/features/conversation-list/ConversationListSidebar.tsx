@@ -1106,14 +1106,11 @@ export const ConversationListSidebar: React.FC<
         className="flex-1 min-h-0 overflow-y-auto scrollbar-thin"
         data-testid="conversation-content"
       >
-        {/* Loading State */}
-        {isLoading && <ConversationSkeleton count={5} />}
-
-        {/* Error State */}
-        {isError && !isLoading && (
+        {/* Error State (ưu tiên hiển thị trước loading để không bị che bởi skeleton) */}
+        {isError && (
           <div className="p-4 text-center" data-testid="conversation-error">
             <p className="text-sm text-gray-500 mb-3">
-              Không thể tải danh sách. Vui lòng thử lại.
+              Không thể tải danh sách. Vui lòng thử lại sau.
             </p>
             <button
               onClick={handleRetry}
@@ -1125,6 +1122,9 @@ export const ConversationListSidebar: React.FC<
             </button>
           </div>
         )}
+
+        {/* Loading State */}
+        {isLoading && !isError && <ConversationSkeleton count={5} />}
 
         {/* Group Tab - Shows work type categories */}
         {!isLoading &&
