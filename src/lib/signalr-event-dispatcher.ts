@@ -228,11 +228,20 @@ export function registerAllEventHandlers(
     );
   };
 
-  const removeMentionFromCaches = (mentionId: string) => {
-    queryClient.setQueriesData<MentionInfinitePages>(
-      { queryKey: mentionKeys.root },
-      (data) => {
-        if (!data || !("pages" in data)) return data;
+  // Apply a "mark read" optimistic update to every history cache. For the
+  // `isRead: false` (Unread) tab we drop the item; for `all` and `read` tabs
+  // we keep it but flip its isRead flag so it doesn't visually disappear.
+  const markMentionReadInCaches = (mentionId: string) => {
+    const entries = queryClient.getQueriesData<MentionInfinitePages>({
+      queryKey: mentionKeys.historyAll(),
+    });
+    for (const [key, data] of entries) {
+      if (!data || !("pages" in data)) continue;
+      const filters = key[2] as
+        | { isRead?: boolean; conversationId?: string }
+        | undefined;
+
+      if (filters?.isRead === false) {
         let removed = 0;
         const pages = data.pages.map((page) => {
           const items = page.items.filter((m) => {
@@ -242,17 +251,37 @@ export function registerAllEventHandlers(
             }
             return true;
           });
-          return items === page.items
+          return items.length === page.items.length
             ? page
-            : {
-                ...page,
-                items,
-                totalCount: Math.max(0, page.totalCount - 1),
-              };
+            : { ...page, items };
         });
-        return removed === 0 ? data : { ...data, pages };
-      },
-    );
+        if (removed === 0) continue;
+        queryClient.setQueryData(key, {
+          ...data,
+          pages: pages.map((p) => ({
+            ...p,
+            totalCount: Math.max(0, p.totalCount - removed),
+          })),
+        });
+      } else {
+        let changed = false;
+        const pages = data.pages.map((page) => {
+          let pageChanged = false;
+          const items = page.items.map((m) => {
+            if (m.id === mentionId && !m.isRead) {
+              pageChanged = true;
+              return { ...m, isRead: true };
+            }
+            return m;
+          });
+          if (!pageChanged) return page;
+          changed = true;
+          return { ...page, items };
+        });
+        if (!changed) continue;
+        queryClient.setQueryData(key, { ...data, pages });
+      }
+    }
   };
 
   const cleanupUserMentioned = chatHub.onWithCleanup<UserMentionedEvent>(
@@ -274,7 +303,7 @@ export function registerAllEventHandlers(
     (event) => {
       if (!event?.mentionId) return;
       // Multi-device sync: another session marked it read.
-      removeMentionFromCaches(event.mentionId);
+      markMentionReadInCaches(event.mentionId);
       bumpUnreadCount(-1);
       // Trust server count
       queryClient.invalidateQueries({

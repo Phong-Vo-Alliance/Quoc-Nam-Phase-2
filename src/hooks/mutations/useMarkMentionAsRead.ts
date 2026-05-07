@@ -29,15 +29,40 @@ function removeMentionFromInfinitePages(
       }
       return true;
     });
-    return items === page.items
+    return items.length === page.items.length
       ? page
-      : {
-          ...page,
-          items,
-          totalCount: Math.max(0, page.totalCount - (page.items.length - items.length)),
-        };
+      : { ...page, items };
   });
   if (removed === 0) return data;
+  return {
+    ...data,
+    pages: pages.map((p) => ({
+      ...p,
+      totalCount: Math.max(0, p.totalCount - removed),
+    })),
+  };
+}
+
+function markMentionReadInInfinitePages(
+  data: MentionInfinitePages | undefined,
+  mentionId: string,
+): MentionInfinitePages | undefined {
+  if (!data) return data;
+  let changed = false;
+  const pages = data.pages.map((page) => {
+    let pageChanged = false;
+    const items = page.items.map((m) => {
+      if (m.id === mentionId && !m.isRead) {
+        pageChanged = true;
+        return { ...m, isRead: true };
+      }
+      return m;
+    });
+    if (!pageChanged) return page;
+    changed = true;
+    return { ...page, items };
+  });
+  if (!changed) return data;
   return { ...data, pages };
 }
 
@@ -60,14 +85,25 @@ export function useMarkMentionAsRead() {
         queryKey: mentionKeys.root,
       });
 
-      // Remove from every "unread" history list cache
-      queryClient.setQueriesData<MentionInfinitePages>(
-        { queryKey: mentionKeys.root },
-        (data) => {
-          if (!data || !("pages" in data)) return data;
-          return removeMentionFromInfinitePages(data, mentionId);
-        },
-      );
+      // Walk every history cache and update based on its filter:
+      //  - isRead === false  → remove the item (no longer matches the filter)
+      //  - isRead === true / undefined → flip its isRead to true (still matches)
+      const historyEntries = queryClient.getQueriesData<MentionInfinitePages>({
+        queryKey: mentionKeys.historyAll(),
+      });
+      for (const [key, data] of historyEntries) {
+        if (!data || !("pages" in data)) continue;
+        const filters = key[2] as
+          | { isRead?: boolean; conversationId?: string }
+          | undefined;
+        const next =
+          filters?.isRead === false
+            ? removeMentionFromInfinitePages(data, mentionId)
+            : markMentionReadInInfinitePages(data, mentionId);
+        if (next !== data) {
+          queryClient.setQueryData(key, next);
+        }
+      }
 
       // Decrement count badge
       queryClient.setQueryData<UnreadMentionCountResponse>(
