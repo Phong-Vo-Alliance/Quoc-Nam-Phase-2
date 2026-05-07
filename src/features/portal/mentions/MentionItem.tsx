@@ -1,8 +1,12 @@
-import React from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MentionDto, MentionParentMessageDto } from "@/types/mentions";
 import { parseMentions } from "@/utils/mentionHighlight";
-import type { MentionInputDto } from "@/types/messages";
+import type { AttachmentDto, MentionInputDto } from "@/types/messages";
+import { useAuthStore } from "@/stores/authStore";
+import { useImageCacheStore } from "@/stores/imageCacheStore";
+import FileIcon from "@/components/files/FileIcon";
 
 // ─── Helpers (exported để MentionsView dùng cho filter) ──────────────────────
 
@@ -124,6 +128,337 @@ function HighlightContent({ text, query }: { text: string; query: string }) {
   return <>{result}</>;
 }
 
+// ─── ClampedMentionContent ───────────────────────────────────────────────────
+// Mention preview clamped to 2 visual lines. When the content overflows AND
+// the original mention range falls past the natural 2-line cut, we cut at a
+// computed index and append a trailing `... @<current user>` pill inline so
+// the viewer still sees the @-target. When the mention is already visible
+// inside the natural 2-line clamp (e.g. it sits at the start of the message),
+// we skip the trailing pill — the in-content highlight is enough, and adding
+// a redundant tag would also wipe the original pill since the cut version
+// drops the mention range.
+
+function ClampedMentionContent({
+  prefix,
+  content,
+  mention,
+  query,
+  currentUserName,
+  appendSelfMentionTag,
+}: {
+  prefix: string;
+  content: string;
+  mention: MentionDto | null;
+  query: string;
+  currentUserName: string;
+  appendSelfMentionTag: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [truncateAt, setTruncateAt] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!appendSelfMentionTag) {
+      setTruncateAt(null);
+      return;
+    }
+    const container = containerRef.current;
+    const measure = measureRef.current;
+    if (!container || !measure) return;
+
+    const escapeHtml = (s: string) =>
+      s.replace(
+        /[&<>"']/g,
+        (c) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[c]!,
+      );
+
+    const buildHTML = (sliceLen: number, withTag: boolean) => {
+      const slice = content.slice(0, sliceLen);
+      let inner: string;
+      if (mention && mention.startIndex + mention.length <= sliceLen) {
+        const before = slice.slice(0, mention.startIndex);
+        const pill = slice.slice(
+          mention.startIndex,
+          mention.startIndex + mention.length,
+        );
+        const after = slice.slice(mention.startIndex + mention.length);
+        inner = `${escapeHtml(before)}<span class="${SELF_MENTION_CLASS}">${escapeHtml(
+          pill,
+        )}</span>${escapeHtml(after)}`;
+      } else {
+        inner = escapeHtml(slice);
+      }
+      const tag =
+        withTag && currentUserName
+          ? `... <span class="${SELF_MENTION_CLASS}">@${escapeHtml(
+              currentUserName,
+            )}</span>`
+          : "";
+      return `<span class="font-medium">${escapeHtml(prefix)}</span>${inner}${tag}`;
+    };
+
+    const compute = () => {
+      const lineHeight = parseFloat(getComputedStyle(container).lineHeight);
+      if (!lineHeight || Number.isNaN(lineHeight)) {
+        setTruncateAt(null);
+        return;
+      }
+      const maxHeight = lineHeight * 2 + 1;
+      const width = container.clientWidth;
+      if (width <= 0) return;
+      measure.style.width = `${width}px`;
+
+      measure.innerHTML = buildHTML(content.length, false);
+      if (measure.scrollHeight <= maxHeight || !currentUserName) {
+        setTruncateAt(null);
+        return;
+      }
+
+      // Mention already visible within natural 2-line clamp → keep it as the
+      // in-content pill and let CSS line-clamp-2 handle the visual cut. Adding
+      // a trailing duplicate would force us to drop the original pill.
+      if (mention) {
+        let nlo = 0;
+        let nhi = content.length;
+        while (nlo < nhi) {
+          const nmid = Math.floor((nlo + nhi + 1) / 2);
+          measure.innerHTML = buildHTML(nmid, false);
+          if (measure.scrollHeight <= maxHeight) {
+            nlo = nmid;
+          } else {
+            nhi = nmid - 1;
+          }
+        }
+        if (mention.startIndex + mention.length <= nlo) {
+          setTruncateAt(null);
+          return;
+        }
+      }
+
+      let lo = 0;
+      let hi = content.length;
+      while (lo < hi) {
+        const mid = Math.floor((lo + hi + 1) / 2);
+        measure.innerHTML = buildHTML(mid, true);
+        if (measure.scrollHeight <= maxHeight) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      setTruncateAt(lo);
+    };
+
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [content, prefix, currentUserName, mention, appendSelfMentionTag]);
+
+  const showTag = truncateAt !== null;
+  const visibleContent = showTag ? content.slice(0, truncateAt!) : content;
+  const visibleMention = showTag ? null : mention;
+
+  return (
+    <div className="min-w-0 flex-1">
+      <div
+        ref={containerRef}
+        className={cn(
+          "text-xs text-gray-600",
+          "break-words [overflow-wrap:anywhere]",
+          "line-clamp-2",
+        )}
+      >
+        <span className="font-medium">{prefix}</span>
+        <HighlightMentionContent
+          content={visibleContent}
+          mention={visibleMention}
+          query={query}
+        />
+        {showTag && currentUserName && (
+          <>
+            {"... "}
+            <span className={SELF_MENTION_CLASS}>@{currentUserName}</span>
+          </>
+        )}
+      </div>
+      <div
+        ref={measureRef}
+        aria-hidden="true"
+        className="fixed -top-[9999px] -left-[9999px] invisible pointer-events-none text-xs break-words [overflow-wrap:anywhere]"
+      />
+    </div>
+  );
+}
+
+// ─── Attachment previews ─────────────────────────────────────────────────────
+// API /mentions/history (2026-05-07) trả thêm `message.attachments`. Render
+// một dải nhỏ bên dưới content: ảnh + video + file dùng chung một quota 3
+// mục, vượt thì overlay `+N` đè mục cuối. Image gọi /thumbnail, video gọi
+// /video-thumbnail (qua imageCacheStore); file docs/excel/pdf/... hiện icon
+// theo content-type qua FileIcon.
+
+const MAX_ATTACHMENT_TILES = 3;
+
+function MentionImageThumb({
+  fileId,
+  fileName,
+}: {
+  fileId: string;
+  fileName: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const getImageUrl = useImageCacheStore((s) => s.getImageUrl);
+
+  useEffect(() => {
+    let cancelled = false;
+    getImageUrl(fileId, "small").then((u) => {
+      if (!cancelled) setUrl(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId, getImageUrl]);
+
+  return (
+    <div className="h-full w-full rounded overflow-hidden bg-gray-100 border border-gray-200">
+      {url ? (
+        <img
+          src={url}
+          alt={fileName}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      ) : (
+        <div className="h-full w-full bg-gray-200 animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+function MentionVideoThumb({
+  fileId,
+  fileName,
+}: {
+  fileId: string;
+  fileName: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const getVideoUrl = useImageCacheStore((s) => s.getVideoUrl);
+
+  useEffect(() => {
+    let cancelled = false;
+    getVideoUrl(fileId, 160).then((u) => {
+      if (!cancelled) setUrl(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId, getVideoUrl]);
+
+  return (
+    <div className="relative h-full w-full rounded overflow-hidden bg-gray-900 border border-gray-200">
+      {url ? (
+        <img
+          src={url}
+          alt={fileName}
+          className="h-full w-full object-cover opacity-90"
+          loading="lazy"
+        />
+      ) : (
+        <div className="h-full w-full bg-gray-700 animate-pulse" />
+      )}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Play
+          size={16}
+          className="text-white drop-shadow"
+          fill="currentColor"
+        />
+      </div>
+    </div>
+  );
+}
+
+function MoreCountOverlay({ count }: { count: number }) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center rounded bg-black/55 text-white text-sm font-semibold pointer-events-none"
+      aria-label={`Còn ${count} mục nữa`}
+    >
+      +{count}
+    </div>
+  );
+}
+
+function MentionFilePill({
+  fileName,
+  contentType,
+}: {
+  fileName: string;
+  contentType: string;
+}) {
+  return (
+    <div
+      className="h-full flex items-center gap-1.5 px-2 rounded bg-gray-50 border border-gray-200"
+      title={fileName}
+    >
+      <FileIcon contentType={contentType} size="md" />
+      <span className="text-xs text-gray-700 truncate">{fileName}</span>
+    </div>
+  );
+}
+
+function MentionAttachments({ attachments }: { attachments: AttachmentDto[] }) {
+  // Ảnh + video + file dùng chung quota — preserve thứ tự gốc trong API.
+  const visible = attachments.slice(0, MAX_ATTACHMENT_TILES);
+  const remaining = attachments.length - visible.length;
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      {visible.map((att, idx) => {
+        const isLast = idx === visible.length - 1;
+        const showOverlay = isLast && remaining > 0;
+        const isImage = att.contentType?.startsWith("image/");
+        const isVideo = att.contentType?.startsWith("video/");
+        return (
+          <div
+            key={att.fileId}
+            className={cn(
+              "relative h-12 shrink-0",
+              isImage || isVideo ? "w-12" : "max-w-[180px]",
+            )}
+          >
+            {isImage ? (
+              <MentionImageThumb
+                fileId={att.fileId}
+                fileName={att.fileName || "Image"}
+              />
+            ) : isVideo ? (
+              <MentionVideoThumb
+                fileId={att.fileId}
+                fileName={att.fileName || "Video"}
+              />
+            ) : (
+              <MentionFilePill
+                fileName={att.fileName || "File"}
+                contentType={att.contentType || "application/octet-stream"}
+              />
+            )}
+            {showOverlay && <MoreCountOverlay count={remaining} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── ThreadCurve ─────────────────────────────────────────────────────────────
 
 function ThreadCurve() {
@@ -157,9 +492,13 @@ interface MentionItemProps {
 }
 
 export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
-  const senderName = item.message?.senderName || item.mentionedByUserName || "Người dùng";
+  const senderName =
+    item.message?.senderName || item.mentionedByUserName || "Người dùng";
   const content = item.message?.content ?? "(Tin nhắn đã bị xoá)";
   const sentAt = item.message?.sentAt ?? item.mentionedAt;
+
+  const currentUser = useAuthStore((s) => s.user);
+  const currentUserName = currentUser?.fullName?.trim() || "";
 
   const groupTitle = item.categoryName?.trim() || item.conversationName;
   const showConversationTag =
@@ -172,6 +511,13 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
   const parentMessage: MentionParentMessageDto | null =
     item.message?.parentMessage ?? null;
   const isThread = !!item.message?.parentMessageId;
+
+  const attachments = item.message?.attachments;
+  const hasAttachments = !!attachments && attachments.length > 0;
+
+  // Toggle: when true, append a trailing `@<currentUser>` pill to the clamped
+  // preview; when false, just clamp to 2 lines with the default CSS ellipsis.
+  const APPEND_SELF_MENTION_TAG = true;
 
   return (
     <button
@@ -224,30 +570,40 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
               </span>
             </div>
             {/* Mention (tin reply) — with curve */}
-            <div className="mt-0.5 flex items-center gap-2">
-              <ThreadCurve />
-              <span className="text-xs text-gray-600 truncate flex-1">
-                <span className="font-medium">{senderName}: </span>
-                <HighlightMentionContent
+            <div className="mt-0.5 flex items-start gap-2">
+              <span className="pt-1">
+                <ThreadCurve />
+              </span>
+              <div className="min-w-0 flex-1">
+                <ClampedMentionContent
+                  prefix={`${senderName}: `}
                   content={content}
                   mention={item.message ? item : null}
                   query={searchQuery}
+                  currentUserName={currentUserName}
+                  appendSelfMentionTag={APPEND_SELF_MENTION_TAG}
                 />
-              </span>
+                {hasAttachments && (
+                  <MentionAttachments attachments={attachments!} />
+                )}
+              </div>
             </div>
           </>
         ) : (
-          /* Top-level mention — single line */
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-xs text-gray-600 truncate flex-1">
-              <span className="font-medium">{senderName}: </span>
-              <HighlightMentionContent
+          /* Top-level mention — up to 2 lines */
+          <>
+            <div className="mt-0.5 flex items-start gap-2">
+              <ClampedMentionContent
+                prefix={`${senderName}: `}
                 content={content}
                 mention={item}
                 query={searchQuery}
+                currentUserName={currentUserName}
+                appendSelfMentionTag={APPEND_SELF_MENTION_TAG}
               />
-            </span>
-          </div>
+            </div>
+            {hasAttachments && <MentionAttachments attachments={attachments!} />}
+          </>
         )}
       </div>
 

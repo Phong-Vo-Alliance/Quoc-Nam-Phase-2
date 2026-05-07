@@ -1,6 +1,8 @@
 // Mention API types
 // Based on contract: docs/mentions REST API contract (2026-05-06)
 
+import type { AttachmentDto } from "./messages";
+
 export interface MentionParentMessageDto {
   messageId: string;
   senderId: string;
@@ -21,6 +23,10 @@ export interface MentionMessagePreviewDto {
   // `parentMessage` là full preview của tin gốc, dùng để hiển thị giống CategoryItem.
   parentMessageId?: string | null;
   parentMessage?: MentionParentMessageDto | null;
+
+  // Attachments — added by BE 2026-05-07. Dùng để render preview ảnh/video/file
+  // bên dưới content trong MentionItem.
+  attachments?: AttachmentDto[];
 }
 
 export interface MentionDto {
