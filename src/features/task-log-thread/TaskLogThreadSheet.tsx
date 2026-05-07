@@ -22,6 +22,7 @@ import {
   GoToBottomButton,
   ThreadPreviewModals,
 } from "./components";
+import JumpToUnreadPill from "@/components/chat/JumpToUnreadPill";
 
 export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
   open,
@@ -236,6 +237,10 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
           ref={messagesContainerRef}
           className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5 bg-gray-50"
         >
+          <JumpToUnreadPill
+            firstUnreadMessageId={firstUnreadReplyId}
+            containerRef={messagesContainerRef}
+          />
           <ThreadMessageList
             loading={loading}
             error={error}

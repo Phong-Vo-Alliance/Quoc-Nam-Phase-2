@@ -397,7 +397,7 @@ export function useMessageScroll({
     }
   }, [isVisible]);
 
-  // Scroll-aware clearing: only run the 3s hide timer when the user is at the
+  // Scroll-aware clearing: only run the 10s hide timer when the user is at the
   // bottom and the tab is visible. If the user is scrolled up reading older
   // messages while new ones arrive, keep the separator visible.
   useEffect(() => {
@@ -411,7 +411,7 @@ export function useMessageScroll({
     const timer = setTimeout(() => {
       setFirstUnreadMessageId(null);
       setPendingClearUnread(false);
-    }, 5000);
+    }, 10000);
     return () => clearTimeout(timer);
   }, [
     pendingClearUnread,

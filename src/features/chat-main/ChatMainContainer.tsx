@@ -37,6 +37,7 @@ import {
 import { GoToBottomButton } from "./components/GoToBottomButton";
 import { MessageList } from "./components/MessageList";
 import { StarredMessagesModal } from "./components/StarredMessagesModal";
+import JumpToUnreadPill from "@/components/chat/JumpToUnreadPill";
 
 import type { ChatMainContainerProps } from "./types";
 
@@ -417,6 +418,10 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         }`}
         data-testid="message-list"
       >
+        <JumpToUnreadPill
+          firstUnreadMessageId={firstUnreadMessageId}
+          containerRef={messagesContainerRef}
+        />
         <MessageList
           messagesByDate={messagesByDate}
           groupedMessages={groupedMessages}

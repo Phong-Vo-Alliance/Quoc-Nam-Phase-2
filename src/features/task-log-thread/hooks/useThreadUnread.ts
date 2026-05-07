@@ -99,7 +99,7 @@ export function useThreadUnread({
     firstUnreadReplyId,
   ]);
 
-  // Re-arm 3s clearing when user returns to the tab
+  // Re-arm 10s clearing when user returns to the tab
   useEffect(() => {
     const wasHidden = !prevIsVisibleRef.current;
     prevIsVisibleRef.current = isVisible;
@@ -120,7 +120,7 @@ export function useThreadUnread({
     const timer = setTimeout(() => {
       setFirstUnreadReplyId(null);
       setPendingClearUnread(false);
-    }, 5000);
+    }, 10000);
     return () => clearTimeout(timer);
   }, [pendingClearUnread, showGoToBottom, isVisible, firstUnreadReplyId]);
 
