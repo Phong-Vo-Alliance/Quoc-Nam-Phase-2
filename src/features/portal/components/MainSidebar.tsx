@@ -17,10 +17,12 @@ import {
   Building2,
   BookOpen,
   UserCog,
+  AtSign,
 } from "lucide-react";
 import { ROUTES } from "@/routes/routes";
 import { cn } from "@/lib/utils";
 import { openGuideWithToken } from "@/lib/auth/guideToken";
+import { useUnreadMentionCount } from "@/hooks/queries/useUnreadMentionCount";
 import QuocnamLogo from "@/assets/Quocnam_logo.png";
 import {
   Popover,
@@ -40,8 +42,10 @@ import { QuickMessageManager } from "./QuickMessageManager";
 import { TodoListManager } from "./TodoListManager";
 
 interface MainSidebarProps {
-  activeView: "workspace" | "lead";
-  onSelect: (view: "workspace" | "lead" | "pinned" | "logout") => void;
+  activeView: "workspace" | "lead" | "mentions";
+  onSelect: (
+    view: "workspace" | "lead" | "pinned" | "mentions" | "logout",
+  ) => void;
   workspaceMode?: "default" | "pinned";
   viewMode?: "lead" | "staff";
   currentUserName?: string;
@@ -86,6 +90,9 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   const navigate = useNavigate();
 
   const isLeaderInAnyCategory = useIsLeaderInAnyCategory();
+
+  const { data: unreadMentions } = useUnreadMentionCount();
+  const hasUnreadMentions = (unreadMentions?.count ?? 0) > 0;
 
   const isShowPhasedFeatures = false;
 
@@ -187,6 +194,28 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
             )}
           >
             <MessageSquareText className="h-6 w-6" />
+          </button>
+
+          {/* Mentions */}
+          <button
+            title="Tin nhắn nhắc đến tôi"
+            onClick={() => onSelect("mentions")}
+            data-testid="sidebar-mentions-button"
+            className={cn(
+              "relative p-2 rounded-lg transition-colors",
+              activeView === "mentions"
+                ? "bg-white/20 text-white"
+                : "bg-brand-600 text-white/90 hover:text-white hover:bg-white/10",
+            )}
+          >
+            <AtSign className="h-6 w-6" />
+            {hasUnreadMentions && (
+              <span
+                data-testid="sidebar-mentions-unread-dot"
+                className="absolute top-1.5 right-1.5 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-brand-600"
+                aria-label="Có tin nhắn nhắc đến bạn chưa đọc"
+              />
+            )}
           </button>
 
           {/* Team Monitor (phase next) */}

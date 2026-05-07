@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ROUTES } from "@/routes/routes";
+
+type PortalView = "workspace" | "lead" | "mentions";
+
+function getViewFromPath(pathname: string): PortalView {
+  if (pathname.startsWith("/mentions")) return "mentions";
+  if (pathname.startsWith("/lead")) return "lead";
+  return "workspace";
+}
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/authStore";
 import { useCreateTaskStore } from "@/stores/createTaskStore";
@@ -25,9 +34,12 @@ import type {
 } from "./types";
 import type { StarredMessageDto } from "@/types/pinned_and_starred";
 import type { ChatMessage } from "@/types/messages";
+import type { MentionDto } from "@/types/mentions";
+import { useMarkMentionAsRead } from "@/hooks/mutations/useMarkMentionAsRead";
 import { WorkspaceView } from "./workspace/WorkspaceView";
 import { TeamMonitorView } from "./lead/TeamMonitorView";
 import { MainSidebar } from "./components/MainSidebar";
+import { MentionsView } from "./mentions/MentionsView";
 import { ViewModeSwitcher } from "@/features/portal/components/ViewModeSwitcher";
 import { DepartmentTransferSheet } from "@/components/sheet/DepartmentTransferSheet";
 import { AssignTaskSheet } from "@/components/sheet/AssignTaskSheet";
@@ -37,7 +49,7 @@ import { useCategories } from "@/hooks/queries/useCategories";
 import { checklistTemplateKeys } from "@/hooks/queries/useChecklistTemplates";
 import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
 import type { ChecklistTemplateMap, ChecklistTemplateItem } from "./types";
-import { TaskLogThreadSheet } from "./workspace/TaskLogThreadSheet";
+import { TaskLogThreadSheet } from "@/features/task-log-thread";
 import { useUIStore } from "@/stores/uiStore";
 import MessageSkeleton from "./components/MessageSkeleton";
 import {
@@ -82,6 +94,7 @@ export default function PortalWireframes({
 
   // ---------- auth & navigation ----------
   const navigate = useNavigate();
+  const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
   const closeModal = useCreateTaskStore((state) => state.closeModal);
   const queryClient = useQueryClient();
@@ -94,7 +107,14 @@ export default function PortalWireframes({
   const [leftTab, setLeftTab] = useState<"contacts" | "messages">("messages");
   const [showAvail, setShowAvail] = useState(false);
   const [showMyWork, setShowMyWork] = useState(false);
-  const [view, setView] = useState<"workspace" | "lead">("workspace");
+  const [view, setView] = useState<PortalView>(() =>
+    getViewFromPath(location.pathname),
+  );
+
+  useEffect(() => {
+    const next = getViewFromPath(location.pathname);
+    setView((prev) => (prev === next ? prev : next));
+  }, [location.pathname]);
   const [workspaceMode, setWorkspaceMode] = useState<"default" | "pinned">(
     "default",
   );
@@ -397,6 +417,20 @@ export default function PortalWireframes({
   const [scrollToMessage, setScrollToMessage] =
     React.useState<StarredMessageDto | null>(null);
 
+  // Mention navigation: lưu target rồi đợi conversation/tasks load xong mới scroll
+  const [pendingMentionTarget, setPendingMentionTarget] = React.useState<{
+    conversationId: string;
+    messageId: string;
+    parentMessageId: string | null;
+  } | null>(null);
+  // External scroll DTO piped down to WorkspaceView (top-level message case)
+  const [externalScrollMessage, setExternalScrollMessage] =
+    React.useState<StarredMessageDto | null>(null);
+  const markMentionReadMutation = useMarkMentionAsRead();
+  const setSelectedConversationStore = useConversationStore(
+    (state) => state.setSelectedConversation,
+  );
+
   // Handle star/unstar toggle from message bubble
   const handleToggleStar = (msg: Message) => {
     if (msg.isStarred) {
@@ -425,6 +459,43 @@ export default function PortalWireframes({
     // 3) set StarredMessageDto để ChatMain cuộn tới
     setScrollToMessage(messageDto);
   };
+
+  // Mention click: mark as read, switch to chat, scroll to message,
+  // or open task log thread sheet if message lives in a thread (nhật ký).
+  const handleOpenMention = React.useCallback(
+    (mention: MentionDto) => {
+      if (!mention.message) {
+        pushToast("Tin nhắn này đã bị xóa.", "error");
+        return;
+      }
+
+      if (!mention.isRead) {
+        markMentionReadMutation.mutate(mention.id);
+      }
+
+      setView("workspace");
+      navigate(ROUTES.WORKSPACE);
+      setWorkspaceMode("default");
+
+      // Drive the conversation switch via the global store so WorkspaceView
+      // re-keys ChatMainContainer and loads the new conversation.
+      const target = {
+        type: "group" as const,
+        id: mention.conversationId,
+        name: mention.conversationName,
+        categoryId: mention.categoryId ?? undefined,
+      };
+      setSelectedConversationStore(target);
+      setSelectedChat({ type: "group", id: mention.conversationId });
+
+      setPendingMentionTarget({
+        conversationId: mention.conversationId,
+        messageId: mention.messageId,
+        parentMessageId: mention.message.parentMessageId ?? null,
+      });
+    },
+    [markMentionReadMutation, navigate, setSelectedConversationStore],
+  );
 
   // Dùng chung cho các nơi muốn "xem tin nhắn gốc"
   // (pinned message, xem từ tab Thông tin, v.v.)
@@ -506,6 +577,48 @@ export default function PortalWireframes({
   }, [rawTasks, selectedGroup]);
 
   const tasks = enrichedTasks;
+
+  // Resolve pending mention navigation once the target conversation is active.
+  // - parentMessageId set → đợi tasks load xong, tìm task tương ứng → mở
+  //   TaskLogThreadSheet với target reply. Nếu không có task khớp → fallback
+  //   scroll tới parent message trên chat chính.
+  // - parentMessageId null → scroll thẳng tới messageId, không đợi tasks.
+  React.useEffect(() => {
+    if (!pendingMentionTarget) return;
+    if (currentConversationId !== pendingMentionTarget.conversationId) return;
+
+    const { messageId, parentMessageId, conversationId } = pendingMentionTarget;
+
+    if (parentMessageId) {
+      if (!isRawTasksReady) return;
+      const task = tasks.find((t) => t.messageId === parentMessageId);
+      if (task) {
+        setTaskLogSheet({
+          open: true,
+          taskId: task.id,
+          messageId: parentMessageId,
+          targetMessageId: messageId,
+        });
+        useUIStore.getState().setOpenThreadMessageId(parentMessageId);
+        setThreadUnreadCounts((prev) => ({ ...prev, [task.id]: 0 }));
+        setPendingMentionTarget(null);
+        return;
+      }
+      // Fallback: không tìm thấy task → scroll tới parent trên chat chính
+      setExternalScrollMessage({
+        messageId: parentMessageId,
+        message: { conversationId },
+      } as unknown as StarredMessageDto);
+      setPendingMentionTarget(null);
+      return;
+    }
+
+    setExternalScrollMessage({
+      messageId,
+      message: { conversationId },
+    } as unknown as StarredMessageDto);
+    setPendingMentionTarget(null);
+  }, [pendingMentionTarget, currentConversationId, isRawTasksReady, tasks]);
 
   // Fetch conversation members from API
   const { data: conversationMembersData } = useConversationMembers({
@@ -1253,7 +1366,12 @@ export default function PortalWireframes({
               // bật chế độ pinned trong workspace
               setView("workspace");
               setWorkspaceMode("pinned");
-              // setShowPinned(true);
+              navigate(ROUTES.WORKSPACE);
+              return;
+            }
+            if (key === "mentions") {
+              setView("mentions");
+              navigate(ROUTES.MENTIONS);
               return;
             }
 
@@ -1261,6 +1379,7 @@ export default function PortalWireframes({
             if (key === "workspace") {
               setWorkspaceMode("default");
               setView("workspace");
+              navigate(ROUTES.WORKSPACE);
               return;
             }
 
@@ -1289,7 +1408,9 @@ export default function PortalWireframes({
 
       {/* Nội dung chính */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {view === "workspace" ? (
+        {view === "mentions" ? (
+          <MentionsView onOpenMention={handleOpenMention} />
+        ) : view === "workspace" ? (
           true ? (
             <WorkspaceView
               layoutMode={portalMode === "mobile" ? "mobile" : "desktop"}
@@ -1327,6 +1448,10 @@ export default function PortalWireframes({
               viewMode={viewMode}
               onClosePinned={() => setWorkspaceMode("default")}
               onOpenPinnedMessage={handleOpenStarredMessage}
+              externalScrollMessage={externalScrollMessage}
+              onConsumeExternalScrollMessage={() =>
+                setExternalScrollMessage(null)
+              }
               onShowPinnedToast={onShowPinnedToast}
               onToggleStar={handleToggleStar}
               workTypes={(selectedGroup?.workTypes ?? []).map((w) => ({
@@ -1339,6 +1464,7 @@ export default function PortalWireframes({
               currentUserName={currentUser}
               // Tasks & callbacks để RightPanel dùng thật
               tasks={tasks}
+              tasksFromAPI={tasksQuery.data}
               threadUnreadCounts={threadUnreadCounts}
               onChangeTaskStatus={handleChangeTaskStatus}
               onToggleChecklist={handleToggleChecklist}

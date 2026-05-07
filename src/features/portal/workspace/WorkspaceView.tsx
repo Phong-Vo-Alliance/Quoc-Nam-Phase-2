@@ -28,7 +28,6 @@ import type { ChatMessage } from "@/types/messages";
 import type { TaskDetailResponse } from "@/types/tasks_api";
 import { MessageSquareIcon, ClipboardListIcon, UserIcon } from "lucide-react";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
-import { useAllTasks } from "@/hooks/queries/useTasks";
 import { useMessages, flattenMessages } from "@/hooks/queries/useMessages";
 import { useCategories } from "@/hooks/queries/useCategories"; // 🆕 NEW: Fetch categories first before messages
 import {
@@ -113,6 +112,7 @@ interface WorkspaceViewProps {
   tab: "info" | "order" | "tasks" | "chat";
   setTab: (v: "info" | "order" | "tasks" | "chat") => void;
   tasks: Task[];
+  tasksFromAPI?: Task[];
   threadUnreadCounts?: Record<string, number>;
   threadCurrentSessionCounts?: Record<string, number>;
   // onChangeTaskStatus: (id: string, nextStatus: Task["status"]) => void;
@@ -133,6 +133,15 @@ interface WorkspaceViewProps {
   setWorkspaceMode: (v: "default" | "pinned") => void;
   onClosePinned?: () => void;
   onOpenPinnedMessage?: (messageDto: StarredMessageDto) => void;
+  /**
+   * Externally-driven scroll target. When set (non-null), WorkspaceView will
+   * pipe it into its internal `pendingScrollMessage` so the chat scrolls to
+   * that message after the conversation is loaded — same pathway that pinned
+   * / starred clicks use internally. Caller must clear it via
+   * `onConsumeExternalScrollMessage` after consumption.
+   */
+  externalScrollMessage?: PinnedMessageDto | StarredMessageDto | null;
+  onConsumeExternalScrollMessage?: () => void;
   onShowPinnedToast: () => void;
   // [PHASE2-REMOVED] Desktop pin feature removed
   // onTogglePin?: (msg: Message) => void;
@@ -214,6 +223,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     tab,
     setTab,
     tasks,
+    tasksFromAPI,
     threadUnreadCounts,
     threadCurrentSessionCounts,
     groupMembers,
@@ -237,6 +247,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     workspaceMode,
     onClosePinned,
     onOpenPinnedMessage,
+    externalScrollMessage,
+    onConsumeExternalScrollMessage,
     onShowPinnedToast,
     // [PHASE2-REMOVED] onTogglePin,
     onToggleStar,
@@ -556,17 +568,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     enabled: !!selectedConversation?.id && categoriesQuery.isSuccess, // 🆕 Wait for categories first
   });
 
-  // Fetch all tasks for the conversation from Task API
-  // This will re-fetch whenever selectedConversation changes (conversation switch)
-  const {
-    data: tasksFromAPI,
-    isLoading: tasksLoading,
-    isError: tasksError,
-  } = useAllTasks({
-    conversationId: selectedConversation?.id,
-    enabled: !!selectedConversation?.id && categoriesQuery.isSuccess, // 🆕 Wait for categories first
-  });
-
   // Task update mutation for reassigning tasks
   const updateTaskMutation = useUpdateTask();
 
@@ -767,6 +768,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
       setPendingScrollMessage(null);
     }
   }, [selectedConversation?.id, pendingScrollMessage]);
+
+  // Pipe externally-driven scroll target (e.g. mention click from outside
+  // workspace) into the internal pending-scroll mechanism so it follows the
+  // same conversation-load → scroll pathway as pinned/starred clicks.
+  React.useEffect(() => {
+    if (!externalScrollMessage) return;
+    setPendingScrollMessage(externalScrollMessage);
+    onConsumeExternalScrollMessage?.();
+  }, [externalScrollMessage, onConsumeExternalScrollMessage]);
 
   if (isMobile) {
     const [showQuickMessageMobile, setShowQuickMessageMobile] =

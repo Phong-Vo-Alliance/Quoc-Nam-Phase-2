@@ -4,10 +4,7 @@ import { toast } from "sonner";
 
 import type { SignalRConnectionState } from "@/types/signalr-events";
 import { useAuthStore } from "@/stores/authStore";
-import type {
-  CategoryWithUnread,
-  ConversationDto,
-} from "@/types/categories";
+import type { CategoryWithUnread, ConversationDto } from "@/types/categories";
 import type {
   DepartmentColleagueDto,
   DepartmentMemberDto,
@@ -28,7 +25,6 @@ const getSignalRHubUrl = (): string => {
   const hubUrl = isDev ? devUrl : prodUrl;
 
   if (!hubUrl) {
-    console.warn("SignalR Hub URL not configured, using fallback");
     // Fallback: construct from Chat API URL
     const chatApiUrl = isDev
       ? import.meta.env.VITE_DEV_CHAT_API_URL
@@ -130,7 +126,8 @@ export const SIGNALR_EVENTS = {
   // ============= Identity Events =============
   DEPARTMENT_MEMBERS_ADDED: "DepartmentMembersAdded",
   DEPARTMENT_MEMBERS_REMOVED: "DepartmentMembersRemoved",
-  DEPARTMENT_MEMBER_LEADER_STATUS_CHANGED: "DepartmentMemberLeaderStatusChanged",
+  DEPARTMENT_MEMBER_LEADER_STATUS_CHANGED:
+    "DepartmentMemberLeaderStatusChanged",
 
   // ============= Error Events =============
   ERROR: "Error",
@@ -212,7 +209,11 @@ class ChatHubConnection {
 
           if (this.queryClient && this.currentConversationId) {
             this.queryClient.invalidateQueries({
-              queryKey: ["messages", "conversation", this.currentConversationId],
+              queryKey: [
+                "messages",
+                "conversation",
+                this.currentConversationId,
+              ],
               refetchType: "active",
             });
           }
@@ -243,7 +244,10 @@ class ChatHubConnection {
         await this.connection.start();
       } catch (wsError) {
         // WebSocket failed — fallback to negotiate + all transports
-        console.warn("[SignalR] WebSocket-only failed, falling back to negotiate", wsError);
+        console.warn(
+          "[SignalR] WebSocket-only failed, falling back to negotiate",
+          wsError,
+        );
         this.connection = new signalR.HubConnectionBuilder()
           .withUrl(HUB_URL, {
             accessTokenFactory: tokenFactory,
@@ -503,11 +507,18 @@ class TaskHubConnection {
           if (error) {
             const msg = error.message || "";
             if (msg.includes("401") || msg.includes("Unauthorized")) {
-              console.error("[TaskHub] Authentication failed - taskAccessToken may be invalid");
+              console.error(
+                "[TaskHub] Authentication failed - taskAccessToken may be invalid",
+              );
             } else if (msg.includes("403") || msg.includes("Forbidden")) {
-              console.error("[TaskHub] Authorization failed - user lacks permission");
+              console.error(
+                "[TaskHub] Authorization failed - user lacks permission",
+              );
             } else if (msg.includes("404")) {
-              console.error("[TaskHub] Hub not found - check TASK_HUB_URL:", TASK_HUB_URL);
+              console.error(
+                "[TaskHub] Hub not found - check TASK_HUB_URL:",
+                TASK_HUB_URL,
+              );
             } else if (!(error.name === "AbortError")) {
               console.error("[TaskHub] Connection closed with error:", msg);
             }
@@ -536,7 +547,10 @@ class TaskHubConnection {
         await this.connection.start();
       } catch (wsError) {
         // WebSocket failed — fallback to negotiate + all transports
-        console.warn("[TaskHub] WebSocket-only failed, falling back to negotiate", wsError);
+        console.warn(
+          "[TaskHub] WebSocket-only failed, falling back to negotiate",
+          wsError,
+        );
         this.connection = new signalR.HubConnectionBuilder()
           .withUrl(TASK_HUB_URL, {
             accessTokenFactory: tokenFactory,
@@ -698,7 +712,9 @@ class IdentityHubConnection {
     const colleagues = this.queryClient.getQueryData<DepartmentColleagueDto[]>([
       "department-colleagues",
     ]);
-    const fromColleagues = colleagues?.find((c) => c.userId === userId)?.fullName;
+    const fromColleagues = colleagues?.find(
+      (c) => c.userId === userId,
+    )?.fullName;
     if (fromColleagues) return fromColleagues;
 
     // 2) categories cache — departmentLeaders[] (useful for demotion case:
@@ -716,7 +732,9 @@ class IdentityHubConnection {
 
     // 3) per-department members cache — covers promotion case
     //    (user just became leader, not yet in departmentLeaders).
-    const memberQueries = this.queryClient.getQueriesData<DepartmentMemberDto[]>({
+    const memberQueries = this.queryClient.getQueriesData<
+      DepartmentMemberDto[]
+    >({
       queryKey: ["department-members"],
     });
     for (const [, members] of memberQueries) {
@@ -776,7 +794,7 @@ class IdentityHubConnection {
 
     const subject = isSelf
       ? "Bạn"
-      : this.resolveUserFullName(payload.userId) ?? "Một thành viên";
+      : (this.resolveUserFullName(payload.userId) ?? "Một thành viên");
     const departmentName =
       this.resolveDepartmentName(payload.departmentId) ?? "phòng ban";
 
@@ -902,7 +920,10 @@ class IdentityHubConnection {
         await this.connection.start();
       } catch (wsError) {
         // WebSocket failed — fallback to negotiate + all transports
-        console.warn("[IdentityHub] WebSocket-only failed, falling back to negotiate", wsError);
+        console.warn(
+          "[IdentityHub] WebSocket-only failed, falling back to negotiate",
+          wsError,
+        );
         this.connection = new signalR.HubConnectionBuilder()
           .withUrl(IDENTITY_HUB_URL, {
             accessTokenFactory: tokenFactory,

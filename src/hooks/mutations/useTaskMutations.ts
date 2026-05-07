@@ -18,11 +18,9 @@ import { checklistTemplateKeys } from "../queries/useChecklistTemplates";
 
 /**
  * Hook to add a checklist item to a task
- * Invalidates tasks query cache on success
+ * Cache refresh is driven by the TasksUpdated SignalR event in useTaskNotifications.
  */
 export function useAddCheckItem() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({
       taskId,
@@ -35,37 +33,25 @@ export function useAddCheckItem() {
       order?: number;
       note?: string | null;
     }) => addCheckItem(taskId, content, order, note),
-    onSuccess: () => {
-      // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
-    },
   });
 }
 
 /**
  * Hook to toggle a checklist item's completion status
- * Invalidates tasks query cache on success
+ * Cache refresh is driven by the TasksUpdated SignalR event in useTaskNotifications.
  */
 export function useToggleCheckItem() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({ taskId, itemId }: { taskId: string; itemId: string }) =>
       toggleCheckItem(taskId, itemId),
-    onSuccess: () => {
-      // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
-    },
   });
 }
 
 /**
  * Hook to update a checklist item's content
- * Invalidates tasks query cache on success
+ * Cache refresh is driven by the TasksUpdated SignalR event in useTaskNotifications.
  */
 export function useUpdateCheckItem() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({
       taskId,
@@ -78,37 +64,25 @@ export function useUpdateCheckItem() {
       content: string;
       note?: string | null;
     }) => updateCheckItem(taskId, itemId, content, note),
-    onSuccess: () => {
-      // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
-    },
   });
 }
 
 /**
  * Hook to delete a checklist item from a task
- * Invalidates tasks query cache on success
+ * Cache refresh is driven by the TasksUpdated SignalR event in useTaskNotifications.
  */
 export function useDeleteCheckItem() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({ taskId, itemId }: { taskId: string; itemId: string }) =>
       deleteCheckItem(taskId, itemId),
-    onSuccess: () => {
-      // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
-    },
   });
 }
 
 /**
  * Hook to update task status
- * Invalidates tasks query cache on success
+ * Cache refresh is driven by the TasksUpdated SignalR event in useTaskNotifications.
  */
 export function useUpdateTaskStatus() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({
       taskId,
@@ -117,20 +91,14 @@ export function useUpdateTaskStatus() {
       taskId: string;
       status: "todo" | "doing" | "need_to_verified" | "finished";
     }) => updateTaskStatus(taskId, status),
-    onSuccess: () => {
-      // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
-    },
   });
 }
 
 /**
  * Hook to update task details (title, description, priority, dueDate, assignTo, etc.)
- * Invalidates tasks query cache on success
+ * Cache refresh is driven by the TasksUpdated SignalR event in useTaskNotifications.
  */
 export function useUpdateTask() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({
       taskId,
@@ -147,10 +115,6 @@ export function useUpdateTask() {
         assignTo?: string;
       };
     }) => updateTask(taskId, data),
-    onSuccess: () => {
-      // Invalidate and refetch tasks queries
-      queryClient.invalidateQueries({ queryKey: ["tasks"], refetchType: 'all' });
-    },
   });
 }
 

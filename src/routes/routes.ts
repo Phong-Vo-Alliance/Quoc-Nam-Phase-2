@@ -11,7 +11,7 @@ export const ROUTES = {
 
   // Portal
   PORTAL: "/",
-  WORKSPACE: "/workspace",
+  WORKSPACE: "/",
   LEAD: "/lead",
   SETTINGS: "/settings",
 
@@ -20,6 +20,9 @@ export const ROUTES = {
   MOBILE_CHAT: "/mobile/chat",
   MOBILE_CHAT_DETAIL: "/mobile/chat/:groupId",
   MOBILE_TASK_LOG: "/mobile/task-log/:taskId",
+
+  // Mentions
+  MENTIONS: "/mentions",
 
   // Account settings
   ACCOUNT: "/account",

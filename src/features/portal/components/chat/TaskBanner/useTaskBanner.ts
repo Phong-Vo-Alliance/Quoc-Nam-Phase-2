@@ -1,9 +1,7 @@
-import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useTasksByCategory } from "@/hooks/queries/useTasksByCategory";
 import { useCategories } from "@/hooks/queries/useCategories";
 import type { TaskDetailResponse, TaskStatusDto } from "@/types/tasks_api";
-import { taskHub, SIGNALR_EVENTS } from "@/lib/signalr";
-import type { TaskUpdatePayload } from "@/types/signalr-events";
 
 export interface StatusCount {
   status: string;
@@ -65,12 +63,6 @@ export function useTaskBanner(
   const { data: tasks, refetch } = useTasksByCategory(categoryId);
   const { data: categories } = useCategories();
 
-  // Store refetch function in ref to avoid re-subscribing on every render
-  const refetchRef = useRef(refetch);
-  useEffect(() => {
-    refetchRef.current = refetch;
-  }, [refetch]);
-
   // Build conversationId → conversationName lookup from cached categories
   const conversationNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -130,38 +122,6 @@ export function useTaskBanner(
   const toggleExpanded = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
-
-  // Listen to TasksUpdated SignalR event
-  useEffect(() => {
-    if (!categoryId) return;
-
-    const handleTaskUpdate = (payload: TaskUpdatePayload) => {
-      const { changeType } = payload;
-
-      // Refetch when these change types occur
-      const shouldRefetch =
-        changeType === "status_changed" ||
-        changeType === "reassigned" ||
-        changeType === "created";
-
-      if (shouldRefetch) {
-        console.log(
-          `[TaskBanner] Refetching due to TasksUpdated event (changeType: ${changeType})`,
-        );
-        // Use ref to avoid re-subscribing on every refetch call
-        refetchRef.current();
-      }
-    };
-
-    // Subscribe to TasksUpdated event
-    const cleanup = taskHub.onWithCleanup(
-      SIGNALR_EVENTS.TASKS_UPDATED,
-      handleTaskUpdate,
-      false, // Disable logging to reduce noise
-    );
-
-    return cleanup;
-  }, [categoryId]); // ✅ Only re-subscribe when categoryId changes
 
   return {
     visible: totalCount > 0,

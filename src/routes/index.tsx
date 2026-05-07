@@ -61,6 +61,10 @@ const router = createBrowserRouter([
         path: "lead",
         element: null, // Handled by PortalPage internal state
       },
+      {
+        path: "mentions",
+        element: null, // Handled by PortalPage internal state
+      },
     ],
   },
   {

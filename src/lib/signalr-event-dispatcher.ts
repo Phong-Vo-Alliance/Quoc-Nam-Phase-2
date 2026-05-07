@@ -9,6 +9,17 @@ import * as categoryCache from "@/lib/cache-updaters/category-cache";
 import * as directCache from "@/lib/cache-updaters/direct-cache";
 import * as conversationCache from "@/lib/cache-updaters/conversation-cache";
 import * as notificationService from "@/lib/notification-service";
+import { mentionKeys } from "@/hooks/queries/keys/mentionKeys";
+import type {
+  MentionDto,
+  PagedResult,
+  UnreadMentionCountResponse,
+} from "@/types/mentions";
+import type {
+  MentionReadEvent,
+  MentionsBulkReadEvent,
+  UserMentionedEvent,
+} from "@/types/signalr-events";
 import type { ChatMessage, ChatMessageContentType } from "@/types/messages";
 
 const CONTENT_TYPE_MAP: Record<number, ChatMessageContentType> = {
@@ -201,6 +212,85 @@ export function registerAllEventHandlers(
     },
   );
 
+  // ───────── Mentions ─────────
+  type MentionInfinitePages = {
+    pages: PagedResult<MentionDto>[];
+    pageParams: unknown[];
+  };
+
+  const bumpUnreadCount = (delta: number) => {
+    queryClient.setQueryData<UnreadMentionCountResponse>(
+      mentionKeys.unreadCount(),
+      (prev) =>
+        prev
+          ? { ...prev, count: Math.max(0, prev.count + delta) }
+          : prev,
+    );
+  };
+
+  const removeMentionFromCaches = (mentionId: string) => {
+    queryClient.setQueriesData<MentionInfinitePages>(
+      { queryKey: mentionKeys.root },
+      (data) => {
+        if (!data || !("pages" in data)) return data;
+        let removed = 0;
+        const pages = data.pages.map((page) => {
+          const items = page.items.filter((m) => {
+            if (m.id === mentionId) {
+              removed += 1;
+              return false;
+            }
+            return true;
+          });
+          return items === page.items
+            ? page
+            : {
+                ...page,
+                items,
+                totalCount: Math.max(0, page.totalCount - 1),
+              };
+        });
+        return removed === 0 ? data : { ...data, pages };
+      },
+    );
+  };
+
+  const cleanupUserMentioned = chatHub.onWithCleanup<UserMentionedEvent>(
+    SIGNALR_EVENTS.USER_MENTIONED,
+    (event) => {
+      if (!event) return;
+      bumpUnreadCount(1);
+      // Refetch list so the new mention appears at the top.
+      // Invalidate all history variants (all / unread / read) — the user may
+      // be viewing any tab when the event arrives.
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.historyAll(),
+      });
+    },
+  );
+
+  const cleanupMentionRead = chatHub.onWithCleanup<MentionReadEvent>(
+    SIGNALR_EVENTS.MENTION_READ,
+    (event) => {
+      if (!event?.mentionId) return;
+      // Multi-device sync: another session marked it read.
+      removeMentionFromCaches(event.mentionId);
+      bumpUnreadCount(-1);
+      // Trust server count
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.unreadCount(),
+      });
+    },
+  );
+
+  const cleanupMentionsBulkRead = chatHub.onWithCleanup<MentionsBulkReadEvent>(
+    SIGNALR_EVENTS.MENTIONS_BULK_READ,
+    () => {
+      // Bulk read can affect arbitrary items — just refetch everything.
+      queryClient.invalidateQueries({ queryKey: mentionKeys.root });
+    },
+  );
+
   return [
     cleanupMessageSent,
     cleanupMessageRead,
@@ -214,6 +304,9 @@ export function registerAllEventHandlers(
     cleanupCategoryAssigned,
     cleanupCategoryUnassigned,
     cleanupConversationDeleted,
+    cleanupUserMentioned,
+    cleanupMentionRead,
+    cleanupMentionsBulkRead,
   ];
 }
 
