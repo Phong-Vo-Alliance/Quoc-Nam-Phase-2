@@ -411,7 +411,7 @@ export function useMessageScroll({
     const timer = setTimeout(() => {
       setFirstUnreadMessageId(null);
       setPendingClearUnread(false);
-    }, 3000);
+    }, 5000);
     return () => clearTimeout(timer);
   }, [
     pendingClearUnread,

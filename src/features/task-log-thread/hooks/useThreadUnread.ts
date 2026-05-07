@@ -120,7 +120,7 @@ export function useThreadUnread({
     const timer = setTimeout(() => {
       setFirstUnreadReplyId(null);
       setPendingClearUnread(false);
-    }, 3000);
+    }, 5000);
     return () => clearTimeout(timer);
   }, [pendingClearUnread, showGoToBottom, isVisible, firstUnreadReplyId]);
 
