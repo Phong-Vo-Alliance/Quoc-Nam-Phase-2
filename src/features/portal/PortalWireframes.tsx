@@ -51,7 +51,6 @@ import { GroupTransferSheet } from "@/components/sheet/GroupTransferSheet";
 import type { ChecklistTemplateMap, ChecklistTemplateItem } from "./types";
 import { TaskLogThreadSheet } from "@/features/task-log-thread";
 import { useUIStore } from "@/stores/uiStore";
-import MessageSkeleton from "./components/MessageSkeleton";
 import {
   useStarMessage,
   useUnstarMessage,
@@ -115,6 +114,16 @@ export default function PortalWireframes({
     const next = getViewFromPath(location.pathname);
     setView((prev) => (prev === next ? prev : next));
   }, [location.pathname]);
+
+  // Đóng Nhật ký công việc khi chuyển sang /mentions để overlay mentions không
+  // bị che bởi TaskLogThreadSheet còn mở từ trước.
+  useEffect(() => {
+    if (view !== "mentions") return;
+    if (!taskLogSheetRef.current.open) return;
+    setTaskLogSheet({ open: false });
+    setThreadIncomingMessage(null);
+    useUIStore.getState().setOpenThreadMessageId(null);
+  }, [view]);
   const [workspaceMode, setWorkspaceMode] = useState<"default" | "pinned">(
     "default",
   );
@@ -593,14 +602,24 @@ export default function PortalWireframes({
       if (!isRawTasksReady) return;
       const task = tasks.find((t) => t.messageId === parentMessageId);
       if (task) {
-        setTaskLogSheet({
-          open: true,
-          taskId: task.id,
+        // Step 1: scroll chat chính tới tin nhắn gốc (parent message của thread)
+        setExternalScrollMessage({
           messageId: parentMessageId,
-          targetMessageId: messageId,
-        });
-        useUIStore.getState().setOpenThreadMessageId(parentMessageId);
-        setThreadUnreadCounts((prev) => ({ ...prev, [task.id]: 0 }));
+          message: { conversationId },
+        } as unknown as StarredMessageDto);
+        // Step 2: scroll xong rồi mới mở nhật ký công việc — cùng pattern với
+        // FileManagerPhase1A.handleOpenSource (300ms delay để smooth-scroll kịp).
+        const taskId = task.id;
+        setTimeout(() => {
+          setTaskLogSheet({
+            open: true,
+            taskId,
+            messageId: parentMessageId,
+            targetMessageId: messageId,
+          });
+          useUIStore.getState().setOpenThreadMessageId(parentMessageId);
+          setThreadUnreadCounts((prev) => ({ ...prev, [taskId]: 0 }));
+        }, 300);
         setPendingMentionTarget(null);
         return;
       }
@@ -1369,12 +1388,6 @@ export default function PortalWireframes({
               navigate(ROUTES.WORKSPACE);
               return;
             }
-            if (key === "mentions") {
-              setView("mentions");
-              navigate(ROUTES.MENTIONS);
-              return;
-            }
-
             // Nếu user chọn workspace khi đang ở pinned → quay lại default
             if (key === "workspace") {
               setWorkspaceMode("default");
@@ -1407,11 +1420,23 @@ export default function PortalWireframes({
       )}
 
       {/* Nội dung chính */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {view === "mentions" ? (
-          <MentionsView onOpenMention={handleOpenMention} />
-        ) : view === "workspace" ? (
-          true ? (
+      {/*
+        WorkspaceView được giữ mounted khi user mở Mentions: MentionsView render
+        như overlay tuyệt đối phía trên. Click một mention chỉ cần ẩn overlay
+        (đổi `view`) → chuyển trở về chat instant, tránh chi phí mount lại
+        toàn bộ cây WorkspaceView/ChatMainContainer.
+      */}
+      <div className="relative flex-1 flex flex-col overflow-hidden">
+        {view === "lead" ? (
+          <TeamMonitorView
+            leadThreads={leadThreads}
+            assignOpenId={assignOpenId}
+            setAssignOpenId={setAssignOpenId}
+            groupMembers={groupMembers}
+            onAssign={handleLeadAssign}
+          />
+        ) : (
+          <>
             <WorkspaceView
               layoutMode={portalMode === "mobile" ? "mobile" : "desktop"}
               groups={groups}
@@ -1525,6 +1550,10 @@ export default function PortalWireframes({
                   "info",
                 );
               }}
+              onOpenMentions={() => {
+                setView("mentions");
+                navigate(ROUTES.MENTIONS);
+              }}
               checklistVariants={checklistVariants}
               defaultChecklistVariantId={defaultChecklistVariantId}
               onCreateTaskFromMessage={(payload) => {
@@ -1544,17 +1573,12 @@ export default function PortalWireframes({
               onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
               threadCurrentSessionCounts={threadCurrentSessionCounts}
             />
-          ) : (
-            <MessageSkeleton />
-          )
-        ) : (
-          <TeamMonitorView
-            leadThreads={leadThreads}
-            assignOpenId={assignOpenId}
-            setAssignOpenId={setAssignOpenId}
-            groupMembers={groupMembers}
-            onAssign={handleLeadAssign}
-          />
+            {view === "mentions" && (
+              <div className="absolute inset-0 z-20 flex flex-col bg-white">
+                <MentionsView onOpenMention={handleOpenMention} />
+              </div>
+            )}
+          </>
         )}
 
         {/* <ViewModeSwitcher viewMode={viewMode} setViewMode={setViewMode} /> */}

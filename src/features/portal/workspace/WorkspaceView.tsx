@@ -178,6 +178,7 @@ interface WorkspaceViewProps {
   onOpenQuickMsg?: () => void;
   onOpenPinned?: () => void;
   onOpenTodoList?: () => void;
+  onOpenMentions?: () => void;
 
   checklistVariants?: { id: string; name: string; isDefault?: boolean }[];
   defaultChecklistVariantId?: string;
@@ -268,6 +269,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     onOpenQuickMsg,
     onOpenPinned,
     onOpenTodoList,
+    onOpenMentions,
 
     checklistVariants,
     defaultChecklistVariantId,
@@ -877,6 +879,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                     onOpenQuickMsg={onOpenQuickMsg}
                     onOpenPinned={onOpenPinned}
                     onOpenTodoList={onOpenTodoList}
+                    onOpenMentions={onOpenMentions}
                     useApiData={true}
                     onTabChange={setLeftTab}
                   />
@@ -1209,6 +1212,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             }
             useApiData={true}
             onTabChange={setLeftTab}
+            onOpenMentions={onOpenMentions}
           />
         )}
       </div>

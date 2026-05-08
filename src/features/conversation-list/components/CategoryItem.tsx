@@ -101,123 +101,127 @@ export function CategoryItem({
         </div>
 
         {/* Line 2: Message Preview + Unread Badge */}
-        {latestConversation?.lastMessage?.parentMessageId ? (
-          <>
-            {/* Conversation name tag (work type) */}
-            {latestConversation && category.conversations.length > 1 && (
-              <div className="mt-0.5">
-                <span className="text-[10px] font-medium text-brand-600 bg-brand-50 px-1 py-0.5 rounded">
-                  {latestConversation.conversationName}
+        <div className="max-h-[80px] overflow-hidden">
+          {latestConversation?.lastMessage?.parentMessageId ? (
+            <>
+              {/* Conversation name tag (work type) */}
+              {latestConversation && category.conversations.length > 1 && (
+                <div className="mt-0.5">
+                  <span className="text-[10px] font-medium text-brand-600 bg-brand-50 px-1 py-0.5 rounded truncate inline-block max-w-full">
+                    {latestConversation.conversationName}
+                  </span>
+                </div>
+              )}
+              {/* Parent message (tin gốc) - no curve */}
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className="text-xs text-gray-500 truncate flex-1">
+                  {parentMessage?.content
+                    ? `${parentMessage.senderName}: ${parentMessage.content.slice(0, 30)}${parentMessage.content.length > 30 ? "..." : ""}`
+                    : `Tin nhắn từ ${parentMessage?.senderName || latestConversation.lastMessage!.senderName}`}
                 </span>
               </div>
-            )}
-            {/* Parent message (tin gốc) - no curve */}
-            <div className="mt-0.5 flex items-center gap-2">
-              <span className="text-xs text-gray-500 truncate flex-1">
-                {parentMessage?.content
-                  ? `${parentMessage.senderName}: ${parentMessage.content.slice(0, 30)}${parentMessage.content.length > 30 ? "..." : ""}`
-                  : `Tin nhắn từ ${parentMessage?.senderName || latestConversation.lastMessage!.senderName}`}
-              </span>
-            </div>
-            {/* Last message (tin mới) - with curve */}
-            <div className="mt-0.5 flex items-center gap-2">
-              {/* Curve connector for thread reply */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="12"
-                height="12"
-                viewBox="0 0 20 20"
-                fill="none"
-                className="text-gray-300 flex-shrink-0"
-              >
-                <path
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  d="M15 15C9.477 15 5 10.523 5 5"
+              {/* Last message (tin mới) - with curve */}
+              <div className="mt-0.5 flex items-center gap-2">
+                {/* Curve connector for thread reply */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 20 20"
                   fill="none"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className="text-xs text-gray-500 truncate flex-1">
-                {formatMessagePreview(latestConversation.lastMessage)}
-              </span>
-              {totalUnread > 0 && (
-                <span
-                  className="inline-flex justify-center items-center ml-2 px-1.5 py-0 text-[10px] font-semibold bg-brand-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
-                  data-testid={`category-unread-badge-${category.id}`}
+                  className="text-gray-300 flex-shrink-0"
                 >
-                  {totalUnread > 99 ? "99+" : totalUnread}
+                  <path
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    d="M15 15C9.477 15 5 10.523 5 5"
+                    fill="none"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="text-xs text-gray-500 truncate flex-1">
+                  {formatMessagePreview(latestConversation.lastMessage)}
                 </span>
-              )}
-            </div>
-            {/* Other unread conversations (work types) */}
-            {unreadConversations.length > 1 && (
-              <div
-                className="mt-0.5 flex items-center gap-1 overflow-hidden"
-                data-testid={`category-unread-worktypes-${category.id}`}
-              >
-                <span className="text-[10px] text-gray-400 flex-shrink-0">
-                  +
-                </span>
-                <span className="text-[10px] text-brand-500 truncate">
-                  {unreadConversations
-                    .filter(
-                      (c) =>
-                        c.conversationId !== latestConversation?.conversationId,
-                    )
-                    .map((c) => `${c.conversationName} (${c.unreadCount})`)
-                    .join(" · ")}
-                </span>
+                {totalUnread > 0 && (
+                  <span
+                    className="inline-flex justify-center items-center ml-2 px-1.5 py-0 text-[10px] font-semibold bg-brand-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
+                    data-testid={`category-unread-badge-${category.id}`}
+                  >
+                    {totalUnread > 99 ? "99+" : totalUnread}
+                  </span>
+                )}
               </div>
-            )}
-          </>
-        ) : latestConversation?.lastMessage ? (
-          <>
-            <div className="mt-0.5 flex items-center gap-2">
-              {/* Conversation name tag when category has multiple conversations */}
-              {category.conversations.length > 1 && (
-                <span className="text-[10px] font-medium text-brand-600 bg-brand-50 px-1 py-0.5 rounded flex-shrink-0">
-                  {latestConversation.conversationName}
-                </span>
-              )}
-              <span className="text-xs text-gray-500 truncate flex-1">
-                {formatMessagePreview(latestConversation.lastMessage)}
-              </span>
-              {totalUnread > 0 && (
-                <span
-                  className="inline-flex justify-center items-center ml-2 px-1.5 py-0 text-[10px] font-semibold bg-brand-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
-                  data-testid={`category-unread-badge-${category.id}`}
+              {/* Other unread conversations (work types) */}
+              {unreadConversations.length > 1 && (
+                <div
+                  className="mt-0.5 flex items-center gap-1 overflow-hidden"
+                  data-testid={`category-unread-worktypes-${category.id}`}
                 >
-                  {totalUnread > 99 ? "99+" : totalUnread}
-                </span>
+                  <span className="text-[10px] text-gray-400 flex-shrink-0">
+                    +
+                  </span>
+                  <span className="text-[10px] text-brand-500 truncate">
+                    {unreadConversations
+                      .filter(
+                        (c) =>
+                          c.conversationId !==
+                          latestConversation?.conversationId,
+                      )
+                      .map((c) => `${c.conversationName} (${c.unreadCount})`)
+                      .join(" · ")}
+                  </span>
+                </div>
               )}
-            </div>
-            {/* Other unread conversations (work types) */}
-            {unreadConversations.length > 1 && (
-              <div
-                className="mt-0.5 flex items-center gap-1 overflow-hidden"
-                data-testid={`category-unread-worktypes-${category.id}`}
-              >
-                <span className="text-[10px] text-gray-400 flex-shrink-0">
-                  +
+            </>
+          ) : latestConversation?.lastMessage ? (
+            <>
+              <div className="mt-0.5 flex items-center gap-2">
+                {/* Conversation name tag when category has multiple conversations */}
+                {category.conversations.length > 1 && (
+                  <span className="text-[10px] font-medium text-brand-600 bg-brand-50 px-1 py-0.5 rounded flex-shrink-0 truncate max-w-[120px] inline-block">
+                    {latestConversation.conversationName}
+                  </span>
+                )}
+                <span className="text-xs text-gray-500 truncate flex-1">
+                  {formatMessagePreview(latestConversation.lastMessage)}
                 </span>
-                <span className="text-[10px] text-brand-500 truncate">
-                  {unreadConversations
-                    .filter(
-                      (c) =>
-                        c.conversationId !== latestConversation?.conversationId,
-                    )
-                    .map((c) => `${c.conversationName} (${c.unreadCount})`)
-                    .join(" · ")}
-                </span>
+                {totalUnread > 0 && (
+                  <span
+                    className="inline-flex justify-center items-center ml-2 px-1.5 py-0 text-[10px] font-semibold bg-brand-600 text-white rounded-full shrink-0 min-w-[20px] h-4"
+                    data-testid={`category-unread-badge-${category.id}`}
+                  >
+                    {totalUnread > 99 ? "99+" : totalUnread}
+                  </span>
+                )}
               </div>
-            )}
-          </>
-        ) : (
-          <p className="mt-0.5 truncate text-xs text-gray-400">
-            Chưa có tin nhắn
-          </p>
-        )}
+              {/* Other unread conversations (work types) */}
+              {unreadConversations.length > 1 && (
+                <div
+                  className="mt-0.5 flex items-center gap-1 overflow-hidden"
+                  data-testid={`category-unread-worktypes-${category.id}`}
+                >
+                  <span className="text-[10px] text-gray-400 flex-shrink-0">
+                    +
+                  </span>
+                  <span className="text-[10px] text-brand-500 truncate">
+                    {unreadConversations
+                      .filter(
+                        (c) =>
+                          c.conversationId !==
+                          latestConversation?.conversationId,
+                      )
+                      .map((c) => `${c.conversationName} (${c.unreadCount})`)
+                      .join(" · ")}
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="mt-0.5 truncate text-xs text-gray-400">
+              Chưa có tin nhắn
+            </p>
+          )}
+        </div>
       </div>
     </button>
   );

@@ -150,7 +150,7 @@ export const WorkTypeManagerDialog: React.FC<WorkTypeManagerDialogProps> = ({
       <DialogContent
         className={cn(
           "overflow-hidden p-0 transition-all duration-200",
-          step === "categories" ? "max-w-[500px]" : "max-w-[700px]",
+          "max-w-[700px]",
         )}
         data-testid="work-type-manager-main-dialog"
       >

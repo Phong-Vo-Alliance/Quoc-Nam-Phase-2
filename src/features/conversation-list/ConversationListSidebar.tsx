@@ -18,7 +18,8 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Zap, Star, ListTodo, RefreshCw, X } from "lucide-react";
+import { Zap, Star, ListTodo, RefreshCw, X, AtSign } from "lucide-react";
+import { useUnreadMentionCount } from "@/hooks/queries/useUnreadMentionCount";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCategories } from "@/hooks/queries/useCategories";
 import {
@@ -90,6 +91,9 @@ export interface ConversationListSidebarProps {
   onOpenQuickMsg?: () => void;
   onOpenPinned?: () => void;
   onOpenTodoList?: () => void;
+
+  // callback mở màn hình Mentions (tab thứ 3 trong SegmentedTabs hoạt động như trigger)
+  onOpenMentions?: () => void;
 }
 
 /* ===================== UI helpers ===================== */
@@ -202,6 +206,7 @@ export const ConversationListSidebar: React.FC<
   onOpenQuickMsg,
   onOpenPinned,
   onOpenTodoList,
+  onOpenMentions,
 }) => {
   const [tab, setTab] = React.useState<"group" | "dm">(getInitialTab());
   const [q, setQ] = React.useState("");
@@ -226,6 +231,10 @@ export const ConversationListSidebar: React.FC<
 
   const queryClient = useQueryClient();
   const categoriesQuery = useCategories();
+
+  // Unread count cho tab Mentions (badge dot)
+  const { data: unreadMentions } = useUnreadMentionCount();
+  const hasUnreadMentions = (unreadMentions?.count ?? 0) > 0;
   const directsQuery = useDirectMessages({ enabled: useApiData });
   const departmentMembersQuery = useDepartmentColleagues({
     enabled: useApiData && tab === "dm",
@@ -1058,12 +1067,33 @@ export const ConversationListSidebar: React.FC<
                       </span>
                     ),
                   },
+                  {
+                    key: "mentions",
+                    label: (
+                      <span
+                        className="relative inline-flex items-center justify-center"
+                        title="Tin nhắn nhắc đến tôi"
+                      >
+                        <AtSign className="h-3.5 w-3.5 translate-y-[2px]" />
+                        {hasUnreadMentions && (
+                          <span
+                            data-testid="conversation-mentions-tab-unread-dot"
+                            className="absolute -top-0.5 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white"
+                            aria-label="Có tin nhắn nhắc đến bạn chưa đọc"
+                          />
+                        )}
+                      </span>
+                    ),
+                  },
                 ]}
                 active={tab}
                 onChange={(v) => {
-                  if (!isAnyTabLoading) {
-                    setTab(v as any);
+                  if (isAnyTabLoading) return;
+                  if (v === "mentions") {
+                    onOpenMentions?.();
+                    return;
                   }
+                  setTab(v as any);
                 }}
                 textClass="text-xs"
               />
@@ -1265,7 +1295,6 @@ export const ConversationListSidebar: React.FC<
                   />
                 </li>
               ))}
-
             </ul>
           ) : (
             <ul className="divide-y">
