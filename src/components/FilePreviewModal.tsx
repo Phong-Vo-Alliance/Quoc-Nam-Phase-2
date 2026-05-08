@@ -607,7 +607,9 @@ export default function FilePreviewModal({
               <video
                 src={videoUrl}
                 controls
+                controlsList="nodownload"
                 autoPlay
+                onContextMenu={(e) => e.preventDefault()}
                 className="h-full w-full max-h-[78vh] rounded-lg bg-black object-contain"
                 data-testid="file-preview-video"
               >
