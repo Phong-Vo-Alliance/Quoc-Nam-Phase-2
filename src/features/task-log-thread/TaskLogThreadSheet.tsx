@@ -72,6 +72,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     imageInputRef,
     isFileLimitReached,
     handleFileSelect,
+    handleDrop,
     handlePaste,
     handleRemoveFile,
     clearFiles,
@@ -298,6 +299,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
           uploadProgress={uploadProgress}
           handleRemoveFile={handleRemoveFile}
           handleFileSelect={handleFileSelect}
+          handleDrop={handleDrop}
           handlePaste={handlePaste}
           fileInputRef={fileInputRef}
           imageInputRef={imageInputRef}

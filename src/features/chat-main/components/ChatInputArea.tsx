@@ -139,10 +139,10 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-brand-400 bg-brand-50/95 pointer-events-none">
           <Upload className="h-8 w-8 text-brand-500" />
           <p className="text-sm font-semibold text-brand-600">
-            Thả file vào đây
+            Thả file vào đây để đính kèm
           </p>
           <p className="text-xs text-brand-400">
-            Hỗ trợ ảnh và tất cả loại file
+            Ảnh (JPG, PNG, GIF…) · Tài liệu (PDF, DOC, XLS…) · Video (MP4…)
           </p>
         </div>
       )}
