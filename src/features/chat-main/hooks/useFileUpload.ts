@@ -111,6 +111,73 @@ export function useFileUpload() {
     [selectedFiles, validateAndAdd],
   );
 
+  // Handle drag-and-drop files
+  const handleDrop = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) return;
+
+      const currentCount = selectedFiles.length;
+      const remainingSlots = MAX_FILES_PER_MESSAGE - currentCount;
+
+      const currentTotalSize = selectedFiles.reduce(
+        (sum, f) => sum + f.file.size,
+        0,
+      );
+      const newFilesSize = files.reduce((sum, f) => sum + f.size, 0);
+      const MAX_TOTAL_SIZE = FILE_UPLOAD_LIMITS.maxTotalSize;
+      const remainingSize = MAX_TOTAL_SIZE - currentTotalSize;
+
+      if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
+        toast.error(
+          remainingSize <= 0
+            ? "Đã đạt giới hạn 100MB. Vui lòng xóa file cũ để chọn file mới."
+            : `Tổng dung lượng vượt quá 100MB. Còn trống ${formatFileSize(remainingSize)}.`,
+        );
+        return;
+      }
+
+      if (remainingSlots === 0) {
+        toast.error(
+          `Đã đủ ${MAX_FILES_PER_MESSAGE} file. Vui lòng xóa file cũ để chọn file mới.`,
+        );
+        return;
+      }
+
+      let filesToAdd = files;
+      if (files.length > remainingSlots) {
+        filesToAdd = files.slice(0, remainingSlots);
+        const discardedCount = files.length - remainingSlots;
+        toast.warning(
+          remainingSlots === MAX_FILES_PER_MESSAGE
+            ? `Chỉ chọn được ${MAX_FILES_PER_MESSAGE} file. Đã tự động bỏ ${discardedCount} file.`
+            : `Đã có ${currentCount} file. Chỉ chọn thêm được ${remainingSlots} file nữa.`,
+        );
+      }
+
+      const validationError = validateBatchFileSelection(
+        filesToAdd,
+        MAX_FILES_PER_MESSAGE,
+        Math.max(
+          FILE_UPLOAD_LIMITS.maxImageSize,
+          FILE_UPLOAD_LIMITS.maxVideoSize,
+          FILE_UPLOAD_LIMITS.maxFileSize,
+        ),
+        FILE_UPLOAD_LIMITS.maxTotalSize,
+      );
+
+      if (validationError) {
+        toast.error(validationError.message);
+        return;
+      }
+
+      const validFiles = validateAndAdd(filesToAdd, currentCount);
+      if (validFiles.length > 0) {
+        setSelectedFiles((prev) => [...prev, ...validFiles]);
+      }
+    },
+    [selectedFiles, validateAndAdd],
+  );
+
   // 🆕 v1.3.0: Handle paste image from clipboard
   const handlePaste = useCallback(
     (event: React.ClipboardEvent) => {
@@ -204,6 +271,7 @@ export function useFileUpload() {
     imageInputRef,
     isFileLimitReached,
     handleFileSelect,
+    handleDrop,
     handlePaste,
     handleRemoveFile,
     clearFiles,
