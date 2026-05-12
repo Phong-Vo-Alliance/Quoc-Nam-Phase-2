@@ -292,8 +292,8 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
                 </span>
               </div>
 
-              {/* Quản lý loại việc (chỉ hiện khi user là leader ở ≥1 nhóm chat) */}
-              {isLeaderInAnyCategory && (
+              {/* Quản lý loại việc (chỉ hiện khi user là admin) */}
+              {hasRole("Admin") && (
                 <div
                   className="flex flex-col items-center text-center text-gray-500 hover:text-brand-700 cursor-pointer"
                   data-testid="tools-worktype-manager-button"
