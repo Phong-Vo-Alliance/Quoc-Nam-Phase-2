@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MentionDto, MentionParentMessageDto } from "@/types/mentions";
 import { parseMentions } from "@/utils/mentionHighlight";
@@ -7,6 +7,14 @@ import type { AttachmentDto, MentionInputDto } from "@/types/messages";
 import { useAuthStore } from "@/stores/authStore";
 import { useImageCacheStore } from "@/stores/imageCacheStore";
 import FileIcon from "@/components/files/FileIcon";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useMarkMentionAsRead } from "@/hooks/mutations/useMarkMentionAsRead";
+import { useMarkMentionAsUnread } from "@/hooks/mutations/useMarkMentionAsRead";
 
 // ─── Helpers (exported để MentionsView dùng cho filter) ──────────────────────
 
@@ -500,6 +508,9 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
   const currentUser = useAuthStore((s) => s.user);
   const currentUserName = currentUser?.fullName?.trim() || "";
 
+  const markAsRead = useMarkMentionAsRead();
+  const markAsUnread = useMarkMentionAsUnread();
+
   const groupTitle = item.categoryName?.trim() || item.conversationName;
   const showConversationTag =
     !!item.categoryName?.trim() &&
@@ -520,12 +531,19 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
   const APPEND_SELF_MENTION_TAG = true;
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClick?.(item)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.(item);
+        }
+      }}
       data-testid={`mention-item-${item.id}`}
       className={cn(
-        "w-full text-left px-4 py-3 flex gap-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0",
+        "group w-full text-left px-4 py-3 flex gap-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0 cursor-pointer",
         !item.isRead && "bg-brand-50/40",
       )}
     >
@@ -536,14 +554,51 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        {/* Line 1: Group name + Timestamp */}
+        {/* Line 1: Group name + Timestamp + Menu */}
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium text-gray-800 truncate">
             <HighlightContent text={groupTitle} query={searchQuery} />
           </span>
-          <span className="shrink-0 text-xs text-gray-400">
-            {formatRelativeTime(sentAt)}
-          </span>
+          <div className="shrink-0 flex items-center gap-1">
+            <span className="text-xs text-gray-400">
+              {formatRelativeTime(sentAt)}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-5 w-5 flex items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all data-[state=open]:bg-gray-200 data-[state=open]:text-gray-600"
+                  data-testid={`mention-item-menu-${item.id}`}
+                >
+                  <MoreVertical className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {item.isRead ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markAsUnread.mutate(item.id);
+                    }}
+                    data-testid={`mention-item-mark-unread-${item.id}`}
+                  >
+                    Đánh dấu chưa đọc
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markAsRead.mutate(item.id);
+                    }}
+                    data-testid={`mention-item-mark-read-${item.id}`}
+                  >
+                    Đánh dấu đã đọc
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Line 2: Conversation name tag (only when category != conversation) */}
@@ -602,17 +657,22 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
                 appendSelfMentionTag={APPEND_SELF_MENTION_TAG}
               />
             </div>
-            {hasAttachments && <MentionAttachments attachments={attachments!} />}
+            {hasAttachments && (
+              <MentionAttachments attachments={attachments!} />
+            )}
           </>
         )}
       </div>
 
-      {/* Unread dot */}
-      {!item.isRead && (
-        <div className="shrink-0 mt-1">
-          <span className="block h-2 w-2 rounded-full bg-brand-500" />
-        </div>
-      )}
-    </button>
+      {/* Unread dot — always reserve space for alignment */}
+      <div className="shrink-0 mt-1.5">
+        <span
+          className={cn(
+            "block h-2 w-2 rounded-full",
+            !item.isRead ? "bg-brand-500" : "bg-transparent",
+          )}
+        />
+      </div>
+    </div>
   );
 }
