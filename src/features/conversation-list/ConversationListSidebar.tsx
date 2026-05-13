@@ -18,7 +18,16 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Zap, Star, ListTodo, RefreshCw, X, AtSign } from "lucide-react";
+import {
+  Zap,
+  Star,
+  ListTodo,
+  RefreshCw,
+  X,
+  AtSign,
+  Users,
+  User,
+} from "lucide-react";
 import { useUnreadMentionCount } from "@/hooks/queries/useUnreadMentionCount";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCategories } from "@/hooks/queries/useCategories";
@@ -140,7 +149,7 @@ const NotificationBadge: React.FC<NotificationBadgeProps> = ({
   }
 
   return (
-    <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center z-50">
+    <span className="absolute -top-[0.4rem] -right-2 flex h-4 w-4 items-center justify-center z-50">
       {pulse && (
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
       )}
@@ -235,6 +244,7 @@ export const ConversationListSidebar: React.FC<
   // Unread count cho tab Mentions (badge dot)
   const { data: unreadMentions } = useUnreadMentionCount();
   const hasUnreadMentions = (unreadMentions?.count ?? 0) > 0;
+  const mentionCount = unreadMentions?.count ?? 0;
   const directsQuery = useDirectMessages({ enabled: useApiData });
   const departmentMembersQuery = useDepartmentColleagues({
     enabled: useApiData && tab === "dm",
@@ -991,14 +1001,10 @@ export const ConversationListSidebar: React.FC<
                   disabled={isAnyTabLoading}
                   data-testid="conversation-tab-group"
                 >
-                  <span className="relative inline-flex items-center gap-1">
-                    Nhóm
+                  <span className="relative inline-flex items-center justify-center">
+                    <Users className="h-4 w-4" />
                     {tab === "dm" && totalGroupUnread > 0 && (
-                      <NotificationBadge
-                        count={totalGroupUnread}
-                        pulse={!hasShownGroupBadge}
-                        inline
-                      />
+                      <span className="absolute -top-0.5 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white" />
                     )}
                   </span>
                 </ToggleGroupItem>
@@ -1013,14 +1019,10 @@ export const ConversationListSidebar: React.FC<
                   disabled={isAnyTabLoading}
                   data-testid="conversation-tab-dm"
                 >
-                  <span className="relative inline-flex items-center gap-1">
-                    Cá nhân
+                  <span className="relative inline-flex items-center justify-center">
+                    <User className="h-4 w-4" />
                     {tab === "group" && totalDmUnread > 0 && (
-                      <NotificationBadge
-                        count={totalDmUnread}
-                        pulse={!hasShownDmBadge}
-                        inline
-                      />
+                      <span className="absolute -top-0.5 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white" />
                     )}
                   </span>
                 </ToggleGroupItem>
@@ -1040,14 +1042,10 @@ export const ConversationListSidebar: React.FC<
                   {
                     key: "group",
                     label: (
-                      <span className="relative inline-flex items-center gap-1">
-                        Nhóm
+                      <span className="relative inline-flex items-center justify-center">
+                        <Users className="h-3.5 w-3.5 translate-y-[2px]" />
                         {tab === "dm" && totalGroupUnread > 0 && (
-                          <NotificationBadge
-                            count={totalGroupUnread}
-                            pulse={!hasShownGroupBadge}
-                            inline
-                          />
+                          <span className="absolute -top-0.5 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white" />
                         )}
                       </span>
                     ),
@@ -1055,14 +1053,10 @@ export const ConversationListSidebar: React.FC<
                   {
                     key: "dm",
                     label: (
-                      <span className="relative inline-flex items-center gap-1">
-                        Cá nhân
+                      <span className="relative inline-flex items-center justify-center">
+                        <User className="h-3.5 w-3.5 translate-y-[2px]" />
                         {tab === "group" && totalDmUnread > 0 && (
-                          <NotificationBadge
-                            count={totalDmUnread}
-                            pulse={!hasShownDmBadge}
-                            inline
-                          />
+                          <span className="absolute -top-0.5 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white" />
                         )}
                       </span>
                     ),
