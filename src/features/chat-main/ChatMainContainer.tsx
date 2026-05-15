@@ -14,6 +14,7 @@ import ImagePreviewModal from "@/components/ImagePreviewModal";
 import FilePreviewModal from "@/components/FilePreviewModal";
 import { ChatHeader } from "@/features/portal/components/chat/ChatHeader";
 import { TaskBanner } from "@/features/portal/components/chat/TaskBanner";
+// import { PinBar } from "@/features/portal/components/chat/PinBar";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
 
 // Extracted hooks
@@ -393,15 +394,24 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         isConversationDisabled={isConversationDisabled}
       />
 
-      {/* Task banner */}
+      {/* Task banner + Pin bar (same row, group-only for pin) */}
+      {/* TODO: Bật lại PinBar khi hoàn thiện logic đầy đủ */}
       {activeCategoryId && (
-        <TaskBanner
-          categoryId={activeCategoryId}
-          onViewWorkType={(convId: string) => {
-            handleConversationChange(convId);
-            onViewTaskDetail?.();
-          }}
-        />
+        <div className="mx-4 mt-2 flex gap-2 items-start [&:empty]:hidden">
+          <TaskBanner
+            categoryId={activeCategoryId}
+            onViewWorkType={(convId: string) => {
+              handleConversationChange(convId);
+              onViewTaskDetail?.();
+            }}
+          />
+          {/* {conversationType === "GRP" && (
+            <PinBar
+              conversationId={conversationId}
+              onJumpToMessage={handleSearchJumpToMessage}
+            />
+          )} */}
+        </div>
       )}
 
       {/* Network status banner */}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
+import { useWindowFocus } from "@/hooks/useWindowFocus";
 import type { ChatMessage, ThreadDto } from "@/types/messages";
 
 interface UseThreadUnreadOptions {
@@ -22,6 +23,8 @@ export function useThreadUnread({
   showGoToBottom,
 }: UseThreadUnreadOptions) {
   const isVisible = usePageVisibility();
+  const isWindowFocused = useWindowFocus();
+  const isUserPresent = isVisible && isWindowFocused;
 
   const [firstUnreadReplyId, setFirstUnreadReplyId] = useState<string | null>(
     null,
@@ -31,7 +34,7 @@ export function useThreadUnread({
 
   const initializedForParentRef = useRef<string | null>(null);
   const lastReplyIdRef = useRef<string | null>(null);
-  const prevIsVisibleRef = useRef(isVisible);
+  const prevIsUserPresentRef = useRef(isUserPresent);
 
   // Reset when sheet closes or parent changes
   useEffect(() => {
@@ -76,7 +79,7 @@ export function useThreadUnread({
     if (lastReply.id === lastReplyIdRef.current) return;
 
     const isFromOther = lastReply.senderId !== userId;
-    const userIsAway = !isVisible || showGoToBottom;
+    const userIsAway = !isUserPresent || showGoToBottom;
 
     if (isFromOther && userIsAway) {
       if (!firstUnreadReplyId) {
@@ -94,35 +97,35 @@ export function useThreadUnread({
     parentMessageId,
     replies,
     userId,
-    isVisible,
+    isUserPresent,
     showGoToBottom,
     firstUnreadReplyId,
   ]);
 
-  // Re-arm 10s clearing when user returns to the tab
+  // Re-arm 10s clearing when user returns to the tab / window focus
   useEffect(() => {
-    const wasHidden = !prevIsVisibleRef.current;
-    prevIsVisibleRef.current = isVisible;
-    if (wasHidden && isVisible && firstUnreadReplyId) {
+    const wasAway = !prevIsUserPresentRef.current;
+    prevIsUserPresentRef.current = isUserPresent;
+    if (wasAway && isUserPresent && firstUnreadReplyId) {
       setPendingClearUnread(true);
     }
-  }, [isVisible, firstUnreadReplyId]);
+  }, [isUserPresent, firstUnreadReplyId]);
 
-  // Scroll-aware auto-clear: only run timer when user is at bottom and tab is visible
+  // Scroll-aware auto-clear: only run timer when user is at bottom and present
   useEffect(() => {
     if (!pendingClearUnread) return;
     if (!firstUnreadReplyId) {
       setPendingClearUnread(false);
       return;
     }
-    if (showGoToBottom || !isVisible) return;
+    if (showGoToBottom || !isUserPresent) return;
 
     const timer = setTimeout(() => {
       setFirstUnreadReplyId(null);
       setPendingClearUnread(false);
     }, 10000);
     return () => clearTimeout(timer);
-  }, [pendingClearUnread, showGoToBottom, isVisible, firstUnreadReplyId]);
+  }, [pendingClearUnread, showGoToBottom, isUserPresent, firstUnreadReplyId]);
 
   // Clear unread badge once user reaches bottom
   useEffect(() => {

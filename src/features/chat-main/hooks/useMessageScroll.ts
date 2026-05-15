@@ -9,12 +9,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getMessagesAfter } from "@/api/messages.api";
 import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 import { categoriesKeys } from "@/hooks/queries/useCategories";
+import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
+import { useWindowFocus } from "@/hooks/useWindowFocus";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import type { UseInfiniteQueryResult } from "@tanstack/react-query";
 import type { ChatMessage } from "@/types/messages";
 import type { CategoryWithUnread } from "@/types/categories";
+import type { GetConversationsResponse } from "@/types/conversations";
 
 const UNREAD_DIVIDER_STORAGE_PREFIX = "chat-unread-divider:";
 const LAST_VISITED_CONVERSATION_KEY = "chat-last-visited-conversation";
@@ -24,7 +27,10 @@ function readDividerFromStorage(conversationId: string): string | null {
   return sessionStorage.getItem(UNREAD_DIVIDER_STORAGE_PREFIX + conversationId);
 }
 
-function writeDividerToStorage(conversationId: string, messageId: string): void {
+function writeDividerToStorage(
+  conversationId: string,
+  messageId: string,
+): void {
   if (typeof sessionStorage === "undefined") return;
   sessionStorage.setItem(
     UNREAD_DIVIDER_STORAGE_PREFIX + conversationId,
@@ -69,6 +75,8 @@ export function useMessageScroll({
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const isVisible = usePageVisibility();
+  const isWindowFocused = useWindowFocus();
+  const isUserPresent = isVisible && isWindowFocused;
 
   const [showGoToBottom, setShowGoToBottom] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -334,6 +342,20 @@ export function useMessageScroll({
           }
         }
       }
+
+      // Fallback: check DM conversations cache if not found in categories
+      if (unread === 0) {
+        const dmData = queryClient.getQueryData<GetConversationsResponse>(
+          conversationKeys.directs(),
+        );
+        if (dmData?.items) {
+          const dmConv = dmData.items.find((c) => c.id === conversationId);
+          if (dmConv) {
+            unread = dmConv.unreadCount;
+          }
+        }
+      }
+
       initialUnreadCountRef.current = unread;
       initialUnreadAppliedRef.current = unread <= 0;
     }
@@ -386,16 +408,16 @@ export function useMessageScroll({
     }
   }, [conversationId, messagesQuery.isSuccess, messages]);
 
-  // Clear unread separator after user returns to the tab
-  const prevIsVisibleRef = useRef(isVisible);
+  // Clear unread separator after user returns to the tab / window focus
+  const prevIsUserPresentRef = useRef(isUserPresent);
   useEffect(() => {
-    const wasHidden = !prevIsVisibleRef.current;
-    prevIsVisibleRef.current = isVisible;
+    const wasAway = !prevIsUserPresentRef.current;
+    prevIsUserPresentRef.current = isUserPresent;
 
-    if (wasHidden && isVisible) {
+    if (wasAway && isUserPresent) {
       setPendingClearUnread(true);
     }
-  }, [isVisible]);
+  }, [isUserPresent]);
 
   // Scroll-aware clearing: only run the 10s hide timer when the user is at the
   // bottom and the tab is visible. If the user is scrolled up reading older
@@ -406,7 +428,7 @@ export function useMessageScroll({
       setPendingClearUnread(false);
       return;
     }
-    if (showGoToBottom || !isVisible) return;
+    if (showGoToBottom || !isUserPresent) return;
 
     const timer = setTimeout(() => {
       setFirstUnreadMessageId(null);
@@ -416,7 +438,7 @@ export function useMessageScroll({
   }, [
     pendingClearUnread,
     showGoToBottom,
-    isVisible,
+    isUserPresent,
     firstUnreadMessageId,
     setFirstUnreadMessageId,
   ]);
@@ -429,7 +451,7 @@ export function useMessageScroll({
       const isFromOtherUser = lastMessage.senderId !== user?.id;
 
       if (isNewMessage && isFromOtherUser) {
-        const userIsAway = !isVisible || showGoToBottom;
+        const userIsAway = !isUserPresent || showGoToBottom;
         if (userIsAway && !firstUnreadMessageId) {
           setFirstUnreadMessageId(lastMessage.id);
           setPendingClearUnread(true);
@@ -437,7 +459,7 @@ export function useMessageScroll({
 
         if (showGoToBottom) {
           setUnreadCount((prev) => prev + 1);
-        } else if (isVisible) {
+        } else if (isUserPresent) {
           setTimeout(() => {
             bottomRef.current?.scrollIntoView({ behavior: "smooth" });
           }, 100);
@@ -450,7 +472,7 @@ export function useMessageScroll({
     messages,
     user?.id,
     showGoToBottom,
-    isVisible,
+    isUserPresent,
     firstUnreadMessageId,
     setFirstUnreadMessageId,
   ]);
