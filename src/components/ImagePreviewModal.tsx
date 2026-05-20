@@ -3,29 +3,27 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  X,
   Download,
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  RotateCw,
+  RefreshCw,
+  Maximize2,
+  Save,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 import {
-  getImagePreview,
   createBlobUrl,
   revokeBlobUrl,
   downloadFile,
+  rotateFile,
+  type RotateAction,
 } from "@/api/files.api";
 import { fileApiClient } from "@/api/fileClient";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface ImageItem {
   fileId: string;
@@ -92,6 +90,7 @@ export default function ImagePreviewModal({
   const [hasError, setHasError] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [canDownload, setCanDownload] = useState(false);
+  const [canRotate, setCanRotate] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   // Zoom & pan state
@@ -100,6 +99,33 @@ export default function ImagePreviewModal({
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0, translateX: 0, translateY: 0 });
 
+  // Rotation state
+  // - rotateActions: ordered action log we replay on the server. Auto-cleared
+  //   when net rotation comes back to 0° so we never send a no-op sequence.
+  // - displayRotation: raw accumulated degrees used for the CSS transform.
+  //   Kept unnormalized so each click rotates the shortest 90°/180° arc
+  //   instead of CSS "unwinding" through 270° at the modulo boundary.
+  const [rotateActions, setRotateActions] = useState<RotateAction[]>([]);
+  const [displayRotation, setDisplayRotation] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  // Pending action that was blocked by the unsaved-rotation confirm dialog
+  const [pendingAction, setPendingAction] = useState<
+    | { type: "close" }
+    | { type: "nav"; direction: "prev" | "next" }
+    | null
+  >(null);
+
+  const isDirty = rotateActions.length > 0;
+
+  // Image natural size + content area size for the fit-scale calculation
+  // applied when rotation is 90°/270° (rotated bounding box must fit container).
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(
+    null,
+  );
+  const [contentSize, setContentSize] = useState<{ w: number; h: number } | null>(
+    null,
+  );
+
   const MIN_SCALE = 1;
   const MAX_SCALE = 5;
   const ZOOM_STEP = 0.25;
@@ -107,7 +133,15 @@ export default function ImagePreviewModal({
   // ✅ Local Gallery Cache - Cache blob URLs for this modal session
   const [imageCache, setImageCache] = useState<Map<string, string>>(new Map());
 
-  useEscapeToClose(open && !isDownloading, () => onOpenChange(false));
+  const requestClose = useCallback(() => {
+    if (isDirty) {
+      setPendingAction({ type: "close" });
+      return;
+    }
+    onOpenChange(false);
+  }, [isDirty, onOpenChange]);
+
+  useEscapeToClose(open && !isDownloading && !isSaving, requestClose);
 
   // Determine current image to display
   const isGalleryMode = images && images.length > 0;
@@ -128,25 +162,71 @@ export default function ImagePreviewModal({
     if (open) {
       setCurrentIndex(initialIndex);
       resetZoom();
+      setRotateActions([]);
+      setDisplayRotation(0);
     }
   }, [open, initialIndex, resetZoom]);
 
-  // Reset zoom when current file changes
+  // Reset zoom & rotation when current file changes
   useEffect(() => {
     resetZoom();
+    setRotateActions([]);
+    setDisplayRotation(0);
+    setNaturalSize(null);
   }, [currentFileId, resetZoom]);
 
+  // Track image natural dimensions — needed to compute fit-scale when rotated 90°.
+  const handleImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+  };
+
+  // fitScale shrinks the image when rotated by 90°/270° so that the rotated
+  // bounding box stays inside the content area (otherwise a landscape image
+  // turned portrait gets its top + bottom clipped).
+  let fitScale = 1;
+  if (naturalSize && contentSize) {
+    const quarterTurns = Math.round(displayRotation / 90);
+    const isQuarter = Math.abs(quarterTurns) % 2 === 1;
+    if (isQuarter) {
+      // Padding p-4 = 16px on each side around the image.
+      const PADDING = 32;
+      const availW = Math.max(contentSize.w - PADDING, 1);
+      const availH = Math.max(contentSize.h - PADDING, 1);
+      const scaleContain = Math.min(availW / naturalSize.w, availH / naturalSize.h);
+      const renderedW = naturalSize.w * scaleContain;
+      const renderedH = naturalSize.h * scaleContain;
+      fitScale = Math.min(availW / renderedH, availH / renderedW);
+    }
+  }
+
   // Navigation handlers
-  const handlePrev = () => {
+  const goPrev = useCallback(() => {
     if (!isGalleryMode) return;
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
     resetZoom();
-  };
+  }, [isGalleryMode, resetZoom]);
 
-  const handleNext = () => {
+  const goNext = useCallback(() => {
     if (!isGalleryMode) return;
     setCurrentIndex((prev) => (prev < images!.length - 1 ? prev + 1 : prev));
     resetZoom();
+  }, [isGalleryMode, images, resetZoom]);
+
+  const handlePrev = () => {
+    if (isDirty) {
+      setPendingAction({ type: "nav", direction: "prev" });
+      return;
+    }
+    goPrev();
+  };
+
+  const handleNext = () => {
+    if (isDirty) {
+      setPendingAction({ type: "nav", direction: "next" });
+      return;
+    }
+    goNext();
   };
 
   // Zoom handlers
@@ -204,6 +284,76 @@ export default function ImagePreviewModal({
 
   const handleMouseUp = () => {
     if (isPanning) setIsPanning(false);
+  };
+
+  // Rotation handlers
+  // - displayRotation accumulates raw degrees so each click animates the
+  //   shortest 90°/180° arc.
+  // - rotateActions tracks the API sequence and is auto-cleared whenever the
+  //   net rotation returns to a multiple of 360° (left+right, flip+flip, etc.)
+  //   so we never POST a no-op sequence.
+  const pushRotateAction = (action: RotateAction) => {
+    const delta = action === "left" ? -90 : action === "right" ? 90 : 180;
+    setDisplayRotation((prev) => prev + delta);
+    setRotateActions((prev) => {
+      const next = [...prev, action];
+      const total = next.reduce((sum, a) => {
+        if (a === "left") return sum - 90;
+        if (a === "right") return sum + 90;
+        return sum + 180;
+      }, 0);
+      const netRotation = ((total % 360) + 360) % 360;
+      return netRotation === 0 ? [] : next;
+    });
+  };
+
+  const handleRotateLeft = () => pushRotateAction("left");
+  const handleRotateRight = () => pushRotateAction("right");
+  const handleFlip = () => pushRotateAction("flip");
+
+  const handleSaveRotation = async () => {
+    if (!currentFileId || !isDirty) return;
+
+    setIsSaving(true);
+    try {
+      await rotateFile(currentFileId, rotateActions);
+
+      // Invalidate this image in the local cache so the next render fetches
+      // the freshly-rotated bytes from the server.
+      const cached = imageCache.get(currentFileId);
+      if (cached) {
+        revokeBlobUrl(cached);
+        setImageCache((prev) => {
+          const next = new Map(prev);
+          next.delete(currentFileId);
+          return next;
+        });
+      }
+      setRotateActions([]);
+      setDisplayRotation(0);
+      toast.success("Lưu thành công");
+    } catch (error: any) {
+      console.error("Lỗi khi xoay ảnh:", error);
+      const status = error?.response?.status;
+      if (status === 404) toast.error("File không tồn tại");
+      else if (status === 403) toast.error("Không có quyền xoay ảnh này");
+      else if (status === 401) toast.error("Chưa đăng nhập");
+      else toast.error("Không thể lưu xoay ảnh");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Discard unsaved rotation and run the pending close/nav action
+  const handleDiscardAndContinue = () => {
+    const action = pendingAction;
+    setRotateActions([]);
+    setDisplayRotation(0);
+    setPendingAction(null);
+    if (!action) return;
+    if (action.type === "close") onOpenChange(false);
+    else if (action.direction === "prev") goPrev();
+    else goNext();
   };
 
   // Download handler
@@ -267,13 +417,14 @@ export default function ImagePreviewModal({
         setIsLoading(true);
         setHasError(false);
 
-        // Get preview with canDownload flag from API response
+        // Get preview with canDownload / canRotate flags from API response
         const response = await fileApiClient.get<{
           fileId: string;
           fileName: string | null;
           dataBase64: string | null;
           contentType: string | null;
           canDownload: boolean;
+          canRotate?: boolean;
           wasWatermarked: boolean;
           fromCache: boolean;
           isPdf: boolean;
@@ -286,8 +437,9 @@ export default function ImagePreviewModal({
           timeout: 30000,
         });
 
-        // Set canDownload flag
+        // Set canDownload / canRotate flags
         setCanDownload(response.data.canDownload);
+        setCanRotate(Boolean(response.data.canRotate));
 
         // Convert base64 to blob
         if (!response.data.dataBase64) {
@@ -311,6 +463,7 @@ export default function ImagePreviewModal({
         console.error("Lỗi khi tải ảnh xem trước:", error);
         setHasError(true);
         setCanDownload(false);
+        setCanRotate(false);
       } finally {
         setIsLoading(false);
       }
@@ -318,6 +471,21 @@ export default function ImagePreviewModal({
 
     loadPreview();
   }, [open, currentFileId, imageCache]);
+
+  // Observe content area size to keep fitScale in sync with window resize.
+  useEffect(() => {
+    if (!open) return;
+    const el = contentAreaRef.current;
+    if (!el) return;
+
+    const updateSize = () => {
+      setContentSize({ w: el.clientWidth, h: el.clientHeight });
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open]);
 
   // Native wheel listener with passive: false to prevent browser/page zoom
   useEffect(() => {
@@ -346,8 +514,8 @@ export default function ImagePreviewModal({
     if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent navigation while downloading
-      if (isDownloading) return;
+      // Prevent input while a network action is in flight
+      if (isDownloading || isSaving) return;
 
       if (hasMultipleImages && e.key === "ArrowLeft") {
         e.preventDefault();
@@ -369,7 +537,16 @@ export default function ImagePreviewModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, currentIndex, hasMultipleImages, images, isDownloading, resetZoom]);
+  }, [
+    open,
+    currentIndex,
+    hasMultipleImages,
+    images,
+    isDownloading,
+    isSaving,
+    isDirty,
+    resetZoom,
+  ]);
 
   // ✅ Cleanup all cached blob URLs when modal closes
   useEffect(() => {
@@ -392,11 +569,11 @@ export default function ImagePreviewModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Prevent closing while downloading
-    if (isDownloading) return;
+    // Prevent closing while a network action is in flight
+    if (isDownloading || isSaving) return;
 
     if (e.target === backdropRef.current) {
-      onOpenChange(false);
+      requestClose();
     }
   };
 
@@ -465,9 +642,63 @@ export default function ImagePreviewModal({
                 data-testid="image-zoom-reset-button"
                 className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <RotateCcw className="h-4 w-4" />
+                <Maximize2 className="h-4 w-4" />
               </button>
             </div>
+
+            {/* Rotate Controls - Conditional */}
+            {canRotate && (
+              <div
+                className="flex items-center gap-1 rounded-lg border border-gray-200 px-1"
+                data-testid="image-rotate-controls"
+              >
+                <button
+                  onClick={handleRotateLeft}
+                  disabled={isLoading || hasError || isSaving}
+                  aria-label="Xoay trái 90°"
+                  title="Xoay trái 90°"
+                  data-testid="image-rotate-left-button"
+                  className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleRotateRight}
+                  disabled={isLoading || hasError || isSaving}
+                  aria-label="Xoay phải 90°"
+                  title="Xoay phải 90°"
+                  data-testid="image-rotate-right-button"
+                  className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RotateCw className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleFlip}
+                  disabled={isLoading || hasError || isSaving}
+                  aria-label="Xoay 180°"
+                  title="Xoay 180°"
+                  data-testid="image-flip-button"
+                  className="flex h-9 w-9 items-center justify-center rounded text-gray-700 transition-colors hover:bg-gray-100 hover:text-brand-600 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleSaveRotation}
+                  disabled={!isDirty || isSaving || isLoading || hasError}
+                  aria-label="Lưu xoay ảnh"
+                  title="Lưu"
+                  data-testid="image-rotate-save-button"
+                  className="flex h-9 items-center gap-1 rounded px-2 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  <span>Lưu</span>
+                </button>
+              </div>
+            )}
 
             {/* Download Button - Conditional */}
             {canDownload && (
@@ -492,8 +723,8 @@ export default function ImagePreviewModal({
             {/* Close Button */}
             <button
               ref={closeButtonRef}
-              onClick={() => onOpenChange(false)}
-              disabled={isDownloading}
+              onClick={requestClose}
+              disabled={isDownloading || isSaving}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-800 transition-colors hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Đóng"
               data-testid="image-preview-close-button"
@@ -549,9 +780,10 @@ export default function ImagePreviewModal({
               <img
                 src={imageUrl}
                 alt={currentFileName || "Preview"}
+                onLoad={handleImgLoad}
                 className="max-h-full max-w-full object-contain"
                 style={{
-                  transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+                  transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale * fitScale}) rotate(${displayRotation}deg)`,
                   transition: isPanning ? "none" : "transform 0.15s ease-out",
                   transformOrigin: "center center",
                   willChange: "transform",
@@ -572,7 +804,9 @@ export default function ImagePreviewModal({
           >
             <button
               onClick={handlePrev}
-              disabled={currentIndex <= 0 || isLoading || isDownloading}
+              disabled={
+                currentIndex <= 0 || isLoading || isDownloading || isSaving
+              }
               className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-gray-100"
               data-testid="image-preview-prev-button"
             >
@@ -589,7 +823,10 @@ export default function ImagePreviewModal({
             <button
               onClick={handleNext}
               disabled={
-                currentIndex >= images.length - 1 || isLoading || isDownloading
+                currentIndex >= images.length - 1 ||
+                isLoading ||
+                isDownloading ||
+                isSaving
               }
               className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-gray-100"
               data-testid="image-preview-next-button"
@@ -600,6 +837,19 @@ export default function ImagePreviewModal({
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+        title="Hủy thay đổi?"
+        description="Bạn đã xoay ảnh nhưng chưa lưu. Tiếp tục sẽ mất các thay đổi."
+        confirmText="Hủy thay đổi"
+        cancelText="Quay lại"
+        variant="warning"
+        onConfirm={handleDiscardAndContinue}
+      />
     </div>
   );
 }
