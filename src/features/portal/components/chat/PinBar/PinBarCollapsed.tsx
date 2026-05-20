@@ -4,7 +4,7 @@ import type { PinnedGroupMessage } from "./usePinBar";
 
 interface PinBarCollapsedProps {
   latestPin: PinnedGroupMessage;
-  remainingCount: number;
+  totalCount: number;
   isExpanded: boolean;
   onToggle: () => void;
 }
@@ -17,7 +17,7 @@ function getPreview(pin: PinnedGroupMessage): string {
 
 export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
   latestPin,
-  remainingCount,
+  totalCount,
   isExpanded,
   onToggle,
 }) => {
@@ -64,7 +64,7 @@ export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0 ml-3">
-        {remainingCount > 0 && (
+        {totalCount > 0 && (
           <span
             className="
               inline-flex items-center justify-center
@@ -73,9 +73,9 @@ export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
               bg-brand-100 text-brand-700
               text-[11px] font-semibold
             "
-            data-testid="pin-bar-remaining-count"
+            data-testid="pin-bar-total-count"
           >
-            +{remainingCount}
+            {totalCount > 9 ? "9+" : totalCount}
           </span>
         )}
         {isExpanded ? (

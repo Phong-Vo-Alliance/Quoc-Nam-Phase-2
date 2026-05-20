@@ -115,3 +115,20 @@ export interface AuthMeResponse {
   departments?: UserDepartmentDto[];
 }
 
+// ==========================================
+// Public Config (/api/config/public)
+// ==========================================
+
+export interface PublicWebsiteConfig {
+  MinutesIdleTimeout?: number;
+  TimeToHideUnreadSeparator?: number;
+}
+
+export interface PublicGeneralConfig {
+  WebsiteConfig?: PublicWebsiteConfig;
+}
+
+export interface PublicConfigResponse {
+  general?: PublicGeneralConfig;
+}
+

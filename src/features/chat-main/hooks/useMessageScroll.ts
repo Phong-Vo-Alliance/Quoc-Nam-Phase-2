@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { getMessagesAfter } from "@/api/messages.api";
 import { messageKeys } from "@/hooks/queries/keys/messageKeys";
@@ -12,6 +13,8 @@ import { categoriesKeys } from "@/hooks/queries/useCategories";
 import { conversationKeys } from "@/hooks/queries/keys/conversationKeys";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
+import { useUserIdle } from "@/hooks/useUserIdle";
+import { useAppConfig } from "@/hooks/useAppConfig";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import type { UseInfiniteQueryResult } from "@tanstack/react-query";
@@ -76,7 +79,17 @@ export function useMessageScroll({
   const queryClient = useQueryClient();
   const isVisible = usePageVisibility();
   const isWindowFocused = useWindowFocus();
-  const isUserPresent = isVisible && isWindowFocused;
+  const { pathname } = useLocation();
+  const appConfig = useAppConfig();
+  const websiteConfig = appConfig?.general?.WebsiteConfig;
+  const idleTimeoutMs = (websiteConfig?.MinutesIdleTimeout ?? 1) * 60_000;
+  const unreadSeparatorHideMs =
+    (websiteConfig?.TimeToHideUnreadSeparator ?? 10) * 1_000;
+  const isIdle = useUserIdle({
+    idleMs: idleTimeoutMs,
+    enabled: pathname === "/",
+  });
+  const isUserPresent = isVisible && isWindowFocused && !isIdle;
 
   const [showGoToBottom, setShowGoToBottom] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -433,7 +446,7 @@ export function useMessageScroll({
     const timer = setTimeout(() => {
       setFirstUnreadMessageId(null);
       setPendingClearUnread(false);
-    }, 10000);
+    }, unreadSeparatorHideMs);
     return () => clearTimeout(timer);
   }, [
     pendingClearUnread,
@@ -441,6 +454,7 @@ export function useMessageScroll({
     isUserPresent,
     firstUnreadMessageId,
     setFirstUnreadMessageId,
+    unreadSeparatorHideMs,
   ]);
 
   // 🆕 NEW: Handle new messages from others (not own messages)

@@ -5,6 +5,7 @@ import { SignalRProvider } from "./providers/SignalRProvider";
 import { useSecurity } from "./hooks/useSecurity";
 import { useEffect } from "react";
 import { useAuthStore } from "./stores/authStore";
+import { useAppConfigStore } from "./stores/appConfigStore";
 import { initializeViewMode } from "./stores/uiStore";
 import { getCurrentUser } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
@@ -40,6 +41,13 @@ export default function App() {
       initializeViewMode();
     }
   }, [isAuthenticated, user?.id]);
+
+  // Fetch public app config once after authenticated (endpoint requires Bearer)
+  useEffect(() => {
+    if (isAuthenticated) {
+      useAppConfigStore.getState().loadConfig();
+    }
+  }, [isAuthenticated]);
 
   // Check and update user info on app initialization/refresh
   useEffect(() => {

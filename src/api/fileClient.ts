@@ -25,6 +25,7 @@ export const fileApiClient = axios.create({
   timeout: 60000, // 60s for file uploads (longer than default)
   headers: {
     "Content-Type": "multipart/form-data",
+    "X-Platform": "web",
   },
 });
 

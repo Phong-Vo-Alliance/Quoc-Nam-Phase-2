@@ -10,6 +10,7 @@ export const identityApiClient = axios.create({
   baseURL: IDENTITY_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    'X-Platform': 'web',
   },
   timeout: 30000,
 });

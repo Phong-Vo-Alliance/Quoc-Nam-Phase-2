@@ -104,6 +104,9 @@ export async function exchangeWebSession(
     const response = await identityClient.post<LoginResponse>(
       "/api/auth/exchange-web-session",
       payload,
+      {
+        headers: { "X-Platform": "web" },
+      },
     );
     return response.data;
   } catch (error) {
@@ -140,7 +143,10 @@ export async function changePasswordFirst(
       "/auth/change-password",
       { newPassword: payload.newPassword },
       {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "X-Platform": "web",
+        },
       },
     );
     return response.data;

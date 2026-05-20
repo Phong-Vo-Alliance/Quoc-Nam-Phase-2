@@ -64,7 +64,7 @@ export interface UsePinBarReturn {
   toggleExpanded: () => void;
   unpin: (pinId: string) => void;
   latestPin: PinnedGroupMessage | null;
-  remainingCount: number;
+  totalCount: number;
 }
 
 export function usePinBar(conversationId: string | undefined): UsePinBarReturn {
@@ -101,6 +101,6 @@ export function usePinBar(conversationId: string | undefined): UsePinBarReturn {
     toggleExpanded,
     unpin,
     latestPin: pins[0] ?? null,
-    remainingCount: Math.max(0, pins.length - 1),
+    totalCount: pins.length,
   };
 }

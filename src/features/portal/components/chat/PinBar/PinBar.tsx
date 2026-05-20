@@ -19,7 +19,7 @@ export const PinBar: React.FC<PinBarProps> = ({
     toggleExpanded,
     unpin,
     latestPin,
-    remainingCount,
+    totalCount,
   } = usePinBar(conversationId);
 
   if (!visible || !latestPin) return null;
@@ -28,7 +28,7 @@ export const PinBar: React.FC<PinBarProps> = ({
     <div className="relative flex-1 min-w-0" data-testid="pin-bar">
       <PinBarCollapsed
         latestPin={latestPin}
-        remainingCount={remainingCount}
+        totalCount={totalCount}
         isExpanded={isExpanded}
         onToggle={toggleExpanded}
       />

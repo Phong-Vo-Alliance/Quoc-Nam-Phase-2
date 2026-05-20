@@ -22,11 +22,16 @@ export const JumpToUnreadPill: React.FC<JumpToUnreadPillProps> = ({
 }) => {
   const [isAbove, setIsAbove] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setIsAbove(false);
     observerRef.current?.disconnect();
     observerRef.current = null;
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
 
     const container = containerRef.current;
     if (!container || !firstUnreadMessageId) return;
@@ -66,6 +71,10 @@ export const JumpToUnreadPill: React.FC<JumpToUnreadPillProps> = ({
       if (rafId) cancelAnimationFrame(rafId);
       observerRef.current?.disconnect();
       observerRef.current = null;
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
     };
   }, [firstUnreadMessageId, containerRef]);
 
@@ -79,6 +88,12 @@ export const JumpToUnreadPill: React.FC<JumpToUnreadPillProps> = ({
     ) as HTMLElement | null;
     if (!separator) return;
     separator.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      setIsAbove(false);
+      hideTimerRef.current = null;
+    }, 1000);
   };
 
   return (

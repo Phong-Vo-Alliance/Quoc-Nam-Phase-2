@@ -394,10 +394,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         isConversationDisabled={isConversationDisabled}
       />
 
-      {/* Task banner + Pin bar (same row, group-only for pin) */}
-      {/* TODO: Bật lại PinBar khi hoàn thiện logic đầy đủ */}
+      {/* Task banner + Pin bar (stacked, group-only for pin) */}
       {activeCategoryId && (
-        <div className="mx-4 mt-2 flex gap-2 items-start [&:empty]:hidden">
+        <div className="mx-4 mt-2 flex flex-col gap-2 [&:empty]:hidden">
           <TaskBanner
             categoryId={activeCategoryId}
             onViewWorkType={(convId: string) => {

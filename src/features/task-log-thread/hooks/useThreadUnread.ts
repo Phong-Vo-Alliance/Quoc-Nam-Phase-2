@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
+import { useUserIdle } from "@/hooks/useUserIdle";
+import { useAppConfig } from "@/hooks/useAppConfig";
 import type { ChatMessage, ThreadDto } from "@/types/messages";
 
 interface UseThreadUnreadOptions {
@@ -24,7 +27,17 @@ export function useThreadUnread({
 }: UseThreadUnreadOptions) {
   const isVisible = usePageVisibility();
   const isWindowFocused = useWindowFocus();
-  const isUserPresent = isVisible && isWindowFocused;
+  const { pathname } = useLocation();
+  const appConfig = useAppConfig();
+  const websiteConfig = appConfig?.general?.WebsiteConfig;
+  const idleTimeoutMs = (websiteConfig?.MinutesIdleTimeout ?? 1) * 60_000;
+  const unreadSeparatorHideMs =
+    (websiteConfig?.TimeToHideUnreadSeparator ?? 10) * 1_000;
+  const isIdle = useUserIdle({
+    idleMs: idleTimeoutMs,
+    enabled: pathname === "/",
+  });
+  const isUserPresent = isVisible && isWindowFocused && !isIdle;
 
   const [firstUnreadReplyId, setFirstUnreadReplyId] = useState<string | null>(
     null,
@@ -123,9 +136,15 @@ export function useThreadUnread({
     const timer = setTimeout(() => {
       setFirstUnreadReplyId(null);
       setPendingClearUnread(false);
-    }, 10000);
+    }, unreadSeparatorHideMs);
     return () => clearTimeout(timer);
-  }, [pendingClearUnread, showGoToBottom, isUserPresent, firstUnreadReplyId]);
+  }, [
+    pendingClearUnread,
+    showGoToBottom,
+    isUserPresent,
+    firstUnreadReplyId,
+    unreadSeparatorHideMs,
+  ]);
 
   // Clear unread badge once user reaches bottom
   useEffect(() => {

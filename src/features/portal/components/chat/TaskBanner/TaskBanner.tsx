@@ -25,7 +25,7 @@ export const TaskBanner: React.FC<TaskBannerProps> = ({
   if (!visible) return null;
 
   return (
-    <div className="relative flex-1 min-w-0">
+    <div className="flex-1 min-w-0">
       <TaskBannerCollapsed
         breakdown={breakdown}
         totalCount={totalCount}
@@ -33,12 +33,10 @@ export const TaskBanner: React.FC<TaskBannerProps> = ({
         onToggle={toggleExpanded}
       />
       {isExpanded && (
-        <div className="absolute top-full left-0 right-0 z-20">
-          <TaskBannerExpanded
-            breakdown={breakdown}
-            onViewWorkType={handleViewWorkType}
-          />
-        </div>
+        <TaskBannerExpanded
+          breakdown={breakdown}
+          onViewWorkType={handleViewWorkType}
+        />
       )}
     </div>
   );
