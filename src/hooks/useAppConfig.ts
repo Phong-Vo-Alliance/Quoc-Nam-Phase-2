@@ -1,6 +1,6 @@
 import { useAppConfigStore } from "@/stores/appConfigStore";
-import type { PublicConfigResponse } from "@/types/identity";
+import type { AppConfigResponse } from "@/types/identity";
 
-export function useAppConfig(): PublicConfigResponse | null {
+export function useAppConfig(): AppConfigResponse | null {
   return useAppConfigStore((s) => s.data);
 }

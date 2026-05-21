@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import type { SignalRConnectionState } from "@/types/signalr-events";
 import { useAuthStore } from "@/stores/authStore";
+import { useAppConfigStore } from "@/stores/appConfigStore";
 
 // Re-export all event types from dedicated file
 export type { SignalRConnectionState };
@@ -123,6 +124,7 @@ export const SIGNALR_EVENTS = {
   DEPARTMENT_MEMBERS_REMOVED: "DepartmentMembersRemoved",
   DEPARTMENT_MEMBER_LEADER_STATUS_CHANGED:
     "DepartmentMemberLeaderStatusChanged",
+  USER_PERMISSIONS_CHANGED: "UserPermissionsChanged",
 
   // ============= Error Events =============
   ERROR: "Error",
@@ -783,6 +785,10 @@ class IdentityHubConnection {
             this.refreshLeaderChangeRelatedQueries();
           },
         );
+
+        conn.on(SIGNALR_EVENTS.USER_PERMISSIONS_CHANGED, () => {
+          useAppConfigStore.getState().reloadConfig();
+        });
 
         conn.onreconnecting((error) => {
           const ts = new Date().toISOString();

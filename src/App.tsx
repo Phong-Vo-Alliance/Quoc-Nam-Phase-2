@@ -42,7 +42,7 @@ export default function App() {
     }
   }, [isAuthenticated, user?.id]);
 
-  // Fetch public app config once after authenticated (endpoint requires Bearer)
+  // Fetch app config (/api/config/me) once after authenticated
   useEffect(() => {
     if (isAuthenticated) {
       useAppConfigStore.getState().loadConfig();

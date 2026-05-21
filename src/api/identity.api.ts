@@ -6,7 +6,7 @@ import type {
   PagedUserProfileResponse,
   CreateUserProfileRequest,
   UpdateUserProfileRequest,
-  PublicConfigResponse,
+  AppConfigResponse,
 } from '@/types/identity';
 
 // ==========================================
@@ -111,16 +111,16 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 // ==========================================
-// Public Config
+// App Config
 // ==========================================
 
 /**
- * Get public app config
- * GET /api/config/public
+ * Get app config for the current user
+ * GET /api/config/me
  */
-export async function getPublicConfig(): Promise<PublicConfigResponse> {
-  const response = await identityApiClient.get<PublicConfigResponse>(
-    '/api/config/public'
+export async function getAppConfig(): Promise<AppConfigResponse> {
+  const response = await identityApiClient.get<AppConfigResponse>(
+    '/api/config/me'
   );
   return response.data;
 }

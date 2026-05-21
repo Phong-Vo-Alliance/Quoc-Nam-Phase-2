@@ -116,19 +116,28 @@ export interface AuthMeResponse {
 }
 
 // ==========================================
-// Public Config (/api/config/public)
+// App Config (/api/config/me)
 // ==========================================
 
-export interface PublicWebsiteConfig {
+export interface AppWebsiteConfig {
   MinutesIdleTimeout?: number;
   TimeToHideUnreadSeparator?: number;
 }
 
-export interface PublicGeneralConfig {
-  WebsiteConfig?: PublicWebsiteConfig;
+export interface AppGeneralConfig {
+  WebsiteConfig?: AppWebsiteConfig;
 }
 
-export interface PublicConfigResponse {
-  general?: PublicGeneralConfig;
+export interface AppUploadLimitsConfig {
+  maxFilesPerUpload?: number;
+  maxFileSizeMB?: number;
+  maxImageSizeMB?: number;
+  maxVideoSizeMB?: number;
+  maxTotalUploadSizeMB?: number;
+}
+
+export interface AppConfigResponse {
+  general?: AppGeneralConfig;
+  uploadLimits?: AppUploadLimitsConfig;
 }
 
