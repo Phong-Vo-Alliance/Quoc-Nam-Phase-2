@@ -8,12 +8,24 @@
  * - Total unread count badge
  */
 
-import { Crown } from "lucide-react";
+import { Crown, MoreHorizontal, Pin, PinOff } from "lucide-react";
 import RelativeTime from "@/features/portal/components/RelativeTime";
 import { useAuthStore } from "@/stores/authStore";
 import { formatMessagePreview } from "@/utils/formatMessagePreview";
 import type { CategoryItemProps } from "../types";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+// MOCKUP: pin local state — remove with feature wire-up
+import {
+  isPinned,
+  togglePinned,
+  usePinnedSet,
+  MOCKUP_PIN_ENABLED,
+} from "../_mockPinned";
 
 // Get initials from name (max 2 chars)
 const getInitials = (name: string) =>
@@ -33,6 +45,11 @@ export function CategoryItem({
   const isCurrentUserLeader = !!category.departmentLeaders?.some(
     (leader) => leader.id === currentUserId && leader.isActive,
   );
+
+  // MOCKUP: pin state — remove with backend wire-up
+  usePinnedSet();
+  const pinned = isPinned(category.id);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Find the latest conversation with a message
   const latestConversation = category.conversations
@@ -65,12 +82,24 @@ export function CategoryItem({
   const parentMessage = latestConversation?.lastMessage?.parentMessage ?? null;
 
   return (
-    <button
-      className={`w-full flex items-center gap-3 p-2 hover:bg-brand-50 cursor-pointer transition-colors text-left ${
-        isActive ? "bg-brand-50 ring-1 ring-brand-100" : ""
+    <div
+      role="button"
+      tabIndex={0}
+      className={`group relative w-full flex items-center gap-3 p-2 hover:bg-brand-50 cursor-pointer transition-colors text-left ${
+        isActive
+          ? "bg-brand-50 ring-1 ring-brand-100"
+          : pinned
+            ? "bg-amber-50/40"
+            : ""
       }`}
       data-testid={`category-item-${category.id}`}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       {/* Avatar */}
       <div className="relative flex-shrink-0">
@@ -223,7 +252,71 @@ export function CategoryItem({
           )}
         </div>
       </div>
-    </button>
+
+      {/* MOCKUP: right slot — Pin icon (idle) hoặc 3-dot menu (hover) */}
+      {MOCKUP_PIN_ENABLED && (
+      <div className="relative ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center self-center">
+        {pinned && (
+          <Pin
+            className={`h-3.5 w-3.5 text-gray-400 rotate-45 ${
+              menuOpen ? "hidden" : "group-hover:hidden"
+            }`}
+            aria-label="Đã ghim"
+          />
+        )}
+        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Thao tác"
+              className={`absolute inset-0 inline-flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 ${
+                menuOpen
+                  ? "opacity-100"
+                  : pinned
+                    ? "opacity-0 group-hover:opacity-100"
+                    : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+              }`}
+              data-testid={`category-actions-${category.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            side="bottom"
+            className="w-44 rounded-lg border border-gray-200 shadow-lg p-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePinned(category.id);
+                setMenuOpen(false);
+              }}
+            >
+              {pinned ? (
+                <>
+                  <PinOff className="h-4 w-4 text-gray-500" />
+                  <span>Bỏ ghim</span>
+                </>
+              ) : (
+                <>
+                  <Pin className="h-4 w-4 text-amber-500" />
+                  <span>Ghim hội thoại</span>
+                </>
+              )}
+            </button>
+          </PopoverContent>
+        </Popover>
+      </div>
+      )}
+    </div>
   );
 }
 

@@ -17,11 +17,18 @@ export function BlockedPage() {
       const isOpen = detectDevTools();
       setIsDevToolsOpen(isOpen);
       setIsChecking(false);
+
+      // Auto redirect when DevTools is closed
+      if (!isOpen) {
+        clearInterval(checkInterval);
+        window.location.href = "/";
+      }
     }, 1000);
 
     // Initial check
     setTimeout(() => {
-      setIsDevToolsOpen(detectDevTools());
+      const isOpen = detectDevTools();
+      setIsDevToolsOpen(isOpen);
       setIsChecking(false);
     }, 500);
 

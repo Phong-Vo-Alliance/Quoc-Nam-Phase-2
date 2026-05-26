@@ -312,15 +312,15 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
           </PopoverContent>
         </Popover>
 
-        {/* Cẩm nang - Guide button */}
-        <button
+        {/* Cẩm nang - Guide button (hidden) */}
+        {/* <button
           title="Cẩm nang"
           onClick={() => openGuideWithToken()}
           data-testid="sidebar-guide-button"
           className="p-2 rounded-lg transition-colors bg-brand-600 text-white/90 hover:text-white hover:bg-white/10"
         >
           <BookOpen className="h-6 w-6" />
-        </button>
+        </button> */}
 
         {/* NEW: User avatar with Popover */}
         <Popover open={openProfile} onOpenChange={setOpenProfile}>

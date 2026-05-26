@@ -57,6 +57,8 @@ import { useCreateDirectMessage } from "@/hooks/mutations/useConversationMutatio
 import { DirectMessageItem } from "./components/DirectMessageItem";
 import { CategoryItem } from "./components/CategoryItem";
 import type { ChatTarget, ContactItem } from "./types";
+// MOCKUP: pin local state — remove with feature wire-up
+import { usePinnedSet } from "./_mockPinned";
 
 /* ===================== Props ===================== */
 export interface ConversationListSidebarProps {
@@ -220,6 +222,8 @@ export const ConversationListSidebar: React.FC<
   const [tab, setTab] = React.useState<"group" | "dm">(getInitialTab());
   const [q, setQ] = React.useState("");
   const [openTools, setOpenTools] = React.useState(false);
+  // MOCKUP: subscribe to pinned set → sort pinned items to the top
+  const pinnedSet = usePinnedSet();
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] =
     React.useState<string | null>(null);
@@ -533,6 +537,19 @@ export const ConversationListSidebar: React.FC<
   const filteredPropContacts = (propContacts || []).filter(
     (c) => match(c.name) || match(c.lastMessage),
   );
+
+  // MOCKUP: re-order to promote pinned items to the top (stable within group)
+  const orderedApiCategories = React.useMemo(() => {
+    const pinned = filteredApiCategories.filter((c) => pinnedSet.has(c.id));
+    const others = filteredApiCategories.filter((c) => !pinnedSet.has(c.id));
+    return [...pinned, ...others];
+  }, [filteredApiCategories, pinnedSet]);
+
+  const orderedApiDirects = React.useMemo(() => {
+    const pinned = filteredApiDirects.filter((c) => pinnedSet.has(c.id));
+    const others = filteredApiDirects.filter((c) => !pinnedSet.has(c.id));
+    return [...pinned, ...others];
+  }, [filteredApiDirects, pinnedSet]);
 
   // Handlers
   const handleGroupSelect = React.useCallback(
@@ -1162,7 +1179,7 @@ export const ConversationListSidebar: React.FC<
                 </div>
               ) : (
                 <ul className="mt-2">
-                  {filteredApiCategories.map((category) => (
+                  {orderedApiCategories.map((category) => (
                     <li key={category.id}>
                       <CategoryItem
                         category={category}
@@ -1269,7 +1286,7 @@ export const ConversationListSidebar: React.FC<
                 </div>
               )}
 
-              {filteredApiDirects.map((contact) => (
+              {orderedApiDirects.map((contact) => (
                 <li key={contact.id}>
                   <DirectMessageItem
                     contact={contact}

@@ -110,21 +110,21 @@ export default function ImagePreviewModal({
   const [isSaving, setIsSaving] = useState(false);
   // Pending action that was blocked by the unsaved-rotation confirm dialog
   const [pendingAction, setPendingAction] = useState<
-    | { type: "close" }
-    | { type: "nav"; direction: "prev" | "next" }
-    | null
+    { type: "close" } | { type: "nav"; direction: "prev" | "next" } | null
   >(null);
 
   const isDirty = rotateActions.length > 0;
 
   // Image natural size + content area size for the fit-scale calculation
   // applied when rotation is 90°/270° (rotated bounding box must fit container).
-  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(
-    null,
-  );
-  const [contentSize, setContentSize] = useState<{ w: number; h: number } | null>(
-    null,
-  );
+  const [naturalSize, setNaturalSize] = useState<{
+    w: number;
+    h: number;
+  } | null>(null);
+  const [contentSize, setContentSize] = useState<{
+    w: number;
+    h: number;
+  } | null>(null);
 
   const MIN_SCALE = 1;
   const MAX_SCALE = 5;
@@ -132,6 +132,9 @@ export default function ImagePreviewModal({
 
   // ✅ Local Gallery Cache - Cache blob URLs for this modal session
   const [imageCache, setImageCache] = useState<Map<string, string>>(new Map());
+
+  // Refresh key to force re-fetch after rotation save
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const requestClose = useCallback(() => {
     if (isDirty) {
@@ -193,7 +196,10 @@ export default function ImagePreviewModal({
       const PADDING = 32;
       const availW = Math.max(contentSize.w - PADDING, 1);
       const availH = Math.max(contentSize.h - PADDING, 1);
-      const scaleContain = Math.min(availW / naturalSize.w, availH / naturalSize.h);
+      const scaleContain = Math.min(
+        availW / naturalSize.w,
+        availH / naturalSize.h,
+      );
       const renderedW = naturalSize.w * scaleContain;
       const renderedH = naturalSize.h * scaleContain;
       fitScale = Math.min(availW / renderedH, availH / renderedW);
@@ -331,6 +337,11 @@ export default function ImagePreviewModal({
       }
       setRotateActions([]);
       setDisplayRotation(0);
+
+      // Force re-fetch the rotated image from server
+      setImageUrl(null);
+      setRefreshKey((k) => k + 1);
+
       toast.success("Lưu thành công");
     } catch (error: any) {
       console.error("Lỗi khi xoay ảnh:", error);
@@ -410,6 +421,10 @@ export default function ImagePreviewModal({
       return;
     }
 
+    // AbortController to prevent double-fetch (React StrictMode double-mount)
+    const abortController = new AbortController();
+    let cancelled = false;
+
     async function loadPreview() {
       if (!currentFileId) return;
 
@@ -435,7 +450,11 @@ export default function ImagePreviewModal({
         }>(`/api/Files/${currentFileId}/preview`, {
           responseType: "json",
           timeout: 30000,
+          signal: abortController.signal,
         });
+
+        // If effect was cleaned up while awaiting, discard result
+        if (cancelled) return;
 
         // Set canDownload / canRotate flags
         setCanDownload(response.data.canDownload);
@@ -460,17 +479,27 @@ export default function ImagePreviewModal({
         setImageCache((prev) => new Map(prev).set(currentFileId, blobUrl));
         setImageUrl(blobUrl);
       } catch (error) {
+        // Ignore abort errors (expected during cleanup)
+        if (cancelled || abortController.signal.aborted) return;
         console.error("Lỗi khi tải ảnh xem trước:", error);
         setHasError(true);
         setCanDownload(false);
         setCanRotate(false);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
     loadPreview();
-  }, [open, currentFileId, imageCache]);
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentFileId, refreshKey]);
 
   // Observe content area size to keep fitScale in sync with window resize.
   useEffect(() => {
