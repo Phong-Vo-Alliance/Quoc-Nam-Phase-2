@@ -7,6 +7,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useDemoConfigStore } from '@/stores/demoConfigStore';
 import { AUTH_CONFIG } from '@/lib/auth/config';
 import { isTokenExpired, willTokenExpireSoon } from '@/lib/auth/jwt';
 
@@ -21,6 +22,7 @@ export function useTokenRefresh() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const logout = useAuthStore((state) => state.logout);
+  const isDemoSession = useDemoConfigStore((state) => state.isDemoSession);
   const navigate = useNavigate();
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -46,8 +48,8 @@ export function useTokenRefresh() {
   }, [accessToken, isAuthenticated, logout, navigate]);
 
   useEffect(() => {
-    // Don't run if not authenticated
-    if (!isAuthenticated || !accessToken) {
+    // Don't run if not authenticated or in demo mode (no real token)
+    if (!isAuthenticated || !accessToken || isDemoSession) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
