@@ -16,7 +16,7 @@ const iso = (d = new Date()) => d.toISOString();
 export const mockUsers: User[] = [
   {
     id: "u_thanh_truc",
-    displayName: "Thanh Trúc",
+    displayName: "Trương Thanh Trúc",
     email: "truc@example.com",    
     roles: ["leader"], // vai trò hệ thống
     departmentIds: ["dep_kho_hang"],
@@ -26,7 +26,7 @@ export const mockUsers: User[] = [
   },
   {
     id: "u_thu_an",
-    displayName: "Thu An",
+    displayName: "Vũ Thu An",
     email: "an@example.com",    
     roles: ["staff"],
     departmentIds: ["dep_kho_hang"],
@@ -36,7 +36,7 @@ export const mockUsers: User[] = [
   },
   {
     id: "u_diem_chi",
-    displayName: "Diễm Chi",
+    displayName: "Lê Diễm Chi",
     email: "chi@example.com",    
     roles: ["staff"],
     departmentIds: ["dep_kho_hang"],
@@ -58,8 +58,8 @@ export const mockUsers: User[] = [
   // Phòng "Vận Hành": 2 nhân sự như yêu cầu
   {
     id: "u_huyen",
-    displayName: "Huyền",
-    email: "huyen@example.com",    
+    displayName: "Tăng Thị Huyền",
+    email: "huyen@example.com",
     roles: ["leader"], // giả định Huyền là leader phòng Vận Hành để auto-join group
     departmentIds: ["dep_van_hanh"],
     primaryDepartmentId: "dep_van_hanh",
@@ -69,10 +69,64 @@ export const mockUsers: User[] = [
   {
     id: "u_ngoc_vang",
     displayName: "Ngọc Vàng",
-    email: "ngocvang@example.com",    
+    email: "ngocvang@example.com",
     roles: ["staff"],
     departmentIds: ["dep_van_hanh"],
     primaryDepartmentId: "dep_van_hanh",
+    active: true,
+    createdAt: iso(),
+  },
+  {
+    id: "u_kim_vui",
+    displayName: "Huỳnh Kim Vui",
+    email: "vui@example.com",
+    roles: ["staff"],
+    departmentIds: ["dep_van_hanh"],
+    primaryDepartmentId: "dep_van_hanh",
+    active: true,
+    createdAt: iso(),
+  },
+  {
+    id: "u_ngoc_han",
+    displayName: "Lưu Ngọc Hân",
+    email: "han@example.com",
+    roles: ["staff"],
+    departmentIds: ["dep_van_hanh"],
+    primaryDepartmentId: "dep_van_hanh",
+    active: true,
+    createdAt: iso(),
+  },
+
+  // Phòng "Kho Hàng": bổ sung thêm
+  {
+    id: "u_thanh_thai",
+    displayName: "Trương Thành Thái",
+    email: "thai@example.com",
+    roles: ["staff"],
+    departmentIds: ["dep_kho_hang"],
+    primaryDepartmentId: "dep_kho_hang",
+    active: true,
+    createdAt: iso(),
+  },
+
+  // Phòng "Điều hành"
+  {
+    id: "u_phuong_truc",
+    displayName: "Phan Thị Phương Trúc",
+    email: "truc@example.com",
+    roles: ["staff"],
+    departmentIds: ["dep_dieu_hanh"],
+    primaryDepartmentId: "dep_dieu_hanh",
+    active: true,
+    createdAt: iso(),
+  },
+  {
+    id: "u_tieu_my",
+    displayName: "Nguyễn Tiểu My",
+    email: "my@example.com",
+    roles: ["staff"],
+    departmentIds: ["dep_dieu_hanh"],
+    primaryDepartmentId: "dep_dieu_hanh",
     active: true,
     createdAt: iso(),
   },
@@ -83,15 +137,22 @@ export const mockDepartments: Department[] = [
   {
     id: "dep_kho_hang",
     name: "Kho Hàng",
-    leaderId: "u_thanh_truc", // Thanh Trúc
-    memberIds: ["u_thanh_truc", "u_thu_an", "u_diem_chi", "u_le_binh"],
+    leaderId: "u_thanh_truc",
+    memberIds: ["u_thanh_truc", "u_thu_an", "u_diem_chi", "u_le_binh", "u_thanh_thai"],
     createdAt: iso(),
   },
   {
     id: "dep_van_hanh",
     name: "Vận Hành",
-    leaderId: "u_huyen", // Huyền (leader để auto-join group)
-    memberIds: ["u_huyen", "u_ngoc_vang"],
+    leaderId: "u_huyen",
+    memberIds: ["u_huyen", "u_ngoc_vang", "u_kim_vui", "u_ngoc_han"],
+    createdAt: iso(),
+  },
+  {
+    id: "dep_dieu_hanh",
+    name: "Điều hành",
+    leaderId: "u_phuong_truc",
+    memberIds: ["u_phuong_truc", "u_tieu_my"],
     createdAt: iso(),
   },
 ];

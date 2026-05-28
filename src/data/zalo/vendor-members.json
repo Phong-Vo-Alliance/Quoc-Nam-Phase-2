@@ -1,0 +1,341 @@
+{
+  "vg_001": [
+    {
+      "id": "vm_001_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_001_huyen",
+      "role": "STAFF",
+      "displayName": "Tăng Thị Huyền",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_huyen",
+      "email": "huyen@quocnam.com",
+      "canDownload": true
+    },
+    {
+      "id": "vm_001_thu_an",
+      "role": "STAFF",
+      "displayName": "Vũ Thu An",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_thu_an",
+      "email": "an@quocnam.com",
+      "canDownload": false
+    },
+    {
+      "id": "vm_001_vendor1",
+      "role": "VENDOR",
+      "displayName": "Anh Minh - Phương Nam",
+      "avatarUrl": null,
+      "zaloUserId": "zv_phuong_nam_1",
+      "zaloDisplayName": "Minh Phương Nam",
+      "internalUserId": null,
+      "email": null
+    },
+    {
+      "id": "vm_001_vendor2",
+      "role": "VENDOR",
+      "displayName": "Chị Lan - Phương Nam",
+      "avatarUrl": null,
+      "zaloUserId": "zv_phuong_nam_2",
+      "zaloDisplayName": "Lan Dispatcher",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_002": [
+    {
+      "id": "vm_002_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_002_huyen",
+      "role": "STAFF",
+      "displayName": "Tăng Thị Huyền",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_huyen",
+      "email": "huyen@quocnam.com",
+      "canDownload": true
+    },
+    {
+      "id": "vm_002_diem_chi",
+      "role": "STAFF",
+      "displayName": "Lê Diễm Chi",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_diem_chi",
+      "email": "chi@quocnam.com",
+      "canDownload": false
+    },
+    {
+      "id": "vm_002_vendor1",
+      "role": "VENDOR",
+      "displayName": "Anh Tuấn - Kho Tân Bình",
+      "avatarUrl": null,
+      "zaloUserId": "zv_tan_binh_1",
+      "zaloDisplayName": "Tuấn Kho TB",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_003": [
+    {
+      "id": "vm_003_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_003_thu_an",
+      "role": "STAFF",
+      "displayName": "Vũ Thu An",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_thu_an",
+      "email": "an@quocnam.com",
+      "canDownload": true
+    },
+    {
+      "id": "vm_003_diem_chi",
+      "role": "STAFF",
+      "displayName": "Lê Diễm Chi",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_diem_chi",
+      "email": "chi@quocnam.com",
+      "canDownload": false
+    },
+    {
+      "id": "vm_003_vendor1",
+      "role": "VENDOR",
+      "displayName": "Chị Ngọc - Thành Công Pack",
+      "avatarUrl": null,
+      "zaloUserId": "zv_thanh_cong_1",
+      "zaloDisplayName": "Ngọc TCP",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_004": [
+    {
+      "id": "vm_004_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_004_diem_chi",
+      "role": "STAFF",
+      "displayName": "Lê Diễm Chi",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_diem_chi",
+      "email": "chi@quocnam.com",
+      "canDownload": false
+    },
+    {
+      "id": "vm_004_le_binh",
+      "role": "STAFF",
+      "displayName": "Lệ Bình",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_le_binh",
+      "email": "binh@quocnam.com",
+      "canDownload": true
+    },
+    {
+      "id": "vm_004_vendor1",
+      "role": "VENDOR",
+      "displayName": "Anh Đức - Delta Equipment",
+      "avatarUrl": null,
+      "zaloUserId": "zv_delta_1",
+      "zaloDisplayName": "Đức Delta",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_005": [
+    {
+      "id": "vm_005_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_005_huyen",
+      "role": "STAFF",
+      "displayName": "Tăng Thị Huyền",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_huyen",
+      "email": "huyen@quocnam.com",
+      "canDownload": true
+    },
+    {
+      "id": "vm_005_vendor1",
+      "role": "VENDOR",
+      "displayName": "Chị Hoa - Logistics Pro",
+      "avatarUrl": null,
+      "zaloUserId": "zv_logpro_1",
+      "zaloDisplayName": "Hoa LP",
+      "internalUserId": null,
+      "email": null
+    },
+    {
+      "id": "vm_005_vendor2",
+      "role": "VENDOR",
+      "displayName": "Anh Khoa - Logistics Pro",
+      "avatarUrl": null,
+      "zaloUserId": "zv_logpro_2",
+      "zaloDisplayName": "Khoa LP Manager",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_006": [
+    {
+      "id": "vm_006_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_006_vendor1",
+      "role": "VENDOR",
+      "displayName": "Chị Linh - Trâm Anh Food",
+      "avatarUrl": null,
+      "zaloUserId": "zv_tram_anh_001",
+      "zaloDisplayName": "Linh TAF",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_007": [
+    {
+      "id": "vm_007_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_007_vendor1",
+      "role": "VENDOR",
+      "displayName": "Anh Tuấn - Nấm Phú Gia",
+      "avatarUrl": null,
+      "zaloUserId": "zv_phu_gia_001",
+      "zaloDisplayName": "Tuấn NPG",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_012": [
+    {
+      "id": "vm_012_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_012_vendor1",
+      "role": "VENDOR",
+      "displayName": "Chị Hương - Giò Chả Cửu Long",
+      "avatarUrl": null,
+      "zaloUserId": "zv_cuu_long_001",
+      "zaloDisplayName": "Hương CL",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_014": [
+    {
+      "id": "vm_014_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_014_vendor1",
+      "role": "VENDOR",
+      "displayName": "Anh Phong - Vifood",
+      "avatarUrl": null,
+      "zaloUserId": "zv_vifood_001",
+      "zaloDisplayName": "Phong Vifood",
+      "internalUserId": null,
+      "email": null
+    }
+  ],
+  "vg_016": [
+    {
+      "id": "vm_016_admin",
+      "role": "ADMIN",
+      "displayName": "Diệp Nguyên",
+      "avatarUrl": null,
+      "zaloUserId": null,
+      "zaloDisplayName": null,
+      "internalUserId": "u_admin",
+      "email": "admin@quocnam.com"
+    },
+    {
+      "id": "vm_016_vendor1",
+      "role": "VENDOR",
+      "displayName": "Chị Mai - Đà Lạt GAP Store",
+      "avatarUrl": null,
+      "zaloUserId": "zv_dalat_gap_001",
+      "zaloDisplayName": "Mai DLG",
+      "internalUserId": null,
+      "email": null
+    }
+  ]
+}

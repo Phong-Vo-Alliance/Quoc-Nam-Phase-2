@@ -1,0 +1,56 @@
+{
+  "vt_001_1": [
+    {
+      "id": "vtl_001_1_1",
+      "taskId": "vt_001_1",
+      "senderId": "u_admin",
+      "senderName": "Diệp Nguyên",
+      "content": "Huyền xác nhận lại với Phương Nam lịch giao thứ 2 nhé, họ đang hỏi.",
+      "sentAt": "2026-05-19T08:12:00.000Z"
+    },
+    {
+      "id": "vtl_001_1_2",
+      "taskId": "vt_001_1",
+      "senderId": "u_huyen",
+      "senderName": "Huyền",
+      "content": "Dạ em đã gọi, Anh Minh xác nhận 3 xe 5 tấn, dự kiến 7h sáng thứ 2.",
+      "sentAt": "2026-05-19T08:45:00.000Z"
+    },
+    {
+      "id": "vtl_001_1_3",
+      "taskId": "vt_001_1",
+      "senderId": "u_admin",
+      "senderName": "Diệp Nguyên",
+      "content": "OK, cập nhật vào hệ thống và báo kho chuẩn bị nhé.",
+      "sentAt": "2026-05-19T08:50:00.000Z"
+    }
+  ],
+  "vt_001_2": [
+    {
+      "id": "vtl_001_2_1",
+      "taskId": "vt_001_2",
+      "senderId": "u_thu_an",
+      "senderName": "Thu An",
+      "content": "Em đã xem phiếu xuất kho, số lượng khớp với đơn. Đang đối chiếu thêm phần phụ kiện.",
+      "sentAt": "2026-05-19T09:20:00.000Z"
+    }
+  ],
+  "vt_002_1": [
+    {
+      "id": "vtl_002_1_1",
+      "taskId": "vt_002_1",
+      "senderId": "u_admin",
+      "senderName": "Diệp Nguyên",
+      "content": "Diễm Chi ơi, kho Tân Bình báo có chênh lệch 50 thùng. Kiểm tra lại giúp anh.",
+      "sentAt": "2026-05-19T08:35:00.000Z"
+    },
+    {
+      "id": "vtl_002_1_2",
+      "taskId": "vt_002_1",
+      "senderId": "u_diem_chi",
+      "senderName": "Diễm Chi",
+      "content": "Dạ em sẽ kiểm tra hệ thống và xác nhận lại với kho trong buổi chiều.",
+      "sentAt": "2026-05-19T08:40:00.000Z"
+    }
+  ]
+}

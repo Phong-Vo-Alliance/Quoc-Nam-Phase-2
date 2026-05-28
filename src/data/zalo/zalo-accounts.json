@@ -1,0 +1,29 @@
+[
+  {
+    "id": "za_001",
+    "zaloUserId": "zalo_uid_001",
+    "displayName": "Quốc Nam Sup",
+    "avatarUrl": null,
+    "phoneNumber": "0901234567",
+    "linkedAt": "2026-05-01T08:00:00.000Z",
+    "isActive": true
+  },
+  {
+    "id": "za_003",
+    "zaloUserId": "zalo_uid_003",
+    "displayName": "Diệp Nguyên",
+    "avatarUrl": null,
+    "phoneNumber": "0908899889",
+    "linkedAt": "2026-05-03T09:35:00.000Z",
+    "isActive": true
+  },
+  {
+    "id": "za_002",
+    "zaloUserId": "zalo_uid_002",
+    "displayName": "Quốc Nam - Kho Hàng",
+    "avatarUrl": null,
+    "phoneNumber": "0907654321",
+    "linkedAt": "2026-05-02T09:30:00.000Z",
+    "isActive": true
+  }
+]

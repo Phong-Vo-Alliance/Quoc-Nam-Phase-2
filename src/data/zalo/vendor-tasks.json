@@ -1,0 +1,292 @@
+{
+  "vg_001": [
+    {
+      "id": "vt_001_1",
+      "groupId": "vg_001",
+      "title": "Xác nhận lịch giao hàng ngày 20/05",
+      "description": "Liên hệ Phương Nam xác nhận giờ giao và số lượng xe",
+      "status": "todo",
+      "assignToId": "u_huyen",
+      "assignToName": "Huyền",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_001_1_1", "text": "Gọi điện xác nhận giờ giao", "done": false },
+        { "id": "vtc_001_1_2", "text": "Xác nhận số lượng xe (3 xe)", "done": false },
+        { "id": "vtc_001_1_3", "text": "Cập nhật vào hệ thống", "done": false }
+      ],
+      "sourceMessageId": "msg_001_003",
+      "logCount": 3,
+      "createdAt": "2026-05-19T08:10:00.000Z",
+      "updatedAt": "2026-05-19T08:10:00.000Z"
+    },
+    {
+      "id": "vt_001_2",
+      "groupId": "vg_001",
+      "title": "Kiểm tra đơn hàng 3 tấn gửi Phương Nam",
+      "description": "Đối chiếu phiếu xuất kho với thông tin đơn hàng",
+      "status": "doing",
+      "assignToId": "u_thu_an",
+      "assignToName": "Thu An",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_001_2_1", "text": "Xem phiếu xuất kho", "done": true },
+        { "id": "vtc_001_2_2", "text": "Đối chiếu với đơn đặt hàng", "done": false }
+      ],
+      "sourceMessageId": "msg_001_010",
+      "logCount": 1,
+      "createdAt": "2026-05-19T07:30:00.000Z",
+      "updatedAt": "2026-05-19T09:15:00.000Z"
+    },
+    {
+      "id": "vt_001_3",
+      "groupId": "vg_001",
+      "title": "Xử lý phản hồi chậm trễ từ Phương Nam",
+      "description": null,
+      "status": "doing",
+      "assignToId": "u_admin",
+      "assignToName": "Diệp Nguyên",
+      "assignedById": "u_huyen",
+      "assignedByName": "Huyền",
+      "checklist": [],
+      "sourceMessageId": "msg_001_013",
+      "createdAt": "2026-05-19T09:00:00.000Z",
+      "updatedAt": "2026-05-19T09:00:00.000Z"
+    },
+    {
+      "id": "vt_001_4",
+      "groupId": "vg_001",
+      "title": "Ghi nhận báo cáo tình trạng xe hôm nay",
+      "description": null,
+      "status": "finished",
+      "assignToId": "u_huyen",
+      "assignToName": "Huyền",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_001_4_1", "text": "Nhận báo cáo từ lái xe", "done": true },
+        { "id": "vtc_001_4_2", "text": "Lưu vào hồ sơ nhà cung cấp", "done": true }
+      ],
+      "sourceMessageId": null,
+      "createdAt": "2026-05-19T06:00:00.000Z",
+      "updatedAt": "2026-05-19T10:20:00.000Z"
+    },
+    {
+      "id": "vt_001_5",
+      "groupId": "vg_001",
+      "title": "Cập nhật hợp đồng vận chuyển tháng 6",
+      "description": null,
+      "status": "finished",
+      "assignToId": "u_thu_an",
+      "assignToName": "Thu An",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [],
+      "sourceMessageId": null,
+      "createdAt": "2026-05-17T08:00:00.000Z",
+      "updatedAt": "2026-05-17T15:30:00.000Z"
+    }
+  ],
+  "vg_002": [
+    {
+      "id": "vt_002_1",
+      "groupId": "vg_002",
+      "title": "Kiểm tra tồn kho tháng 5",
+      "description": "Đối chiếu số liệu tồn kho thực tế với báo cáo kho Tân Bình",
+      "status": "todo",
+      "assignToId": "u_diem_chi",
+      "assignToName": "Diễm Chi",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_002_1_1", "text": "Xem báo cáo kho từ Tân Bình", "done": false },
+        { "id": "vtc_002_1_2", "text": "Đối chiếu với hệ thống nội bộ", "done": false },
+        { "id": "vtc_002_1_3", "text": "Báo cáo chênh lệch (nếu có)", "done": false }
+      ],
+      "sourceMessageId": "msg_002_005",
+      "logCount": 2,
+      "createdAt": "2026-05-19T08:30:00.000Z",
+      "updatedAt": "2026-05-19T08:30:00.000Z"
+    },
+    {
+      "id": "vt_002_2",
+      "groupId": "vg_002",
+      "title": "Lập phiếu nhập kho lô hàng mới",
+      "description": null,
+      "status": "doing",
+      "assignToId": "u_huyen",
+      "assignToName": "Huyền",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_002_2_1", "text": "Tạo phiếu nhập kho", "done": true },
+        { "id": "vtc_002_2_2", "text": "Điền thông tin lô hàng", "done": false }
+      ],
+      "sourceMessageId": null,
+      "createdAt": "2026-05-19T07:00:00.000Z",
+      "updatedAt": "2026-05-19T09:45:00.000Z"
+    },
+    {
+      "id": "vt_002_3",
+      "groupId": "vg_002",
+      "title": "Xác nhận số lượng hàng tháng 5 với kho",
+      "description": null,
+      "status": "finished",
+      "assignToId": "u_admin",
+      "assignToName": "Diệp Nguyên",
+      "assignedById": "u_diem_chi",
+      "assignedByName": "Diễm Chi",
+      "checklist": [],
+      "sourceMessageId": "msg_002_007",
+      "createdAt": "2026-05-19T06:30:00.000Z",
+      "updatedAt": "2026-05-19T11:00:00.000Z"
+    }
+  ],
+  "vg_003": [
+    {
+      "id": "vt_003_1",
+      "groupId": "vg_003",
+      "title": "Duyệt mẫu đóng gói mới từ Thành Công",
+      "description": "Xem xét và phê duyệt thiết kế bao bì mới do NCC đề xuất",
+      "status": "todo",
+      "assignToId": "u_admin",
+      "assignToName": "Diệp Nguyên",
+      "assignedById": "u_thu_an",
+      "assignedByName": "Thu An",
+      "checklist": [
+        { "id": "vtc_003_1_1", "text": "Xem mẫu thiết kế", "done": false },
+        { "id": "vtc_003_1_2", "text": "Lấy ý kiến bộ phận Marketing", "done": false },
+        { "id": "vtc_003_1_3", "text": "Phản hồi NCC", "done": false }
+      ],
+      "sourceMessageId": "msg_003_006",
+      "createdAt": "2026-05-19T09:10:00.000Z",
+      "updatedAt": "2026-05-19T09:10:00.000Z"
+    },
+    {
+      "id": "vt_003_2",
+      "groupId": "vg_003",
+      "title": "Theo dõi lô hàng đóng gói sáng nay",
+      "description": null,
+      "status": "doing",
+      "assignToId": "u_diem_chi",
+      "assignToName": "Diễm Chi",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_003_2_1", "text": "Kiểm tra tiến độ đóng gói", "done": true },
+        { "id": "vtc_003_2_2", "text": "Xác nhận số lượng hoàn thành", "done": false }
+      ],
+      "sourceMessageId": "msg_003_008",
+      "createdAt": "2026-05-19T08:00:00.000Z",
+      "updatedAt": "2026-05-19T10:00:00.000Z"
+    },
+    {
+      "id": "vt_003_3",
+      "groupId": "vg_003",
+      "title": "Gửi yêu cầu báo giá vật liệu đóng gói",
+      "description": null,
+      "status": "finished",
+      "assignToId": "u_thu_an",
+      "assignToName": "Thu An",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [],
+      "sourceMessageId": null,
+      "createdAt": "2026-05-18T08:00:00.000Z",
+      "updatedAt": "2026-05-18T14:00:00.000Z"
+    }
+  ],
+  "vg_004": [
+    {
+      "id": "vt_004_1",
+      "groupId": "vg_004",
+      "title": "Xem xét báo giá máy nâng hàng từ Delta",
+      "description": "Phân tích báo giá và so sánh với nhà cung cấp khác",
+      "status": "todo",
+      "assignToId": "u_admin",
+      "assignToName": "Diệp Nguyên",
+      "assignedById": "u_le_binh",
+      "assignedByName": "Lệ Bình",
+      "checklist": [
+        { "id": "vtc_004_1_1", "text": "Đọc báo giá từ Delta", "done": false },
+        { "id": "vtc_004_1_2", "text": "So sánh với báo giá cũ", "done": false },
+        { "id": "vtc_004_1_3", "text": "Trình ban giám đốc", "done": false }
+      ],
+      "sourceMessageId": "msg_004_005",
+      "createdAt": "2026-05-19T09:30:00.000Z",
+      "updatedAt": "2026-05-19T09:30:00.000Z"
+    },
+    {
+      "id": "vt_004_2",
+      "groupId": "vg_004",
+      "title": "Lên kế hoạch nghiệm thu thiết bị tháng 6",
+      "description": null,
+      "status": "doing",
+      "assignToId": "u_diem_chi",
+      "assignToName": "Diễm Chi",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_004_2_1", "text": "Xác định ngày nghiệm thu", "done": true },
+        { "id": "vtc_004_2_2", "text": "Phân công nhân sự tham dự", "done": false }
+      ],
+      "sourceMessageId": null,
+      "createdAt": "2026-05-19T07:00:00.000Z",
+      "updatedAt": "2026-05-19T10:30:00.000Z"
+    }
+  ],
+  "vg_005": [
+    {
+      "id": "vt_005_1",
+      "groupId": "vg_005",
+      "title": "Cập nhật thông tin đơn giao ngày 15/05",
+      "description": null,
+      "status": "todo",
+      "assignToId": "u_admin",
+      "assignToName": "Diệp Nguyên",
+      "assignedById": "u_huyen",
+      "assignedByName": "Huyền",
+      "checklist": [
+        { "id": "vtc_005_1_1", "text": "Nhận xác nhận từ Logistics Pro", "done": false },
+        { "id": "vtc_005_1_2", "text": "Cập nhật trạng thái đơn hàng", "done": false }
+      ],
+      "sourceMessageId": "msg_005_012",
+      "createdAt": "2026-05-19T09:20:00.000Z",
+      "updatedAt": "2026-05-19T09:20:00.000Z"
+    },
+    {
+      "id": "vt_005_2",
+      "groupId": "vg_005",
+      "title": "Theo dõi tình trạng giao hàng đơn LP-0519",
+      "description": null,
+      "status": "doing",
+      "assignToId": "u_huyen",
+      "assignToName": "Huyền",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [
+        { "id": "vtc_005_2_1", "text": "Kiểm tra trạng thái đơn", "done": true },
+        { "id": "vtc_005_2_2", "text": "Liên hệ Logistics Pro nếu trễ", "done": false }
+      ],
+      "sourceMessageId": "msg_005_010",
+      "createdAt": "2026-05-19T08:00:00.000Z",
+      "updatedAt": "2026-05-19T09:00:00.000Z"
+    },
+    {
+      "id": "vt_005_3",
+      "groupId": "vg_005",
+      "title": "Đối chiếu cước phí vận chuyển tháng 5",
+      "description": null,
+      "status": "finished",
+      "assignToId": "u_huyen",
+      "assignToName": "Huyền",
+      "assignedById": "u_admin",
+      "assignedByName": "Diệp Nguyên",
+      "checklist": [],
+      "sourceMessageId": null,
+      "createdAt": "2026-05-18T08:00:00.000Z",
+      "updatedAt": "2026-05-18T16:00:00.000Z"
+    }
+  ]
+}
