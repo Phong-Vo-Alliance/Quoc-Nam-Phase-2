@@ -92,7 +92,8 @@ export type ChatMessageContentType =
   | "FILE"
   | "TASK"
   | "SYS"
-  | "VID";
+  | "VID"
+  | "PIN_NOTIFICATION"; // Client-only: shown when a message is pinned
 
 // ========== Attachment Types from Swagger API ==========
 
@@ -208,6 +209,9 @@ export interface ChatMessage {
   sendStatus?: "sending" | "retrying" | "failed" | "sent";
   retryCount?: number;
   failReason?: string;
+
+  // Client-side: used by PIN_NOTIFICATION messages to identify the pinned message
+  pinTargetMessageId?: string;
 }
 
 // API Response for GET messages
