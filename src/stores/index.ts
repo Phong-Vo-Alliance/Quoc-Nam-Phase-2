@@ -9,3 +9,4 @@ export {
 export { useCreateTaskStore } from "./createTaskStore";
 export { useConversationStore, type ChatTarget } from "./conversationStore";
 export { useSessionDialogStore } from "./sessionDialogStore";
+export { useDemoConfigStore, DEMO_USERS } from "./demoConfigStore";

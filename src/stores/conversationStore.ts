@@ -11,7 +11,7 @@ import {
  * ChatTarget - Represents a selected conversation (group or DM)
  */
 export type ChatTarget = {
-  type: "group" | "dm";
+  type: "group" | "dm" | "ncc";
   id: string;
   name?: string;
   category?: string; // Category/Department name (for groups)
@@ -25,19 +25,19 @@ export type ChatTarget = {
 interface ConversationState {
   // State
   selectedConversation: ChatTarget | null;
-  activeTabType: "group" | "dm" | null; // 🆕 Track active tab in sidebar
+  activeTabType: "group" | "dm" | "ncc" | null; // 🆕 Track active tab in sidebar
 
   // Actions
   setSelectedConversation: (conversation: ChatTarget) => void;
   clearSelectedConversation: () => void;
-  setActiveTabType: (tabType: "group" | "dm") => void; // 🆕 Set active tab
+  setActiveTabType: (tabType: "group" | "dm" | "ncc") => void; // 🆕 Set active tab
 
   // Convenience getters
   getConversationId: () => string | null;
   getConversationName: () => string | null;
   getConversationCategory: () => string | null;
   getConversationCategoryId: () => string | null;
-  getConversationType: () => "group" | "dm" | null;
+  getConversationType: () => "group" | "dm" | "ncc" | null;
 }
 
 /**
@@ -65,7 +65,7 @@ export const useConversationStore = create<ConversationState>()(
       setSelectedConversation: (conversation) => {
         set({
           selectedConversation: conversation,
-          activeTabType: conversation.type, // 🆕 Auto-sync tab type
+          activeTabType: conversation.type as "group" | "dm" | "ncc", // 🆕 Auto-sync tab type
         });
 
         // Sync to legacy localStorage keys for backward compatibility
@@ -100,7 +100,8 @@ export const useConversationStore = create<ConversationState>()(
       getConversationCategoryId: () =>
         get().selectedConversation?.categoryId ?? null,
 
-      getConversationType: () => get().selectedConversation?.type ?? null,
+      getConversationType: () =>
+        get().selectedConversation?.type ?? null,
     }),
     {
       name: "conversation-storage", // localStorage key
