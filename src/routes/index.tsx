@@ -10,6 +10,7 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import {
   AuthSsoPage,
   AccountPage,
+  AdminDemoPage,
   BlockedPage,
   ChangePasswordPage,
   LoginPage,
@@ -72,6 +73,14 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <AccountPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: `${ROUTES.ADMIN_DEMO}/*`,
+    element: (
+      <ProtectedRoute>
+        <AdminDemoPage />
       </ProtectedRoute>
     ),
   },

@@ -30,6 +30,9 @@ export const ROUTES = {
   // Security
   BLOCKED: "/blocked",
 
+  // Admin demo
+  ADMIN_DEMO: "/admin-demo",
+
   // Utils
   NOT_FOUND: "/404",
 } as const;

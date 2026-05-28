@@ -5,6 +5,7 @@ import { SignalRProvider } from "./providers/SignalRProvider";
 import { useSecurity } from "./hooks/useSecurity";
 import { useEffect } from "react";
 import { useAuthStore } from "./stores/authStore";
+import { useDemoConfigStore } from "./stores/demoConfigStore";
 import { initializeViewMode } from "./stores/uiStore";
 import { getCurrentUser } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
@@ -20,7 +21,11 @@ export default function App() {
 
   // ✅ FIX: Detect and clear corrupted state (isAuthenticated = true but no token)
   // This handles browsers that cached old state before the 401 fix was implemented
+  // Skip this check for demo sessions — demo intentionally has no real token
   useEffect(() => {
+    const isDemoSession = useDemoConfigStore.getState().isDemoSession;
+    if (isDemoSession) return;
+
     const token = getAccessToken();
 
     // If authenticated in store but no token exists → corrupted state

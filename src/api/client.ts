@@ -3,6 +3,7 @@ import { getAccessToken, removeAccessToken } from "@/lib/auth/tokenStorage";
 import { AUTH_CONFIG } from "@/lib/auth/config";
 import { API_ENDPOINTS } from "@/config/env.config";
 import { useSessionDialogStore } from "@/stores/sessionDialogStore";
+import { useDemoConfigStore } from "@/stores/demoConfigStore";
 
 // Use the chat API endpoint from env config
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_ENDPOINTS.chat;
@@ -50,6 +51,11 @@ apiClient.interceptors.response.use(
     // Handle 401 Unauthorized - Token expired or account disabled
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
+
+      // Skip session dialog for demo sessions — no real token, expected to get 401s
+      if (useDemoConfigStore.getState().isDemoSession) {
+        return Promise.reject(error);
+      }
 
       // Clear stored token
       removeAccessToken();

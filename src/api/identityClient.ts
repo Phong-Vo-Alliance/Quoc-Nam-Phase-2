@@ -2,6 +2,7 @@ import axios from 'axios';
 import { getAccessToken, removeAccessToken } from '@/lib/auth/tokenStorage';
 import { AUTH_CONFIG } from '@/lib/auth/config';
 import { API_ENDPOINTS } from '@/config/env.config';
+import { useDemoConfigStore } from '@/stores/demoConfigStore';
 
 // Use the auth/identity API endpoint from env config
 const IDENTITY_API_BASE_URL = import.meta.env.VITE_DEV_AUTH_API_URL || API_ENDPOINTS.auth;
@@ -37,6 +38,10 @@ identityApiClient.interceptors.response.use(
     // Handle 401 Unauthorized - Token expired
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
+
+      if (useDemoConfigStore.getState().isDemoSession) {
+        return Promise.reject(error);
+      }
 
       // Clear stored token
       removeAccessToken();

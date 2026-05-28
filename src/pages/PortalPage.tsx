@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { AUTH_CONFIG } from '@/lib/auth/config';
 import PortalWireframes from '@/features/portal/PortalWireframes';
+import { AdminDemoFloatingButton } from '@/features/portal/components/AdminDemoFloatingButton';
 
 /**
  * Portal page - main chat application entry point
@@ -37,6 +38,7 @@ export function PortalPage() {
       data-testid="portal-page"
     >
       <PortalWireframes />
+      <AdminDemoFloatingButton />
     </div>
   );
 }
