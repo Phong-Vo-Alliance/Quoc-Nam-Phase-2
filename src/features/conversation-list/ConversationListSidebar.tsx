@@ -18,7 +18,19 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Zap, Star, ListTodo, RefreshCw, X, AtSign } from "lucide-react";
+import {
+  Zap,
+  Star,
+  ListTodo,
+  RefreshCw,
+  X,
+  AtSign,
+  Building2,
+  Users,
+  User,
+} from "lucide-react";
+import { useVendorGroups, useZaloAccounts } from "@/features/zalo-vendor/hooks/useVendorGroups";
+import { VendorGroupItem } from "@/features/zalo-vendor/components/VendorGroupItem";
 import { useUnreadMentionCount } from "@/hooks/queries/useUnreadMentionCount";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCategories } from "@/hooks/queries/useCategories";
@@ -41,8 +53,12 @@ import {
   getSelectedCategory,
 } from "@/utils/storage";
 import { useConversationStore } from "@/stores/conversationStore";
+import { useDemoConfigStore, DEMO_USERS } from "@/stores/demoConfigStore";
+import type { VendorTag } from "@/stores/demoConfigStore";
+import { TagManagementModal as NccTagManagementModal } from "@/features/admin-demo/components/TagManagementModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateDirectMessage } from "@/hooks/mutations/useConversationMutations";
+import type { VendorGroup } from "@/types/zalo";
 
 // Internal components
 import { DirectMessageItem } from "./components/DirectMessageItem";
@@ -85,7 +101,7 @@ export interface ConversationListSidebarProps {
   useApiData?: boolean;
 
   // Tab change callback (for syncing parent tab state)
-  onTabChange?: (tab: "contacts" | "messages") => void;
+  onTabChange?: (tab: "contacts" | "messages" | "vendor") => void;
 
   isMobile?: boolean;
   onOpenQuickMsg?: () => void;
@@ -168,12 +184,15 @@ const initials = (name: string) =>
     .toUpperCase();
 
 /* ===================== Helper: Get initial tab ===================== */
-const getInitialTab = (): "group" | "dm" => {
+const getInitialTab = (): "group" | "dm" | "ncc" => {
   try {
     const stored = localStorage.getItem("conversation-storage");
     if (stored) {
       const data = JSON.parse(stored);
       const conversationType = data?.state?.selectedConversation?.type;
+      if (conversationType === "ncc") {
+        return "ncc";
+      }
       if (conversationType === "dm") {
         return "dm";
       }
@@ -208,7 +227,7 @@ export const ConversationListSidebar: React.FC<
   onOpenTodoList,
   onOpenMentions,
 }) => {
-  const [tab, setTab] = React.useState<"group" | "dm">(getInitialTab());
+  const [tab, setTab] = React.useState<"group" | "dm" | "ncc">(getInitialTab());
   const [q, setQ] = React.useState("");
   const [openTools, setOpenTools] = React.useState(false);
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
@@ -219,7 +238,7 @@ export const ConversationListSidebar: React.FC<
   const [hasShownGroupBadge, setHasShownGroupBadge] = React.useState(false);
   const [hasShownDmBadge, setHasShownDmBadge] = React.useState(false);
 
-  const prevTabRef = React.useRef<"group" | "dm">(getInitialTab());
+  const prevTabRef = React.useRef<"group" | "dm" | "ncc">(getInitialTab());
   const isAutoSwitchingTabRef = React.useRef(false);
   const contactsListRef = React.useRef<HTMLUListElement>(null);
 
@@ -231,6 +250,16 @@ export const ConversationListSidebar: React.FC<
 
   const queryClient = useQueryClient();
   const categoriesQuery = useCategories();
+  const { data: vendorGroups } = useVendorGroups();
+  const { data: zaloAccounts } = useZaloAccounts();
+  const pinnedVendorGroups = useDemoConfigStore((s) => s.pinnedGroups);
+  const togglePinVendorGroup = useDemoConfigStore((s) => s.togglePinGroup);
+  const isDemoSession = useDemoConfigStore((s) => s.isDemoSession);
+  const currentDemoUser = useDemoConfigStore((s) => s.currentUser);
+  const vendorTags = useDemoConfigStore((s) => s.vendorTags);
+  const groupTagIds = useDemoConfigStore((s) => s.groupTagIds);
+  const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([]);
+  const [showNccTagManagement, setShowNccTagManagement] = React.useState(false);
 
   // Unread count cho tab Mentions (badge dot)
   const { data: unreadMentions } = useUnreadMentionCount();
@@ -396,20 +425,39 @@ export const ConversationListSidebar: React.FC<
     return merged;
   }, [apiDirects, departmentMembersQuery.data, currentUserId]);
 
+  // Demo mode: build mock contacts from DEMO_USERS
+  const demoContacts = React.useMemo((): ContactItem[] => {
+    if (!isDemoSession) return [];
+    return DEMO_USERS.filter((u) => u.id !== currentDemoUser.id).map((u) => ({
+      id: u.id,
+      userId: u.id,
+      name: u.displayName,
+      email: u.email,
+      avatarUrl: u.avatarUrl,
+      isLeader: null,
+      isOnline: false,
+      hasConversation: false,
+      sharedDepartments: [],
+    }));
+  }, [isDemoSession, currentDemoUser]);
+
   // Loading states
   const isLoading =
+    !isDemoSession &&
     useApiData &&
     ((tab === "group" && categoriesQuery.isLoading) ||
       (tab === "dm" &&
         (directsQuery.isLoading || departmentMembersQuery.isLoading)));
 
   const isAnyTabLoading =
+    !isDemoSession &&
     useApiData &&
     (categoriesQuery.isLoading ||
       directsQuery.isLoading ||
       departmentMembersQuery.isLoading);
 
   const isError =
+    !isDemoSession &&
     useApiData &&
     ((tab === "group" && categoriesQuery.isError) ||
       (tab === "dm" &&
@@ -524,6 +572,35 @@ export const ConversationListSidebar: React.FC<
     (c) => match(c.name) || match(c.lastMessage),
   );
 
+  const { pinnedVendorList, unpinnedVendorList } = React.useMemo(() => {
+    const filtered = vendorGroups.filter((group) => {
+      const matchesSearch = match(group.name) || match(group.lastMessage?.content);
+      const assignedTagIds = groupTagIds[group.id] ?? [];
+      const matchesTag =
+        selectedTagIds.length === 0 ||
+        selectedTagIds.some((tid) => assignedTagIds.includes(tid));
+      return matchesSearch && matchesTag;
+    });
+
+    const byPinOrder = (a: VendorGroup, b: VendorGroup) =>
+      pinnedVendorGroups.indexOf(a.id) - pinnedVendorGroups.indexOf(b.id);
+
+    const byLatestMessage = (a: VendorGroup, b: VendorGroup) => {
+      const tA = a.lastMessage ? new Date(a.lastMessage.sentAt).getTime() : 0;
+      const tB = b.lastMessage ? new Date(b.lastMessage.sentAt).getTime() : 0;
+      return tB - tA;
+    };
+
+    return {
+      pinnedVendorList: filtered
+        .filter((group) => pinnedVendorGroups.includes(group.id))
+        .sort(byPinOrder),
+      unpinnedVendorList: filtered
+        .filter((group) => !pinnedVendorGroups.includes(group.id))
+        .sort(byLatestMessage),
+    };
+  }, [vendorGroups, pinnedVendorGroups, q, selectedTagIds, groupTagIds]);
+
   // Handlers
   const handleGroupSelect = React.useCallback(
     (
@@ -633,7 +710,7 @@ export const ConversationListSidebar: React.FC<
   }, [selectedCategoryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
-    const parentTab = tab === "group" ? "messages" : "contacts";
+    const parentTab = tab === "group" ? "messages" : tab === "ncc" ? "vendor" : "contacts";
     onTabChange?.(parentTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -764,7 +841,7 @@ export const ConversationListSidebar: React.FC<
 
   React.useEffect(() => {
     if (prevTabRef.current !== tab) {
-      setActiveTabType(tab === "group" ? "group" : "dm");
+      setActiveTabType(tab === "group" ? "group" : tab === "ncc" ? "ncc" : "dm");
 
       if (isAutoSwitchingTabRef.current) {
         isAutoSwitchingTabRef.current = false;
@@ -780,6 +857,8 @@ export const ConversationListSidebar: React.FC<
       setHasAutoSelected(false);
       setQ("");
       prevTabRef.current = tab;
+      const parentTab = tab === "group" ? "messages" : tab === "ncc" ? "vendor" : "contacts";
+      onTabChange?.(parentTab);
     }
   }, [tab, onClearSelectedChat, setActiveTabType, clearSelectedConversation]);
 
@@ -1038,11 +1117,22 @@ export const ConversationListSidebar: React.FC<
               <SegmentedTabs
                 tabs={[
                   {
+                    key: "ncc",
+                    label: (
+                      <span
+                        className="relative inline-flex items-center justify-center"
+                        title="NCC / Zalo Vendor"
+                      >
+                        <Building2 className="h-3.5 w-3.5" />
+                      </span>
+                    ),
+                  },
+                  {
                     key: "group",
                     label: (
-                      <span className="relative inline-flex items-center gap-1">
-                        Nhóm
-                        {tab === "dm" && totalGroupUnread > 0 && (
+                      <span className="relative inline-flex items-center justify-center gap-0.5" title="Nhóm">
+                        <Users className="h-3.5 w-3.5" />
+                        {tab !== "group" && totalGroupUnread > 0 && (
                           <NotificationBadge
                             count={totalGroupUnread}
                             pulse={!hasShownGroupBadge}
@@ -1055,9 +1145,9 @@ export const ConversationListSidebar: React.FC<
                   {
                     key: "dm",
                     label: (
-                      <span className="relative inline-flex items-center gap-1">
-                        Cá nhân
-                        {tab === "group" && totalDmUnread > 0 && (
+                      <span className="relative inline-flex items-center justify-center gap-0.5" title="Cá nhân">
+                        <User className="h-3.5 w-3.5" />
+                        {tab !== "dm" && totalDmUnread > 0 && (
                           <NotificationBadge
                             count={totalDmUnread}
                             pulse={!hasShownDmBadge}
@@ -1128,6 +1218,23 @@ export const ConversationListSidebar: React.FC<
               )}
             </div>
           </div>
+          {tab === "ncc" && (
+            <div className="mt-1 -mb-[7px] flex justify-end">
+              <NccTagFilterButton
+                vendorTags={vendorTags}
+                selectedTagIds={selectedTagIds}
+                onToggle={(tagId) =>
+                  setSelectedTagIds((prev) =>
+                    prev.includes(tagId)
+                      ? prev.filter((id) => id !== tagId)
+                      : [...prev, tagId],
+                  )
+                }
+                onClear={() => setSelectedTagIds([])}
+                onOpenManage={() => setShowNccTagManagement(true)}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1155,6 +1262,83 @@ export const ConversationListSidebar: React.FC<
 
         {/* Loading State */}
         {isLoading && !isError && <ConversationSkeleton count={5} />}
+
+        {/* NCC / Vendor Tab */}
+        {tab === "ncc" && (
+          <ul className="py-1" data-testid="vendor-groups-list">
+            {pinnedVendorList.length + unpinnedVendorList.length === 0 ? (
+              <div className="p-4 text-center text-xs text-gray-400">
+                {q
+                  ? "Không tìm thấy nhóm NCC nào."
+                  : "Chưa có nhóm NCC nào được đồng bộ."}
+              </div>
+            ) : (
+              <>
+                {pinnedVendorList.length > 0 && (
+                  <>
+                    {pinnedVendorList.map((group) => {
+                      const zaloAccount =
+                        zaloAccounts.find((a) => a.id === group.zaloAccountId) ??
+                        null;
+
+                      return (
+                        <li key={group.id}>
+                          <VendorGroupItem
+                            group={group}
+                            zaloAccount={zaloAccount}
+                            isSelected={selectedConversationId === group.id}
+                            isPinned={true}
+                            onTogglePin={() => togglePinVendorGroup(group.id)}
+                            onOpenTagManage={() => setShowNccTagManagement(true)}
+                            onClick={() =>
+                              onSelectChat({
+                                type: "ncc",
+                                id: group.id,
+                                name: group.name,
+                                memberCount: group.memberCount,
+                              })
+                            }
+                          />
+                        </li>
+                      );
+                    })}
+                    {unpinnedVendorList.length > 0 && (
+                      <li aria-hidden>
+                        <div className="mx-3 my-1 border-t border-gray-100" />
+                      </li>
+                    )}
+                  </>
+                )}
+
+                {unpinnedVendorList.map((group) => {
+                  const zaloAccount =
+                    zaloAccounts.find((a) => a.id === group.zaloAccountId) ?? null;
+
+                  return (
+                    <li key={group.id}>
+                      <VendorGroupItem
+                        group={group}
+                        zaloAccount={zaloAccount}
+                        isSelected={selectedConversationId === group.id}
+                        isPinned={false}
+                        onTogglePin={() => togglePinVendorGroup(group.id)}
+                        onOpenTagManage={() => setShowNccTagManagement(true)}
+                        onClick={() =>
+                          onSelectChat({
+                            type: "ncc",
+                            id: group.id,
+                            name: group.name,
+                            memberCount: group.memberCount,
+                          })
+                        }
+                      />
+                    </li>
+                  );
+                })}
+              </>
+            )}
+          </ul>
+        )}
 
         {/* Group Tab - Shows work type categories */}
         {!isLoading &&
@@ -1259,7 +1443,25 @@ export const ConversationListSidebar: React.FC<
         {!isLoading &&
           !isError &&
           tab === "dm" &&
-          (useApiData ? (
+          (isDemoSession ? (
+            <ul className="divide-y" data-testid="dm-list-container">
+              {demoContacts.length === 0 && (
+                <div className="p-3 text-xs text-gray-500">Chưa có người liên hệ nào.</div>
+              )}
+              {demoContacts.map((contact) => (
+                <li key={contact.id}>
+                  <DirectMessageItem
+                    contact={contact}
+                    isActive={selectedConversationId === contact.id}
+                    onClick={() => {}}
+                    onCreateConversation={() =>
+                      onSelectChat({ type: "dm", id: contact.userId, name: contact.name })
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : useApiData ? (
             <ul
               ref={contactsListRef}
               className="divide-y"
@@ -1345,6 +1547,9 @@ export const ConversationListSidebar: React.FC<
             </ul>
           ))}
       </div>
+      {showNccTagManagement && (
+        <NccTagManagementModal onClose={() => setShowNccTagManagement(false)} />
+      )}
     </aside>
   );
 };
@@ -1353,3 +1558,145 @@ export const ConversationListSidebar: React.FC<
 export type LeftSidebarProps = ConversationListSidebarProps;
 
 export default ConversationListSidebar;
+
+/* ── NCC Tag Filter Button ─────────────────────────────────────────────────── */
+function NccTagFilterButton({
+  vendorTags,
+  selectedTagIds,
+  onToggle,
+  onClear,
+  onOpenManage,
+}: {
+  vendorTags: VendorTag[];
+  selectedTagIds: string[];
+  onToggle: (tagId: string) => void;
+  onClear: () => void;
+  onOpenManage: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const count = selectedTagIds.length;
+  const singleTag = count === 1 ? vendorTags.find((t) => t.id === selectedTagIds[0]) : null;
+
+  // Pill label content
+  let pillLabel: React.ReactNode;
+  let pillStyle: React.CSSProperties = {};
+  let pillClass: string;
+
+  if (count === 0) {
+    pillLabel = (
+      <>
+        <span>Phân loại</span>
+        <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+          <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </>
+    );
+    pillClass = "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-800";
+  } else if (count === 1 && singleTag) {
+    pillLabel = <span>{singleTag.name}</span>;
+    pillStyle = { backgroundColor: singleTag.color, borderColor: singleTag.color };
+    pillClass = "text-white";
+  } else {
+    pillLabel = <span>{count} thẻ</span>;
+    pillClass = "border-brand-500 bg-brand-600 text-white";
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={pillStyle}
+        className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${pillClass}`}
+      >
+        {pillLabel}
+        {count > 0 && (
+          <span
+            role="button"
+            aria-label="Xóa lọc"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear();
+              setOpen(false);
+            }}
+            className="ml-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/30 hover:bg-white/50 transition-colors"
+          >
+            <svg className="h-2 w-2" viewBox="0 0 8 8" fill="none">
+              <path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-[200] mt-1 w-56 rounded-xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Theo thẻ phân loại</span>
+            {count > 0 && (
+              <button
+                type="button"
+                onClick={() => { onClear(); setOpen(false); }}
+                className="text-[11px] text-brand-600 hover:underline"
+              >
+                Xóa lọc
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-60 overflow-y-auto py-1">
+            {vendorTags.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-400">Chưa có thẻ phân loại nào.</p>
+            ) : (
+              vendorTags.map((tag) => {
+                const active = selectedTagIds.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => onToggle(tag.id)}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 transition-colors hover:bg-gray-50 ${active ? "bg-brand-50/60" : ""}`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                        active ? "border-brand-600 bg-brand-600" : "border-gray-300"
+                      }`}
+                    >
+                      {active && (
+                        <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="h-4 w-4 shrink-0 rounded" style={{ backgroundColor: tag.color }} />
+                    <span className="flex-1 text-left text-sm text-gray-700">{tag.name}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="border-t border-gray-100 py-1">
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onOpenManage(); }}
+              className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
+            >
+              Quản lý thẻ phân loại
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

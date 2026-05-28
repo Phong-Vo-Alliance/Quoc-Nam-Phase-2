@@ -1,5 +1,8 @@
 import React from "react";
 import type { GroupChat } from "../types";
+import { VendorGroupItem } from "@/features/zalo-vendor/components/VendorGroupItem";
+import { useVendorGroups, useZaloAccounts } from "@/features/zalo-vendor/hooks/useVendorGroups";
+import type { VendorGroup } from "@/types/zalo";
 import { SegmentedTabs } from "../components/SegmentedTabs";
 import {
   Popover,
@@ -34,6 +37,9 @@ import {
   getSelectedCategory,
 } from "@/utils/storage"; // Phase 6: Conversation persistence
 import { useConversationStore } from "@/stores/conversationStore"; // 🆕 Import store
+import { useDemoConfigStore } from "@/stores/demoConfigStore";
+import type { VendorTag } from "@/stores/demoConfigStore";
+import { TagManagementModal as TagManagementModalPortal } from "@/features/admin-demo/components/TagManagementModal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDepartmentMembers } from "@/api/departments.api";
 import { getCurrentUser } from "@/utils/getCurrentUser";
@@ -44,7 +50,7 @@ import type { ConversationDto } from "@/types/categories";
 
 /* ===================== Types (props mới) ===================== */
 type ChatTarget = {
-  type: "group" | "dm";
+  type: "group" | "dm" | "ncc";
   id: string;
   name?: string;
   category?: string; // Category/WorkType name for groups
@@ -136,18 +142,15 @@ const initials = (name: string) =>
 /* ===================== Component ===================== */
 
 // 🔧 Helper: Get initial tab based on persisted conversation type
-const getInitialTab = (): "group" | "dm" => {
+const getInitialTab = (): "group" | "dm" | "ncc" => {
   try {
     const stored = localStorage.getItem("conversation-storage");
     if (stored) {
       const data = JSON.parse(stored);
       const conversationType = data?.state?.selectedConversation?.type;
-      if (conversationType === "dm") {
-        return "dm";
-      }
-      if (conversationType === "group") {
-        return "group";
-      }
+      if (conversationType === "dm") return "dm";
+      if (conversationType === "ncc") return "ncc";
+      if (conversationType === "group") return "group";
     }
   } catch (error) {
     // Ignore parse errors, fallback to default
@@ -172,13 +175,13 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   onOpenPinned,
   onOpenTodoList,
 }) => {
-  const [tab, setTab] = React.useState<"group" | "dm">(getInitialTab()); // 🔧 Initialize based on persisted conversation
+  const [tab, setTab] = React.useState<"group" | "dm" | "ncc">(getInitialTab()); // 🔧 Initialize based on persisted conversation
   const [q, setQ] = React.useState("");
   const [openTools, setOpenTools] = React.useState(false);
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] =
     React.useState<string | null>(null); // 🔧 Track selected category internally
-  const prevTabRef = React.useRef<"group" | "dm">(getInitialTab()); // 🐛 FIX: Initialize with same value as tab state
+  const prevTabRef = React.useRef<"group" | "dm" | "ncc">(getInitialTab()); // 🐛 FIX: Initialize with same value as tab state
   const isAutoSwitchingTabRef = React.useRef(false); // Flag to prevent clearing selection during auto-switch
   const prevSelectedConversationIdRef = React.useRef<string | undefined>(
     undefined,
@@ -190,6 +193,11 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   const clearSelectedConversation = useConversationStore(
     (s) => s.clearSelectedConversation,
   );
+
+  // NCC tab filter state (lifted from VendorGroupTabContent so filter bar lives in the fixed header)
+  const vendorTags = useDemoConfigStore((s) => s.vendorTags);
+  const [nccTagIds, setNccTagIds] = React.useState<string[]>([]);
+  const [showNccTagMgmt, setShowNccTagMgmt] = React.useState(false);
 
   const queryClient = useQueryClient();
   const categoriesQuery = useCategories();
@@ -629,8 +637,9 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
   // 🔧 Sync parent tab on mount based on initial tab
   React.useEffect(() => {
     // Map internal tab to parent tab type
-    const parentTab = tab === "group" ? "messages" : "contacts";
-    onTabChange?.(parentTab);
+    const parentTab =
+      tab === "group" ? "messages" : tab === "ncc" ? "vendor" : "contacts";
+    onTabChange?.(parentTab as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 
@@ -788,7 +797,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
     // Only clear if tab actually changed (not on initial mount or re-render)
     if (prevTabRef.current !== tab) {
       // 🆕 Update active tab type in store FIRST
-      setActiveTabType(tab === "group" ? "group" : "dm");
+      setActiveTabType(tab === "group" ? "group" : tab === "ncc" ? "ncc" : "dm");
 
       // Don't clear if this is an auto-switch triggered by conversation selection
       if (isAutoSwitchingTabRef.current) {
@@ -944,7 +953,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                 value={tab}
                 onValueChange={(v) => {
                   if (!isAnyTabLoading && v) {
-                    setTab(v as "group" | "dm");
+                    setTab(v as "group" | "dm" | "ncc");
                   }
                 }}
                 className="flex w-full gap-1"
@@ -974,6 +983,18 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                 >
                   Cá Nhân
                 </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="ncc"
+                  className={`flex-1 rounded-full px-3 py-1 text-sm transition
+                  data-[state=on]:bg-white data-[state=on]:text-gray-900 data-[state=on]:shadow
+                  data-[state=on]:ring-1 data-[state=on]:ring-blue-300
+                  data-[state=off]:text-gray-700
+                  ${isAnyTabLoading ? "cursor-not-allowed" : ""}
+                `}
+                  disabled={isAnyTabLoading}
+                >
+                  NCC
+                </ToggleGroupItem>
               </ToggleGroup>
             </div>
           </div>
@@ -989,11 +1010,12 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                 tabs={[
                   { key: "group", label: "Nhóm" },
                   { key: "dm", label: "Cá nhân" },
+                  { key: "ncc", label: "NCC" },
                 ]}
                 active={tab}
                 onChange={(v) => {
                   if (!isAnyTabLoading) {
-                    setTab(v as any);
+                    setTab(v as "group" | "dm" | "ncc");
                   }
                 }}
                 textClass="text-xs"
@@ -1028,6 +1050,62 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
               )}
             </div>
           </div>
+          {tab === "ncc" && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <TagFilterButton
+                vendorTags={vendorTags}
+                selectedTagIds={nccTagIds}
+                onToggle={(tagId) =>
+                  setNccTagIds((prev) =>
+                    prev.includes(tagId)
+                      ? prev.filter((id) => id !== tagId)
+                      : [...prev, tagId],
+                  )
+                }
+                onClear={() => setNccTagIds([])}
+                onOpenManage={() => setShowNccTagMgmt(true)}
+              />
+              {nccTagIds.length > 0 && (
+                <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                  {nccTagIds.map((tagId) => {
+                    const tag = vendorTags.find((t) => t.id === tagId);
+                    if (!tag) return null;
+                    return (
+                      <span
+                        key={tagId}
+                        className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+                        style={{ backgroundColor: tag.color }}
+                      >
+                        {tag.name}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNccTagIds((prev) =>
+                              prev.filter((id) => id !== tagId),
+                            )
+                          }
+                          className="ml-0.5 rounded-full hover:opacity-75"
+                        >
+                          <svg
+                            className="h-2.5 w-2.5"
+                            viewBox="0 0 10 10"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M3 3l4 4M7 3l-4 4"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1388,7 +1466,260 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
               ))}
             </ul>
           ))}
+        {/* NCC Tab — Vendor groups from Zalo */}
+        {tab === "ncc" && (
+          <VendorGroupTabContent
+            selectedConversationId={selectedConversationId}
+            onSelectChat={onSelectChat}
+            searchQuery={q}
+            selectedTagIds={nccTagIds}
+            onToggleTag={(tagId) =>
+              setNccTagIds((prev) =>
+                prev.includes(tagId)
+                  ? prev.filter((id) => id !== tagId)
+                  : [...prev, tagId],
+              )
+            }
+            onClearTags={() => setNccTagIds([])}
+            onOpenTagManage={() => setShowNccTagMgmt(true)}
+          />
+        )}
       </div>
+      {showNccTagMgmt && (
+        <TagManagementModalPortal onClose={() => setShowNccTagMgmt(false)} />
+      )}
     </aside>
   );
 };
+
+/* ── Tag Filter Button (Phân loại ▼ with multi-select dropdown) ───────────── */
+function TagFilterButton({
+  vendorTags,
+  selectedTagIds,
+  onToggle,
+  onClear,
+  onOpenManage,
+}: {
+  vendorTags: VendorTag[];
+  selectedTagIds: string[];
+  onToggle: (tagId: string) => void;
+  onClear: () => void;
+  onOpenManage: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const hasFilter = selectedTagIds.length > 0;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+          hasFilter
+            ? "border-brand-500 bg-brand-50 text-brand-700"
+            : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-800"
+        }`}
+      >
+        <span>Phân loại</span>
+        {hasFilter && (
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-[9px] font-bold text-white">
+            {selectedTagIds.length}
+          </span>
+        )}
+        <svg className="h-3 w-3 text-current" viewBox="0 0 12 12" fill="currentColor">
+          <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-[200] mt-1 w-56 rounded-xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Theo thẻ phân loại</span>
+            {hasFilter && (
+              <button
+                type="button"
+                onClick={() => { onClear(); setOpen(false); }}
+                className="text-[11px] text-brand-600 hover:underline"
+              >
+                Xóa lọc
+              </button>
+            )}
+          </div>
+
+          {/* Tag list */}
+          <div className="max-h-60 overflow-y-auto py-1">
+            {vendorTags.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-400">Chưa có thẻ phân loại nào.</p>
+            ) : (
+              vendorTags.map((tag) => {
+                const active = selectedTagIds.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => onToggle(tag.id)}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 transition-colors hover:bg-gray-50 ${active ? "bg-brand-50/60" : ""}`}
+                  >
+                    {/* Checkbox */}
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                        active ? "border-brand-600 bg-brand-600" : "border-gray-300"
+                      }`}
+                    >
+                      {active && (
+                        <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </span>
+                    {/* Tag color dot */}
+                    <span
+                      className="h-4 w-4 shrink-0 rounded"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    <span className="flex-1 text-left text-sm text-gray-700">{tag.name}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-gray-100 py-1">
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onOpenManage(); }}
+              className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
+            >
+              Quản lý thẻ phân loại
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── NCC Tab Content ─────────────────────────────────────────────────────── */
+function VendorGroupTabContent({
+  selectedConversationId,
+  onSelectChat,
+  searchQuery,
+  selectedTagIds,
+  onToggleTag,
+  onClearTags: _onClearTags,
+  onOpenTagManage,
+}: {
+  selectedConversationId?: string;
+  onSelectChat: (target: ChatTarget) => void;
+  searchQuery: string;
+  selectedTagIds: string[];
+  onToggleTag: (tagId: string) => void;
+  onClearTags: () => void;
+  onOpenTagManage: () => void;
+}) {
+  const { data: groups } = useVendorGroups();
+  const { data: zaloAccounts } = useZaloAccounts();
+  const pinnedGroups = useDemoConfigStore((s) => s.pinnedGroups);
+  const togglePinGroup = useDemoConfigStore((s) => s.togglePinGroup);
+  const groupTagIds = useDemoConfigStore((s) => s.groupTagIds);
+
+  const { pinned, unpinned } = React.useMemo(() => {
+    const base = groups.filter((g: VendorGroup) => {
+      const matchesSearch =
+        !searchQuery.trim() ||
+        g.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const assignedTagIds = groupTagIds[g.id] ?? [];
+      // OR logic: show group if it has ANY of the selected tags
+      const matchesTag =
+        selectedTagIds.length === 0 ||
+        selectedTagIds.some((tid) => assignedTagIds.includes(tid));
+      return matchesSearch && matchesTag;
+    });
+
+    const byTime = (a: VendorGroup, b: VendorGroup) => {
+      const tA = a.lastMessage ? new Date(a.lastMessage.sentAt).getTime() : 0;
+      const tB = b.lastMessage ? new Date(b.lastMessage.sentAt).getTime() : 0;
+      return tB - tA;
+    };
+
+    const pinnedList = base
+      .filter((g: VendorGroup) => pinnedGroups.includes(g.id))
+      .sort(
+        (a: VendorGroup, b: VendorGroup) =>
+          pinnedGroups.indexOf(a.id) - pinnedGroups.indexOf(b.id),
+      );
+
+    const unpinnedList = base
+      .filter((g: VendorGroup) => !pinnedGroups.includes(g.id))
+      .sort(byTime);
+
+    return { pinned: pinnedList, unpinned: unpinnedList };
+  }, [groups, searchQuery, pinnedGroups, selectedTagIds, groupTagIds]);
+
+  const total = pinned.length + unpinned.length;
+
+  const renderItem = (group: VendorGroup) => {
+    const zaloAccount =
+      zaloAccounts.find((a) => a.id === group.zaloAccountId) ?? null;
+    return (
+      <li key={group.id}>
+        <VendorGroupItem
+          group={group}
+          zaloAccount={zaloAccount}
+          isSelected={selectedConversationId === group.id}
+          isPinned={pinnedGroups.includes(group.id)}
+          onTogglePin={() => togglePinGroup(group.id)}
+          onOpenTagManage={onOpenTagManage}
+          onClick={() =>
+            onSelectChat({
+              type: "ncc",
+              id: group.id,
+              name: group.name,
+              memberCount: group.memberCount,
+            })
+          }
+        />
+      </li>
+    );
+  };
+
+  return (
+    <div>
+      {total === 0 ? (
+        <div className="p-4 text-center text-xs text-gray-400">
+          {searchQuery || selectedTagIds.length > 0
+            ? "Không tìm thấy nhóm NCC nào."
+            : "Chưa có nhóm NCC nào được đồng bộ."}
+        </div>
+      ) : (
+        <ul className="py-1" data-testid="vendor-groups-list">
+          {pinned.length > 0 && (
+            <>
+              {pinned.map(renderItem)}
+              {unpinned.length > 0 && (
+                <li aria-hidden>
+                  <div className="mx-3 my-1 border-t border-gray-100" />
+                </li>
+              )}
+            </>
+          )}
+          {unpinned.map(renderItem)}
+        </ul>
+      )}
+
+    </div>
+  );
+}

@@ -103,7 +103,7 @@ export default function PortalWireframes({
   // ---------- shared UI state ----------
   const [tab, setTab] = useState<"info" | "order" | "tasks" | "chat">("info");
   const [mode, setMode] = useState<"CSKH" | "THUMUA">("CSKH");
-  const [leftTab, setLeftTab] = useState<"contacts" | "messages">("messages");
+  const [leftTab, setLeftTab] = useState<"contacts" | "messages" | "vendor">("messages");
   const [showAvail, setShowAvail] = useState(false);
   const [showMyWork, setShowMyWork] = useState(false);
   const [view, setView] = useState<PortalView>(() =>

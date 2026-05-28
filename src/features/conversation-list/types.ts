@@ -13,7 +13,7 @@ import type {
  * Target for chat selection callback
  */
 export type ChatTarget = {
-  type: "group" | "dm";
+  type: "group" | "dm" | "ncc";
   id: string;
   name?: string;
   category?: string; // Category/WorkType name for groups

@@ -1,10 +1,19 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { ConversationListSidebar } from "@/features/conversation-list";
 import { ChatMessagePanel } from "./ChatMessagePanel";
 import { ConversationDetailPanel } from "@/features/conversation-detail";
 import { PinnedMessagesPanel } from "../components/PinnedMessagesPanel";
 import { ChatMainContainer } from "../components/chat";
 import { EmptyChatState } from "../components/EmptyChatState";
+import { VendorChatContainer } from "@/features/zalo-vendor/components/VendorChatContainer";
+import { VendorRightPanel } from "@/features/zalo-vendor/components/VendorRightPanel";
+import { VendorTaskLogSheet } from "@/features/zalo-vendor/components/VendorTaskLogSheet";
+import { DemoDmChatContainer } from "@/features/zalo-vendor/components/DemoDmChatContainer";
+import { useVendorMessagesStore } from "@/stores/vendorMessagesStore";
+import { useDemoConfigStore } from "@/stores/demoConfigStore";
+import { useVendorTasksStore } from "@/stores/vendorTasksStore";
+import vendorGroupsRaw from "@/data/zalo/vendor-groups.json";
+import type { VendorGroup } from "@/types/zalo";
 import { QuickMessageManagerMobile } from "../components/QuickMessageManagerMobile";
 import { TodoListManagerMobile } from "../components/TodoListManagerMobile";
 
@@ -74,8 +83,8 @@ interface WorkspaceViewProps {
   }>;
   onSelectChat: (t: ChatTarget) => void;
 
-  leftTab: "contacts" | "messages";
-  setLeftTab: (v: "contacts" | "messages") => void;
+  leftTab: "contacts" | "messages" | "vendor";
+  setLeftTab: (v: "contacts" | "messages" | "vendor") => void;
 
   available: Task[];
   myWork: Task[];
@@ -329,11 +338,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     refetchOnMount: false, // Don't refetch on modal reopen - SignalR handles new attachments
   });
   const conversationAttachment = conversationAttachmentsQuery.data;
-  useEffect(() => {
-    if (selectedConversation) {
-      onSelectChat(selectedConversation);
-    }
-  }, [selectedConversation]);
 
   const setSelectedConversation = useConversationStore(
     (state) => state.setSelectedConversation,
@@ -348,6 +352,22 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
   // Header expand toggle (still available)
   const [rightExpanded, setRightExpanded] = React.useState(false);
+
+  // NCC vendor right panel visibility + active tab
+  const [showVendorRight, setShowVendorRight] = React.useState(true);
+  const [vendorRightTab, setVendorRightTab] = React.useState<"info" | "tasks">("info");
+  const vendorScrollRef = useRef<((id: string) => void) | null>(null);
+  const pendingVendorScrollIdRef = useRef<string | null>(null);
+  const vendorDispatch = useVendorMessagesStore((s) => s.dispatch);
+  const vendorAllTasks = useVendorTasksStore((s) => s.tasks);
+
+  // NCC vendor task log sheet state (#19)
+  const [vendorTaskLogOpen, setVendorTaskLogOpen] = React.useState(false);
+  const [vendorTaskLogId, setVendorTaskLogId] = React.useState<string | null>(null);
+  const handleVendorOpenTaskLog = React.useCallback((taskId: string) => {
+    setVendorTaskLogId(taskId);
+    setVendorTaskLogOpen(true);
+  }, []);
 
   // Desktop resizable RightPanel
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -534,20 +554,24 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
     return dm?.isDisabled === true;
   }, [selectedConversation, directConversations]);
 
+  const isDemoSession = useDemoConfigStore((s) => s.isDemoSession);
+
   // 🆕 NEW: Check if conversation list is still loading (to prevent showing ChatMainContainer too early)
   const activeTabType = selectedConversation?.type === "group" ? "group" : "dm";
   const isConversationListInitialLoading =
-    (activeTabType === "group" && categoriesQuery.isLoading) ||
-    (activeTabType === "dm" &&
-      (directMessagesQuery.isLoading || departmentMembersQuery.isLoading));
+    !isDemoSession &&
+    ((activeTabType === "group" && categoriesQuery.isLoading) ||
+      (activeTabType === "dm" &&
+        (directMessagesQuery.isLoading || departmentMembersQuery.isLoading)));
 
   // Check if conversation list failed to load - hide chat & info panel when list errored
   const isConversationListError =
-    (activeTabType === "group" && categoriesQuery.isError) ||
-    (activeTabType === "dm" &&
-      (directMessagesQuery.isError || departmentMembersQuery.isError));
+    !isDemoSession &&
+    ((activeTabType === "group" && categoriesQuery.isError) ||
+      (activeTabType === "dm" &&
+        (directMessagesQuery.isError || departmentMembersQuery.isError)));
 
-  // Hide chat & info panel when categories list is empty on group tab
+  // Hide chat & info panel when categories list is empty on group tab (not on vendor tab)
   const isGroupTabCategoriesEmpty =
     leftTab === "messages" &&
     categoriesQuery.isSuccess &&
@@ -855,6 +879,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                     }
                   }}
                   onPreview={(file) => openPreview?.(file as any)}
+                  onOpenNccChat={(groupId, messageId) => {
+                    const group = (vendorGroupsRaw as VendorGroup[]).find((g) => g.id === groupId);
+                    if (!group) return;
+                    const nccTarget: ChatTarget = { type: "ncc", id: groupId, name: group.name };
+                    setSelectedConversation(nccTarget);
+                    onSelectChat(nccTarget);
+                    pendingVendorScrollIdRef.current = messageId;
+                  }}
+                  onUnstarNcc={(groupId, messageId) => {
+                    vendorDispatch({ type: "STAR_MESSAGE", groupId, messageId });
+                  }}
                 />
               ) : !selectedConversation ? (
                 <div className="h-full min-h-0 overflow-y-auto">
@@ -1110,12 +1145,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
   // Desktop layout: grid with draggable divider controlling RightPanel width
   return (
+    <>
     <div
       ref={containerRef}
       style={
-        showRight &&
-        !isConversationListError &&
-        !isConversationListInitialLoading
+        (selectedConversation?.type === "ncc" && showVendorRight) ||
+        (showRight && !isConversationListError && !isConversationListInitialLoading)
           ? {
               gridTemplateColumns: `360px 1fr ${DIVIDER_WIDTH}px ${rightPanelWidth}px`,
             }
@@ -1183,6 +1218,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
               }
             }}
             onPreview={(file) => openPreview?.(file as any)}
+            onOpenNccChat={(groupId, messageId) => {
+              const group = (vendorGroupsRaw as VendorGroup[]).find((g) => g.id === groupId);
+              if (!group) return;
+              const nccTarget: ChatTarget = { type: "ncc", id: groupId, name: group.name };
+              setSelectedConversation(nccTarget);
+              onSelectChat(nccTarget);
+              pendingVendorScrollIdRef.current = messageId;
+            }}
+            onUnstarNcc={(groupId, messageId) => {
+              vendorDispatch({ type: "STAR_MESSAGE", groupId, messageId });
+            }}
           />
         ) : (
           <ConversationListSidebar
@@ -1219,68 +1265,139 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
 
       {/* Center (Chat Container) — IMPORTANT: allow shrinking by setting min-w-0 */}
       <div className="h-full min-h-0 min-w-0 relative">
-        {isGroupTabCategoriesEmpty ? (
+        {selectedConversation?.type === "ncc" ? (
+          <VendorChatContainer
+            key={selectedConversation.id}
+            groupId={selectedConversation.id}
+            groupName={selectedConversation.name ?? ""}
+            showRightPanel={showVendorRight}
+            onToggleRightPanel={() => setShowVendorRight((v) => !v)}
+            onScrollToMessageReady={(fn) => {
+              vendorScrollRef.current = fn;
+              if (pendingVendorScrollIdRef.current) {
+                const id = pendingVendorScrollIdRef.current;
+                pendingVendorScrollIdRef.current = null;
+                setTimeout(() => fn(id), 150);
+              }
+            }}
+            onOpenTaskLog={handleVendorOpenTaskLog}
+            onOpenTasks={() => {
+              setShowVendorRight(true);
+              setVendorRightTab("tasks");
+            }}
+          />
+        ) : isGroupTabCategoriesEmpty ? (
           <EmptyChatState isMobile={false} variant="no-groups" />
         ) : selectedConversation &&
           !isConversationListInitialLoading &&
           !isConversationListError ? (
-          // API-based chat using ChatMainContainer (conversation-detail)
-          <ChatMainContainer
-            key={selectedConversation.id}
-            conversationId={selectedConversation.id}
-            threadCurrentSessionCounts={threadCurrentSessionCounts}
-            conversationName={chatTitle}
-            conversationType={
-              selectedConversation.type === "group" ? "GRP" : "DM"
-            }
-            conversationCategory={
-              selectedConversation.type === "group"
-                ? selectedConversation.category
-                : selectedConversation.name
-            }
-            selectedCategoryId={
-              selectedConversation.type === "group"
-                ? selectedConversation.categoryId
-                : undefined
-            }
-            memberCount={selectedConversation?.memberCount || 0}
-            isMobile={false}
-            onChatChange={handleChatChange}
-            showRightPanel={showRight}
-            onToggleRightPanel={() => setShowRight(!showRight)}
-            scrollToMessageId={scrollToMessage}
-            onScrollComplete={() => setScrollToMessage(null)}
-            onToggleStar={
-              onToggleStar
-                ? (messageId: string, isStarred: boolean) => {
-                    // Create a minimal Message object for the handler
-                    onToggleStar({
-                      id: messageId,
-                      isStarred,
-                    } as unknown as Message);
-                  }
-                : undefined
-            }
-            onCreateTaskFromMessage={onCreateTaskFromMessage}
-            onTaskLogClick={onOpenTaskLog}
-            openThreadMessageId={openThreadMessageId}
-            threadUnreadCounts={threadUnreadCounts}
-            onMessagesLoaded={(messages) => {
-              setMessages(messages);
-            }}
-            onConfirmInfoSuccess={() => {
-              setShowRight(true);
-              setTab("order");
-            }}
-            onViewTaskDetail={() => {
-              setShowRight(true);
-              setTab("order");
-              if (viewMode === "lead") {
-                setForceLeaderMine((prev) => prev + 1);
+          selectedConversation.type === "dm" ? (
+            <div className="flex flex-col h-full">
+              <div className="flex-1 min-h-0">
+                {isDemoSession ? (
+                  <DemoDmChatContainer
+                    key={selectedConversation.id}
+                    contactId={selectedConversation.id}
+                    contactName={selectedConversation.name ?? ""}
+                    showRightPanel={showRight}
+                    onToggleRightPanel={() => setShowRight(!showRight)}
+                  />
+                ) : (
+                  <ChatMainContainer
+                    key={selectedConversation.id}
+                    conversationId={selectedConversation.id}
+                    threadCurrentSessionCounts={threadCurrentSessionCounts}
+                    conversationName={chatTitle}
+                    conversationType="DM"
+                    conversationCategory={selectedConversation.name}
+                    selectedCategoryId={undefined}
+                    memberCount={selectedConversation?.memberCount || 0}
+                    isMobile={false}
+                    onChatChange={handleChatChange}
+                    showRightPanel={showRight}
+                    onToggleRightPanel={() => setShowRight(!showRight)}
+                    scrollToMessageId={scrollToMessage}
+                    onScrollComplete={() => setScrollToMessage(null)}
+                    onToggleStar={
+                      onToggleStar
+                        ? (messageId: string, isStarred: boolean) => {
+                            onToggleStar({
+                              id: messageId,
+                              isStarred,
+                            } as unknown as Message);
+                          }
+                        : undefined
+                    }
+                    onCreateTaskFromMessage={onCreateTaskFromMessage}
+                    onTaskLogClick={onOpenTaskLog}
+                    openThreadMessageId={openThreadMessageId}
+                    threadUnreadCounts={threadUnreadCounts}
+                    onMessagesLoaded={(messages) => {
+                      setMessages(messages);
+                    }}
+                    onConfirmInfoSuccess={() => {
+                      setShowRight(true);
+                      setTab("order");
+                    }}
+                    onViewTaskDetail={() => {
+                      setShowRight(true);
+                      setTab("order");
+                      if (viewMode === "lead") {
+                        setForceLeaderMine((prev) => prev + 1);
+                      }
+                    }}
+                    isConversationDisabled={isConversationDisabled}
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            <ChatMainContainer
+              key={selectedConversation.id}
+              conversationId={selectedConversation.id}
+              threadCurrentSessionCounts={threadCurrentSessionCounts}
+              conversationName={chatTitle}
+              conversationType="GRP"
+              conversationCategory={selectedConversation.category}
+              selectedCategoryId={selectedConversation.categoryId}
+              memberCount={selectedConversation?.memberCount || 0}
+              isMobile={false}
+              onChatChange={handleChatChange}
+              showRightPanel={showRight}
+              onToggleRightPanel={() => setShowRight(!showRight)}
+              scrollToMessageId={scrollToMessage}
+              onScrollComplete={() => setScrollToMessage(null)}
+              onToggleStar={
+                onToggleStar
+                  ? (messageId: string, isStarred: boolean) => {
+                      onToggleStar({
+                        id: messageId,
+                        isStarred,
+                      } as unknown as Message);
+                    }
+                  : undefined
               }
-            }}
-            isConversationDisabled={isConversationDisabled}
-          />
+              onCreateTaskFromMessage={onCreateTaskFromMessage}
+              onTaskLogClick={onOpenTaskLog}
+              openThreadMessageId={openThreadMessageId}
+              threadUnreadCounts={threadUnreadCounts}
+              onMessagesLoaded={(messages) => {
+                setMessages(messages);
+              }}
+              onConfirmInfoSuccess={() => {
+                setShowRight(true);
+                setTab("order");
+              }}
+              onViewTaskDetail={() => {
+                setShowRight(true);
+                setTab("order");
+                if (viewMode === "lead") {
+                  setForceLeaderMine((prev) => prev + 1);
+                }
+              }}
+              isConversationDisabled={isConversationDisabled}
+            />
+          )
         ) : isConversationListError ? (
           <div
             className="flex h-full items-center justify-center bg-gray-50"
@@ -1327,8 +1444,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
         )}
       </div>
 
-      {/* Divider (draggable) */}
-      {showRight &&
+      {/* Divider */}
+      {selectedConversation?.type === "ncc" ? (
+        showVendorRight ? (
+          <div className="relative h-full flex items-center justify-center">
+            <div className="w-px h-full bg-gray-200" />
+          </div>
+        ) : null
+      ) : (
+        showRight &&
         !isConversationListError &&
         !isConversationListInitialLoading &&
         !isGroupTabCategoriesEmpty && (
@@ -1344,10 +1468,28 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
               data-testid="right-panel-resize"
             />
           </div>
-        )}
+        )
+      )}
 
       {/* Right */}
-      {showRight &&
+      {selectedConversation?.type === "ncc" ? (
+        showVendorRight ? (
+          <div
+            className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col rounded-2xl border border-gray-300 bg-white"
+            data-testid="vendor-right-panel-container"
+          >
+            <VendorRightPanel
+              key={selectedConversation.id}
+              groupId={selectedConversation.id}
+              onScrollToMessage={(id) => vendorScrollRef.current?.(id)}
+              onOpenTaskLog={handleVendorOpenTaskLog}
+              activeTab={vendorRightTab}
+              onActiveTabChange={setVendorRightTab}
+            />
+          </div>
+        ) : null
+      ) : (
+        showRight &&
         !isConversationListError &&
         !isConversationListInitialLoading &&
         !isGroupTabCategoriesEmpty && (
@@ -1393,7 +1535,19 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
               forceLeaderMine={forceLeaderMine}
             />
           </div>
-        )}
+        )
+      )}
     </div>
+
+    {/* Vendor Task Log Sheet (feature #19) */}
+    {vendorTaskLogOpen && vendorTaskLogId && selectedConversation?.type === "ncc" && (
+      <VendorTaskLogSheet
+        open={vendorTaskLogOpen}
+        onClose={() => { setVendorTaskLogOpen(false); setVendorTaskLogId(null); }}
+        task={(vendorAllTasks[selectedConversation.id] ?? []).find((t) => t.id === vendorTaskLogId) ?? null}
+        groupId={selectedConversation.id}
+      />
+    )}
+    </>
   );
 };

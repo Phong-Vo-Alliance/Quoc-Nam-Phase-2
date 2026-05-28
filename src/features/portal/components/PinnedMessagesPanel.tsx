@@ -29,6 +29,12 @@ import {
   flattenDirectMessages,
 } from "@/hooks/queries/useDirectMessages"; // Fetch DM conversations
 import type { StarredMessageDto } from "@/types/pinned_and_starred";
+import { useVendorMessagesStore } from "@/stores/vendorMessagesStore";
+import { useDemoConfigStore } from "@/stores/demoConfigStore";
+import vendorGroupsRaw from "@/data/zalo/vendor-groups.json";
+import type { VendorGroup } from "@/types/zalo";
+
+const vendorGroups = vendorGroupsRaw as VendorGroup[];
 
 /**
  * Remove Vietnamese diacritics for accent-insensitive search
@@ -130,22 +136,23 @@ function getFileExtension(fileName?: string, contentType?: string): string {
 
 interface Props {
   onClose: () => void;
-  /**
-   * Handler when user clicks on a starred message.
-   * Parent should implement scroll-to-message logic (similar to handleScrollToMessage in ChatMainContainer).
-   * @param messageDto - StarredMessageDto to scroll to
-   */
   onOpenChat: (messageDto: StarredMessageDto) => void;
-  // [PHASE2-REMOVED] onUnpin prop removed - using useUnstarMessage mutation instead
+  /** NCC: navigate to a vendor group and scroll to message */
+  onOpenNccChat?: (groupId: string, messageId: string) => void;
+  /** NCC: unstar a vendor message locally (no API) */
+  onUnstarNcc?: (groupId: string, messageId: string) => void;
   onPreview?: (file: FileAttachment) => void;
 }
 
 export const PinnedMessagesPanel: React.FC<Props> = ({
   onClose,
   onOpenChat,
-  // [PHASE2-REMOVED] onUnpin,
+  onOpenNccChat,
+  onUnstarNcc,
   onPreview,
 }) => {
+  const isDemoSession = useDemoConfigStore((s) => s.isDemoSession);
+
   // Fetch categories data (contains all conversations)
   const { data: categoriesData } = useCategories();
 
@@ -156,7 +163,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
     [directMessagesQuery.data],
   );
 
-  // Fetch ALL starred messages from API (không filter theo conversation)
+  // Fetch ALL starred messages from API — disabled in demo (no real API)
   const {
     data: starredData,
     isLoading,
@@ -164,7 +171,8 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
     error,
     refetch,
   } = useStarredMessages({
-    limit: 50, // Từ requirement decision #2
+    limit: 50,
+    enabled: !isDemoSession,
   });
 
   // Unstar message mutation
@@ -174,6 +182,49 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
       // No need to manually refetch
     },
   });
+
+  // NCC starred messages (from local store, no API)
+  const vendorAllMessages = useVendorMessagesStore((s) => s.messages);
+
+  const nccPinnedMessages = React.useMemo((): PinnedMessage[] => {
+    return Object.entries(vendorAllMessages).flatMap(([groupId, msgs]) => {
+      const group = vendorGroups.find((g) => g.id === groupId);
+      return msgs
+        .filter((m) => m.isStarred && !m.isRecalled)
+        .map((m) => {
+          const att = m.attachments?.[0];
+          return {
+            id: m.id,
+            sender: m.senderName,
+            content: m.content || "",
+            time: m.sentAt,
+            type: (m.contentType === "IMG"
+              ? "image"
+              : m.contentType === "FILE" || m.contentType === "VID"
+                ? "file"
+                : "text") as "text" | "image" | "file",
+            groupName: group?.name ?? groupId,
+            workTypeName: "NCC",
+            workTypeId: groupId,
+            chatId: groupId,
+            fileInfo: att
+              ? {
+                  id: att.id,
+                  name: att.fileName,
+                  url: att.url,
+                  type: att.contentType?.startsWith("image/") ? "image" as const : "other" as const,
+                  size: att.fileSize?.toString(),
+                }
+              : undefined,
+          };
+        });
+    });
+  }, [vendorAllMessages]);
+
+  const nccMessageIds = React.useMemo(
+    () => new Set(nccPinnedMessages.map((m) => m.id)),
+    [nccPinnedMessages],
+  );
 
   // Transform StarredMessageDto[] sang PinnedMessage[] format
   const messages = React.useMemo(() => {
@@ -251,12 +302,19 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
       .filter((m): m is PinnedMessage => m !== null);
   }, [starredData, categoriesData, directConversations]);
 
+  // Merge NCC + API messages, sort newest first
+  const allMessages = React.useMemo(() => {
+    return [...nccPinnedMessages, ...messages].sort(
+      (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
+    );
+  }, [nccPinnedMessages, messages]);
+
   const [searchQuery, setSearchQuery] = React.useState("");
 
   const filteredMessages = React.useMemo(() => {
     const q = searchQuery.trim();
-    if (!q) return messages;
-    return messages.filter(
+    if (!q) return allMessages;
+    return allMessages.filter(
       (m) =>
         includesNormalized(m.content || "", q) ||
         includesNormalized(m.sender || "", q) ||
@@ -264,7 +322,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
         includesNormalized(m.workTypeName || "", q) ||
         includesNormalized(m.fileInfo?.name || "", q),
     );
-  }, [messages, searchQuery]);
+  }, [allMessages, searchQuery]);
 
   const grouped = React.useMemo(() => {
     const groups: Record<string, PinnedMessage[]> = {};
@@ -285,7 +343,7 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
     return groups;
   }, [filteredMessages]);
 
-  const hasMessages = messages.length > 0;
+  const hasMessages = allMessages.length > 0;
   const hasFilteredMessages = filteredMessages.length > 0;
   const today = new Date().toISOString().split("T")[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
@@ -399,24 +457,18 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                       <div
                         key={msg.id}
                         onClick={() => {
-                          // Find the original StarredMessageDto from starredData
+                          if (nccMessageIds.has(msg.id)) {
+                            // NCC message: navigate to vendor group
+                            onOpenNccChat?.(msg.workTypeId ?? "", msg.id);
+                            return;
+                          }
+                          // Portal API message
                           const originalStarred = starredData?.find(
                             (starred) => starred.messageId === msg.id,
                           );
-
                           if (originalStarred) {
-                            // Pass the full StarredMessageDto to parent for handleScrollToMessage
                             onOpenChat(originalStarred);
-                          } else {
-                            console.warn(
-                              "Could not find original StarredMessageDto for message:",
-                              msg.id,
-                            );
                           }
-
-                          // 🐛 FIX (ui-improvements-20260205): Keep panel open
-                          // User wants to be able to click multiple messages without panel closing
-                          // onClose();
                         }}
                         className="group relative cursor-pointer border-b border-brand-200 hover:bg-brand-50 transition-all p-3 pr-8" // pr-8 để tránh icon tràn
                       >
@@ -427,12 +479,15 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
                               <div
                                 className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-200 transform hover:scale-110"
                                 onClick={(e) => {
-                                  e.stopPropagation(); // không kích hoạt onOpenChat
-                                  // Call API to unstar message - pass conversationId to invalidate messages cache
-                                  unstarMutation.mutate({
-                                    messageId: msg.id,
-                                    conversationId: msg.chatId,
-                                  });
+                                  e.stopPropagation();
+                                  if (nccMessageIds.has(msg.id)) {
+                                    onUnstarNcc?.(msg.workTypeId ?? "", msg.id);
+                                  } else {
+                                    unstarMutation.mutate({
+                                      messageId: msg.id,
+                                      conversationId: msg.chatId,
+                                    });
+                                  }
                                 }}
                               >
                                 <StarOff

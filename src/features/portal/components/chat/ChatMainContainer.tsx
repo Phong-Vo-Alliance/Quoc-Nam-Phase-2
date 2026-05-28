@@ -1,6 +1,7 @@
 // ChatMainContainer - Container that fetches messages and integrates with ChatMain
 
 import { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
+import { usePinMessage, useUnpinMessage } from "@/hooks/mutations/usePinMessage";
 import { useSendMessage } from "@/hooks/mutations/useSendMessage";
 import { flattenMessages, useMessages } from "@/hooks/queries/useMessages";
 import { useClientSystemMessagesStore } from "@/stores/clientSystemMessagesStore";
@@ -47,7 +48,6 @@ import {
   Paperclip,
   RefreshCw,
   Send,
-  // [PHASE2-REMOVED] Pin,
   Star,
 } from "lucide-react";
 import { MessageSkeleton } from "../MessageSkeleton";
@@ -56,6 +56,7 @@ import { EmptyCategoryState } from "./EmptyCategoryState"; // 🆕 NEW (CBN-002)
 import { MessageBubbleSimple } from "./MessageBubbleSimple";
 import QuotedMessagePreview from "./QuotedMessagePreview"; // 🆕 NEW: Quoted message preview (Quote Reply feature)
 import { SystemMessageBubble } from "./SystemMessageBubble";
+import { PinNotificationBubble } from "./PinNotificationBubble";
 // import {
 //   Popover,
 //   PopoverContent,
@@ -91,7 +92,7 @@ import {
 // import MessageImage from "@/features/portal/workspace/MessageImage";
 import FilePreviewModal from "@/components/FilePreviewModal";
 import { useQuickMessages } from "@/hooks/queries/useQuickMessages";
-import type { ChatMessage } from "@/types/messages";
+import type { ChatMessage, GetMessagesResponse } from "@/types/messages";
 import ImagePreviewModal from "@/components/ImagePreviewModal";
 import type { ConversationInfoDto } from "@/types/categories"; // 🆕 NEW (CBN-002)
 import { TaskBanner } from "./TaskBanner"; // 🆕 NEW: Task banner for assigned tasks
@@ -648,6 +649,20 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     },
   });
 
+  const addClientSysMessage = useClientSystemMessagesStore(
+    (state) => state.addMessage,
+  );
+
+  const pinMessageMutation = usePinMessage({
+    conversationId,
+    onSuccess: () => {},
+  });
+
+  const unpinMessageMutation = useUnpinMessage({
+    conversationId,
+    onSuccess: () => {},
+  });
+
   // Typing indicators (replaces old useMessageRealtime typing logic)
   const { typingUsers } = useTypingIndicators(conversationId);
 
@@ -714,7 +729,82 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     categoriesQuery.isLoading,
     clientSystemMessages,
   ]);
-  // setMessages(_messages); // Update messages in parent state
+  const handleTogglePin = useCallback(
+    (messageId: string, isPinned: boolean) => {
+      if (isPinned) {
+        unpinMessageMutation.mutate({ messageId });
+      } else {
+        const msg = messages.find((m) => m.id === messageId);
+        const pinnerName = user?.fullName || user?.identifier || "Ai đó";
+        const preview =
+          msg?.content
+            ? msg.content.length > 40
+              ? msg.content.slice(0, 40) + "..."
+              : msg.content
+            : "tệp đính kèm";
+
+        const pinNotif: ChatMessage = {
+          id: `pin-notif-${messageId}-${Date.now()}`,
+          senderId: user?.id ?? "",
+          senderName: pinnerName,
+          senderIdentifier: null,
+          senderFullName: null,
+          senderRoles: null,
+          conversationId,
+          content: `${pinnerName} đã ghim tin nhắn ${preview}`,
+          contentType: "PIN_NOTIFICATION",
+          sentAt: new Date().toISOString(),
+          editedAt: null,
+          linkedTaskId: null,
+          reactions: [],
+          attachments: [],
+          replyCount: 0,
+          unreadReplyCount: 0,
+          isStarred: false,
+          isPinned: false,
+          threadPreview: null,
+          mentions: [],
+          parentMessageId: null,
+          quoteMessageId: null,
+          pinTargetMessageId: messageId,
+        };
+
+        // Step 1: Persist in Zustand (survives react-query refetches)
+        addClientSysMessage(conversationId, pinNotif);
+
+        // Step 2: Also insert into React Query cache for immediate UI update
+        const msgCacheKey = messageKeys.conversation(conversationId);
+        queryClient.setQueryData<{
+          pages: GetMessagesResponse[];
+          pageParams: (string | undefined)[];
+        }>(msgCacheKey, (old) => {
+          if (!old || !old.pages?.length) return old;
+          const alreadyExists = old.pages.some((page) =>
+            page.items.some((item) => item.id === pinNotif.id),
+          );
+          if (alreadyExists) return old;
+          const newPages = [...old.pages];
+          newPages[newPages.length - 1] = {
+            ...newPages[newPages.length - 1],
+            items: [...newPages[newPages.length - 1].items, pinNotif],
+          };
+          return { ...old, pages: newPages };
+        });
+
+        pinMessageMutation.mutate({ messageId });
+      }
+    },
+    [
+      messages,
+      user,
+      conversationId,
+      pinMessageMutation,
+      unpinMessageMutation,
+      addClientSysMessage,
+      queryClient,
+    ],
+  );
+
   // Scroll detection for go-to-bottom button + bidirectional loading
   useEffect(() => {
     const setupScrollDetection = () => {
@@ -2385,6 +2475,17 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   );
                 }
 
+                // Render pin notification
+                if (message.contentType === "PIN_NOTIFICATION") {
+                  return (
+                    <PinNotificationBubble
+                      key={message.id}
+                      message={message}
+                      onScrollToMessage={handleScrollToQuoted}
+                    />
+                  );
+                }
+
                 // Render regular messages
                 return (
                   <MessageBubbleSimple
@@ -2402,6 +2503,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                       setPreviewInitialIndex(initialIndex);
                       setPreviewFileId(images[initialIndex]?.fileId || null);
                     }}
+                    onTogglePin={handleTogglePin}
                     onToggleStar={onToggleStar}
                     // DM conversations don't have task creation buttons
                     onCreateTask={isDirect ? undefined : handleCreateTask}
