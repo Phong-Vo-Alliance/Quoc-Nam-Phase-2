@@ -110,6 +110,9 @@ export interface ConversationListSidebarProps {
 
   // callback mở màn hình Mentions (tab thứ 3 trong SegmentedTabs hoạt động như trigger)
   onOpenMentions?: () => void;
+
+  // Externally request a tab switch (e.g. when navigating to NCC from another view)
+  requestedTab?: "contacts" | "messages" | "vendor";
 }
 
 /* ===================== UI helpers ===================== */
@@ -226,6 +229,7 @@ export const ConversationListSidebar: React.FC<
   onOpenPinned,
   onOpenTodoList,
   onOpenMentions,
+  requestedTab,
 }) => {
   const [tab, setTab] = React.useState<"group" | "dm" | "ncc">(getInitialTab());
   const [q, setQ] = React.useState("");
@@ -714,6 +718,13 @@ export const ConversationListSidebar: React.FC<
     onTabChange?.(parentTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  React.useEffect(() => {
+    if (!requestedTab) return;
+    const internalTab = requestedTab === "vendor" ? "ncc" : requestedTab === "messages" ? "group" : "dm";
+    isAutoSwitchingTabRef.current = true; // prevent tab-change effect from clearing selectedConversation
+    setTab(internalTab);
+  }, [requestedTab]);
 
   React.useEffect(() => {
     if (useApiData && !hasAutoSelected) {

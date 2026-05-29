@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Send, PanelRightOpen, PanelRightClose, ArrowUpRight, X, FileText, Play } from "lucide-react";
+import { Send, PanelRightOpen, PanelRightClose, ArrowUpRight, X, FileText, Play, MessageSquare } from "lucide-react";
 import { useDemoConfigStore } from "@/stores/demoConfigStore";
 import type { ForwardedMessage } from "@/stores/demoConfigStore";
 
@@ -8,6 +8,8 @@ interface DemoDmChatContainerProps {
   contactName: string;
   showRightPanel: boolean;
   onToggleRightPanel: () => void;
+  /** Navigate to the original NCC group and scroll to the source message */
+  onOpenNccChat?: (groupId: string, messageId: string) => void;
 }
 
 interface LocalMessage {
@@ -53,9 +55,11 @@ function formatFileSize(bytes: number): string {
 function ForwardedBubble({
   msg,
   onDismiss,
+  onJumpToSource,
 }: {
   msg: ForwardedMessage;
   onDismiss: () => void;
+  onJumpToSource?: () => void;
 }) {
   const images = msg.originalAttachments.filter((a) => a.contentType?.startsWith("image/"));
   const files = msg.originalAttachments.filter((a) => !a.contentType?.startsWith("image/"));
@@ -77,12 +81,24 @@ function ForwardedBubble({
             <span className="text-emerald-400 text-xs">·</span>
             <span className="text-[10px] text-emerald-500 shrink-0">{formatDate(msg.forwardedAt)}</span>
           </div>
-          <button
-            onClick={onDismiss}
-            className="p-0.5 rounded hover:bg-emerald-100 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0"
-          >
-            <X className="h-3 w-3" />
-          </button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {onJumpToSource && (
+              <button
+                onClick={onJumpToSource}
+                className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500 hover:text-emerald-700 transition-colors"
+                title="Cuộn đến tin nhắn gốc trong nhóm NCC"
+                type="button"
+              >
+                <MessageSquare className="h-3 w-3" />
+              </button>
+            )}
+            <button
+              onClick={onDismiss}
+              className="p-0.5 rounded hover:bg-emerald-100 text-emerald-400 hover:text-emerald-600 transition-colors"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
         </div>
 
         {/* Card body */}
@@ -139,6 +155,17 @@ function ForwardedBubble({
           {!msg.originalContent && images.length === 0 && files.length === 0 && (
             <p className="text-xs italic text-gray-400">Không có nội dung</p>
           )}
+
+          {onJumpToSource && (
+            <button
+              onClick={onJumpToSource}
+              className="mt-1.5 inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 transition-colors"
+              type="button"
+            >
+              <ArrowUpRight className="h-3 w-3" />
+              <span>Xem trong nhóm NCC</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -157,6 +184,7 @@ export function DemoDmChatContainer({
   contactName,
   showRightPanel,
   onToggleRightPanel,
+  onOpenNccChat,
 }: DemoDmChatContainerProps) {
   const currentUser = useDemoConfigStore((s) => s.currentUser);
   const forwardedMessages = useDemoConfigStore((s) => s.forwardedMessages);
@@ -261,6 +289,11 @@ export function DemoDmChatContainer({
                     <ForwardedBubble
                       msg={entry.msg}
                       onDismiss={() => dismissForwardedMessage(entry.msg.id)}
+                      onJumpToSource={
+                        onOpenNccChat
+                          ? () => onOpenNccChat(entry.msg.vendorGroupId, entry.msg.originalMessageId)
+                          : undefined
+                      }
                     />
                   </div>
                 );

@@ -353,6 +353,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
   // Header expand toggle (still available)
   const [rightExpanded, setRightExpanded] = React.useState(false);
 
+  // Requested sidebar tab (used to switch sidebar from external navigation, e.g. NCC jump)
+  const [requestedSidebarTab, setRequestedSidebarTab] = React.useState<"contacts" | "messages" | "vendor" | null>(null);
+
   // NCC vendor right panel visibility + active tab
   const [showVendorRight, setShowVendorRight] = React.useState(true);
   const [vendorRightTab, setVendorRightTab] = React.useState<"info" | "tasks">("info");
@@ -1259,6 +1262,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
             useApiData={true}
             onTabChange={setLeftTab}
             onOpenMentions={onOpenMentions}
+            requestedTab={requestedSidebarTab ?? undefined}
           />
         )}
       </div>
@@ -1301,6 +1305,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = (props) => {
                     contactName={selectedConversation.name ?? ""}
                     showRightPanel={showRight}
                     onToggleRightPanel={() => setShowRight(!showRight)}
+                    onOpenNccChat={(groupId, messageId) => {
+                      const group = (vendorGroupsRaw as VendorGroup[]).find((g) => g.id === groupId);
+                      if (!group) return;
+                      const nccTarget: ChatTarget = { type: "ncc", id: groupId, name: group.name };
+                      setLeftTab("vendor");
+                      setRequestedSidebarTab(null);
+                      setTimeout(() => setRequestedSidebarTab("vendor"), 0);
+                      setSelectedConversation(nccTarget);
+                      onSelectChat(nccTarget);
+                      pendingVendorScrollIdRef.current = messageId;
+                    }}
                   />
                 ) : (
                   <ChatMainContainer
