@@ -6,6 +6,7 @@
 import React, { useRef, useState, useCallback } from "react";
 import {
   Pin,
+  PinOff,
   Star,
   StarOff,
   RefreshCw,
@@ -393,7 +394,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       data-testid="toggle-pin-button"
                     >
                       {message.isPinned ? (
-                        <Pin size={14} className="fill-amber-600" />
+                        <PinOff size={14} />
                       ) : (
                         <Pin size={14} />
                       )}

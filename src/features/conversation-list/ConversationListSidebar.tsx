@@ -51,7 +51,9 @@ import {
 } from "@/utils/storage";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useCreateDirectMessage } from "@/hooks/mutations/useConversationMutations";
+import type { GetConversationsResponse } from "@/types/conversations";
 
 // Internal components
 import { DirectMessageItem } from "./components/DirectMessageItem";
@@ -612,22 +614,22 @@ export const ConversationListSidebar: React.FC<
         updatedAt: newConversation.updatedAt || new Date().toISOString(),
       };
 
-      queryClient.setQueryData(conversationKeys.directs(), (oldData: any) => {
-        if (!oldData) return oldData;
+      queryClient.setQueryData<GetConversationsResponse>(
+        conversationKeys.directs(),
+        (oldData) => {
+          if (!oldData) return { items: [directConversation] };
 
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: any, index: number) => {
-            if (index === 0) {
-              return {
-                ...page,
-                items: [directConversation, ...page.items],
-              };
-            }
-            return page;
-          }),
-        };
-      });
+          const alreadyExists = oldData.items.some(
+            (dm) => dm.id === directConversation.id,
+          );
+          if (alreadyExists) return oldData;
+
+          return {
+            ...oldData,
+            items: [directConversation, ...oldData.items],
+          };
+        },
+      );
 
       if (contactsListRef.current) {
         contactsListRef.current.scrollTop = 0;
@@ -636,11 +638,10 @@ export const ConversationListSidebar: React.FC<
       handleDirectSelect(directConversation);
     } catch (error) {
       console.error("[CreateConversation] Failed:", error);
-      alert(
-        "Không thể tạo cuộc trò chuyện. Vui lòng thử lại sau.\n\n" +
-          "Lỗi: " +
-          (error instanceof Error ? error.message : "Unknown error"),
-      );
+      toast.error("Không thể tạo cuộc trò chuyện", {
+        description:
+          error instanceof Error ? error.message : "Vui lòng thử lại sau.",
+      });
     }
   };
 

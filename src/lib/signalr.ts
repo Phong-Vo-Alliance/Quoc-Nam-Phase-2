@@ -110,6 +110,7 @@ export const SIGNALR_EVENTS = {
   // ============= Pin Events =============
   MESSAGE_PINNED: "MessagePinned",
   MESSAGE_UNPINNED: "MessageUnpinned",
+  PINNED_MESSAGES_REORDERED: "PinnedMessagesReordered",
 
   // ============= Mention Events =============
   USER_MENTIONED: "UserMentioned",

@@ -1,6 +1,8 @@
 // ChatMainContainer - Thin orchestrator that delegates to extracted hooks & components
 
 import React, { useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 import { useAuthStore } from "@/stores/authStore";
 import { useReplyStore } from "@/stores/replyStore";
 import { useQuickMessages } from "@/hooks/queries/useQuickMessages";
@@ -14,7 +16,11 @@ import ImagePreviewModal from "@/components/ImagePreviewModal";
 import FilePreviewModal from "@/components/FilePreviewModal";
 import { ChatHeader } from "@/features/portal/components/chat/ChatHeader";
 import { TaskBanner } from "@/features/portal/components/chat/TaskBanner";
-// import { PinBar } from "@/features/portal/components/chat/PinBar";
+import { PinBar } from "@/features/portal/components/chat/PinBar";
+import {
+  usePinMessage,
+  useUnpinMessage,
+} from "@/hooks/mutations/usePinMessage";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
 
 // Extracted hooks
@@ -71,6 +77,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   isConversationDisabled = false,
 }) => {
   const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
   const inputRef = useRef<MentionInputHandle>(null);
 
   // ── Reply store ──
@@ -198,6 +205,55 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     bottomRef,
     inputRef,
   });
+
+  // ── Pin / Unpin ──
+  const pinMessageMutation = usePinMessage({ conversationId });
+  const unpinMessageMutation = useUnpinMessage({ conversationId });
+
+  const handleTogglePin = useCallback(
+    (messageId: string, isPinned: boolean) => {
+      if (isPinned) {
+        unpinMessageMutation.mutate({ messageId });
+      } else {
+        pinMessageMutation.mutate({ messageId });
+      }
+    },
+    [pinMessageMutation, unpinMessageMutation],
+  );
+
+  // Resolve the task linked to a root message from the message cache.
+  const findLinkedTaskId = useCallback(
+    (rootMessageId: string): string | null => {
+      const data = queryClient.getQueryData<{ pages?: { items?: any[] }[] }>(
+        messageKeys.conversation(conversationId),
+      );
+      for (const page of data?.pages ?? []) {
+        const found = page.items?.find((m) => m.id === rootMessageId);
+        if (found) return found.linkedTaskId ?? null;
+      }
+      return null;
+    },
+    [queryClient, conversationId],
+  );
+
+  // Jump to a pinned message. A pin with parentMessageId is a thread reply
+  // (Nhật ký công việc), so scroll to its root message in chat first, then open
+  // the thread scrolled to the reply — same flow as FileManagerPhase1A.handleOpenSource.
+  const handlePinJump = useCallback(
+    (messageId: string, parentMessageId?: string) => {
+      if (!parentMessageId) {
+        handleSearchJumpToMessage(messageId);
+        return;
+      }
+      Promise.resolve(handleSearchJumpToMessage(parentMessageId)).finally(() => {
+        setTimeout(() => {
+          const taskId = findLinkedTaskId(parentMessageId);
+          if (taskId) onTaskLogClick?.(taskId, messageId);
+        }, 300);
+      });
+    },
+    [handleSearchJumpToMessage, findLinkedTaskId, onTaskLogClick],
+  );
 
   // ── Confirmed Info ──
   const {
@@ -394,22 +450,22 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         isConversationDisabled={isConversationDisabled}
       />
 
-      {/* Task banner + Pin bar (stacked, group-only for pin) */}
-      {activeCategoryId && (
-        <div className="mx-4 mt-2 flex flex-col gap-2 [&:empty]:hidden">
-          <TaskBanner
-            categoryId={activeCategoryId}
-            onViewWorkType={(convId: string) => {
-              handleConversationChange(convId);
-              onViewTaskDetail?.();
-            }}
-          />
-          {/* {conversationType === "GRP" && (
-            <PinBar
-              conversationId={conversationId}
-              onJumpToMessage={handleSearchJumpToMessage}
+      {/* Task banner (group-only) + Pin bar (group & direct) */}
+      {(activeCategoryId || conversationType === "DM") && (
+        <div className="mx-4 my-2 flex flex-col gap-2 rounded-lg shadow-sm [&:empty]:hidden">
+          {activeCategoryId && (
+            <TaskBanner
+              categoryId={activeCategoryId}
+              onViewWorkType={(convId: string) => {
+                handleConversationChange(convId);
+                onViewTaskDetail?.();
+              }}
             />
-          )} */}
+          )}
+          <PinBar
+            conversationId={conversationId}
+            onJumpToMessage={handlePinJump}
+          />
         </div>
       )}
 
@@ -453,6 +509,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           threadUnreadCounts={threadUnreadCounts}
           threadCurrentSessionCounts={threadCurrentSessionCounts}
           onLoadMore={handleLoadMore}
+          onTogglePin={handleTogglePin}
           onToggleStar={onToggleStar}
           onCreateTask={
             isDirect

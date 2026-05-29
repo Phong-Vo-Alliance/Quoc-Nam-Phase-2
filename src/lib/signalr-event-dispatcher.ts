@@ -10,6 +10,7 @@ import * as directCache from "@/lib/cache-updaters/direct-cache";
 import * as conversationCache from "@/lib/cache-updaters/conversation-cache";
 import * as notificationService from "@/lib/notification-service";
 import { mentionKeys } from "@/hooks/queries/keys/mentionKeys";
+import { pinnedStarredKeys } from "@/hooks/queries/keys/pinnedStarredKeys";
 import type {
   MentionDto,
   PagedResult,
@@ -18,6 +19,9 @@ import type {
 import type {
   MentionReadEvent,
   MentionsBulkReadEvent,
+  MessagePinnedEvent,
+  MessageUnpinnedEvent,
+  PinnedMessagesReorderedEvent,
   UserMentionedEvent,
 } from "@/types/signalr-events";
 import type { ChatMessage, ChatMessageContentType } from "@/types/messages";
@@ -320,6 +324,62 @@ export function registerAllEventHandlers(
     },
   );
 
+  // ───────── Pinned messages ─────────
+  // When another member pins/unpins/reorders we refetch the pinned list and,
+  // for pin/unpin, flip the message's isPinned flag in the message cache so its
+  // pin icon updates in place. Events triggered by the current user are skipped
+  // because their own mutation already invalidated both caches.
+  const isSelf = (actorId?: string) =>
+    !!actorId && actorId === getCurrentUserId();
+
+  const invalidatePinnedList = (conversationId: string) => {
+    queryClient.invalidateQueries({
+      queryKey: pinnedStarredKeys.pinnedByConversation(conversationId),
+      refetchType: "active",
+    });
+  };
+
+  const cleanupMessagePinned = chatHub.onWithCleanup<MessagePinnedEvent>(
+    SIGNALR_EVENTS.MESSAGE_PINNED,
+    (event) => {
+      if (!event?.conversationId || isSelf(event.pinnedBy)) return;
+      invalidatePinnedList(event.conversationId);
+      if (event.messageId) {
+        messageCache.setMessagePinnedFlag(
+          queryClient,
+          event.conversationId,
+          event.messageId,
+          true,
+        );
+      }
+    },
+  );
+
+  const cleanupMessageUnpinned = chatHub.onWithCleanup<MessageUnpinnedEvent>(
+    SIGNALR_EVENTS.MESSAGE_UNPINNED,
+    (event) => {
+      if (!event?.conversationId || isSelf(event.unpinnedBy)) return;
+      invalidatePinnedList(event.conversationId);
+      if (event.messageId) {
+        messageCache.setMessagePinnedFlag(
+          queryClient,
+          event.conversationId,
+          event.messageId,
+          false,
+        );
+      }
+    },
+  );
+
+  const cleanupPinnedMessagesReordered =
+    chatHub.onWithCleanup<PinnedMessagesReorderedEvent>(
+      SIGNALR_EVENTS.PINNED_MESSAGES_REORDERED,
+      (event) => {
+        if (!event?.conversationId || isSelf(event.reorderedBy)) return;
+        invalidatePinnedList(event.conversationId);
+      },
+    );
+
   return [
     cleanupMessageSent,
     cleanupMessageRead,
@@ -336,6 +396,9 @@ export function registerAllEventHandlers(
     cleanupUserMentioned,
     cleanupMentionRead,
     cleanupMentionsBulkRead,
+    cleanupMessagePinned,
+    cleanupMessageUnpinned,
+    cleanupPinnedMessagesReordered,
   ];
 }
 

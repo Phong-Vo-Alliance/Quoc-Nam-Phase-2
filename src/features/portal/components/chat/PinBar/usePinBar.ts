@@ -1,12 +1,31 @@
 import { useCallback, useMemo, useState } from "react";
+import { useAppConfigStore } from "@/stores/appConfigStore";
+import { usePinnedMessages } from "@/hooks/queries/usePinnedMessages";
+import {
+  useReorderPinnedMessages,
+  useUnpinMessage,
+} from "@/hooks/mutations/usePinMessage";
+import type { PinnedMessageDto } from "@/types/pinned_and_starred";
+import type { AttachmentDto, ChatMessage } from "@/types/messages";
 
-export type PinnedMessageType = "text" | "image" | "file";
+/**
+ * Which icon to show for a pinned message, resolved from its attachments:
+ * - "image": only image attachment(s)
+ * - "video": only video attachment(s)
+ * - "file":  document file(s) only, or image + document (file wins over image)
+ * - "mixed": video combined with any other type → one common icon
+ * - "text":  no attachments
+ */
+export type PinnedIconKind = "text" | "image" | "file" | "video" | "mixed";
 
 export interface PinnedGroupMessage {
+  /** Pin row id — same as messageId for now (API doesn't return a separate pin id). */
   id: string;
   conversationId: string;
   messageId: string;
-  type: PinnedMessageType;
+  /** Root message of the thread when the pin is a thread reply (Nhật ký công việc). */
+  parentMessageId?: string;
+  iconKind: PinnedIconKind;
   content?: string;
   fileName?: string;
   fileSize?: number;
@@ -17,90 +36,176 @@ export interface PinnedGroupMessage {
   pinnedAt: string;
 }
 
-export const PIN_LIMIT = 3;
-
-const MOCK_PINS: PinnedGroupMessage[] = [
-  {
-    id: "pin-1",
-    conversationId: "__ANY__",
-    messageId: "msg-mock-1",
-    type: "text",
-    content:
-      "Họp triển khai 9h sáng mai cả nhóm nhé! Mọi người chuẩn bị tài liệu trước.",
-    senderName: "PM Trang",
-    sentAt: "2026-05-14T07:20:00Z",
-    pinnedBy: "Minh",
-    pinnedAt: "2026-05-14T07:25:00Z",
-  },
-  {
-    id: "pin-2",
-    conversationId: "__ANY__",
-    messageId: "msg-mock-2",
-    type: "file",
-    fileName: "Báo cáo tuần.xlsx",
-    fileSize: 2_415_616,
-    senderName: "An",
-    sentAt: "2026-05-12T02:30:00Z",
-    pinnedBy: "Trang",
-    pinnedAt: "2026-05-12T02:35:00Z",
-  },
-  {
-    id: "pin-3",
-    conversationId: "__ANY__",
-    messageId: "msg-mock-3",
-    type: "image",
-    fileName: "Sơ đồ giao hàng Q7.png",
-    senderName: "Minh",
-    sentAt: "2026-05-13T09:45:00Z",
-    pinnedBy: "Trang",
-    pinnedAt: "2026-05-13T09:50:00Z",
-  },
-];
+/** Fallback when /api/config/me hasn't loaded chat.maxPinnedMessages yet. */
+const DEFAULT_PIN_LIMIT = 3;
 
 export interface UsePinBarReturn {
   visible: boolean;
   pins: PinnedGroupMessage[];
   isExpanded: boolean;
   toggleExpanded: () => void;
-  unpin: (pinId: string) => void;
+  collapse: () => void;
+  unpin: (messageId: string) => void;
+  moveToTop: (messageId: string) => void;
+  moveToBottom: (messageId: string) => void;
   latestPin: PinnedGroupMessage | null;
   totalCount: number;
+  pinLimit: number;
+}
+
+function pickPrimaryAttachment(
+  attachments: AttachmentDto[] | undefined,
+): AttachmentDto | undefined {
+  if (!attachments || attachments.length === 0) return undefined;
+  return attachments[0];
+}
+
+/**
+ * Resolve which icon to show by inspecting each attachment's MIME type.
+ * Falls back to the message-level contentType when no attachments are present.
+ */
+function resolveIconKind(msg: ChatMessage): PinnedIconKind {
+  const attachments = msg.attachments ?? [];
+
+  if (attachments.length > 0) {
+    let hasImage = false;
+    let hasVideo = false;
+    let hasFile = false;
+    for (const att of attachments) {
+      const ct = att.contentType ?? "";
+      if (ct.startsWith("image/")) hasImage = true;
+      else if (ct.startsWith("video/")) hasVideo = true;
+      else hasFile = true; // documents + unknown MIME types
+    }
+
+    // Video mixed with any other type → one common icon.
+    if (hasVideo && (hasImage || hasFile)) return "mixed";
+    if (hasVideo) return "video";
+    // File wins over image (image + file → file).
+    if (hasFile) return "file";
+    if (hasImage) return "image";
+  }
+
+  if (msg.contentType === "IMG") return "image";
+  if (msg.contentType === "VID") return "video";
+  if (msg.contentType === "FILE") return "file";
+  return "text";
+}
+
+function mapPinnedDtoToView(dto: PinnedMessageDto): PinnedGroupMessage {
+  const msg = dto.message;
+  const primary = pickPrimaryAttachment(msg.attachments);
+
+  return {
+    id: dto.messageId,
+    conversationId: msg.conversationId,
+    messageId: dto.messageId,
+    parentMessageId: dto.parentMessageId ?? msg.parentMessageId ?? undefined,
+    iconKind: resolveIconKind(msg),
+    content: msg.content ?? undefined,
+    fileName: primary?.fileName ?? undefined,
+    fileSize: primary?.fileSize,
+    fileId: primary?.fileId,
+    senderName: msg.senderFullName || msg.senderName || "Người dùng",
+    sentAt: msg.sentAt,
+    pinnedBy: dto.pinnedByFullName || dto.pinnedBy || "Người dùng",
+    pinnedAt: dto.pinnedAt,
+  };
 }
 
 export function usePinBar(conversationId: string | undefined): UsePinBarReturn {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [unpinnedIds, setUnpinnedIds] = useState<Set<string>>(new Set());
+
+  const configPinLimit = useAppConfigStore(
+    (s) => s.data?.chat?.maxPinnedMessages,
+  );
+
+  const { data } = usePinnedMessages({
+    conversationId: conversationId ?? "",
+    enabled: !!conversationId,
+  });
+
+  const unpinMutation = useUnpinMessage({
+    conversationId: conversationId ?? "",
+  });
+
+  const reorderMutation = useReorderPinnedMessages({
+    conversationId: conversationId ?? "",
+  });
+
+  const pinLimit =
+    data?.maxPinnedMessages ?? configPinLimit ?? DEFAULT_PIN_LIMIT;
 
   const pins = useMemo(() => {
-    if (!conversationId) return [];
-    return MOCK_PINS.filter((p) => !unpinnedIds.has(p.id))
-      .map((p) => ({ ...p, conversationId }))
-      .sort(
-        (a, b) =>
-          new Date(b.pinnedAt).getTime() - new Date(a.pinnedAt).getTime(),
-      )
-      .slice(0, PIN_LIMIT);
-  }, [conversationId, unpinnedIds]);
+    const items = data?.items;
+    if (!conversationId || !Array.isArray(items)) return [];
+    return items.map(mapPinnedDtoToView).slice(0, pinLimit);
+  }, [conversationId, data, pinLimit]);
 
   const toggleExpanded = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
 
-  const unpin = useCallback((pinId: string) => {
-    setUnpinnedIds((prev) => {
-      const next = new Set(prev);
-      next.add(pinId);
-      return next;
-    });
+  const collapse = useCallback(() => {
+    setIsExpanded(false);
   }, []);
+
+  const unpin = useCallback(
+    (messageId: string) => {
+      unpinMutation.mutate({ messageId });
+    },
+    [unpinMutation],
+  );
+
+  const submitReorder = useCallback(
+    (next: PinnedGroupMessage[]) => {
+      reorderMutation.mutate({
+        orders: next.map((p, idx) => ({
+          messageId: p.messageId,
+          newOrder: idx,
+        })),
+      });
+    },
+    [reorderMutation],
+  );
+
+  const moveToTop = useCallback(
+    (messageId: string) => {
+      const idx = pins.findIndex((p) => p.messageId === messageId);
+      if (idx <= 0) return;
+      const next = [...pins];
+      const [item] = next.splice(idx, 1);
+      next.unshift(item);
+      submitReorder(next);
+    },
+    [pins, submitReorder],
+  );
+
+  const moveToBottom = useCallback(
+    (messageId: string) => {
+      const idx = pins.findIndex((p) => p.messageId === messageId);
+      if (idx === -1 || idx === pins.length - 1) return;
+      const next = [...pins];
+      const [item] = next.splice(idx, 1);
+      next.push(item);
+      submitReorder(next);
+    },
+    [pins, submitReorder],
+  );
 
   return {
     visible: pins.length > 0,
     pins,
     isExpanded,
     toggleExpanded,
+    collapse,
     unpin,
+    moveToTop,
+    moveToBottom,
     latestPin: pins[0] ?? null,
     totalCount: pins.length,
+    pinLimit,
   };
 }
+
+export { DEFAULT_PIN_LIMIT as PIN_LIMIT };

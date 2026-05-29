@@ -9,6 +9,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import useAuthStore from "@/stores/authStore";
 import type { ChatMessage } from "@/types/messages";
 import { renderSystemMessageWithHighlights } from "@/utils/systemMessageParser";
 
@@ -21,6 +22,9 @@ export const SystemMessageBubble: React.FC<SystemMessageBubbleProps> = ({
   message,
   formatTime,
 }) => {
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isSelfActor = !!message.senderId && message.senderId === currentUserId;
+
   return (
     <div
       className="flex justify-center py-2"
@@ -39,6 +43,7 @@ export const SystemMessageBubble: React.FC<SystemMessageBubbleProps> = ({
             taskNameClassName: "font-semibold text-gray-900",
             itemNameClassName:
               "font-semibold text-brand-700 bg-brand-100 px-0.5 rounded",
+            pinActorSelf: isSelfActor,
           })}
         </span>
         <span className="text-gray-500 shrink-0">•</span>

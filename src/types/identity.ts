@@ -136,8 +136,13 @@ export interface AppUploadLimitsConfig {
   maxTotalUploadSizeMB?: number;
 }
 
+export interface AppChatConfig {
+  maxPinnedMessages?: number;
+}
+
 export interface AppConfigResponse {
   general?: AppGeneralConfig;
   uploadLimits?: AppUploadLimitsConfig;
+  chat?: AppChatConfig;
 }
 

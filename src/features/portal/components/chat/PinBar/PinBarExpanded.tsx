@@ -1,17 +1,29 @@
-import React from "react";
-import { Pin, X, FileText, ImageIcon } from "lucide-react";
+import React, { useState } from "react";
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider,
-} from "@/components/ui/tooltip";
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Pin,
+  PinOff,
+  FileText,
+  ImageIcon,
+  Video,
+  Files,
+  MoreHorizontal,
+} from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { PinnedGroupMessage } from "./usePinBar";
 
 interface PinBarExpandedProps {
   pins: PinnedGroupMessage[];
-  onJumpToMessage: (messageId: string) => void;
-  onUnpin: (pinId: string) => void;
+  pinLimit: number;
+  onJumpToMessage: (messageId: string, parentMessageId?: string) => void;
+  onUnpin: (messageId: string) => void;
+  onMoveToTop: (messageId: string) => void;
+  onMoveToBottom: (messageId: string) => void;
 }
 
 function formatFileSize(bytes?: number): string {
@@ -32,42 +44,60 @@ function formatDateTime(iso: string): string {
 
 export const PinBarExpanded: React.FC<PinBarExpandedProps> = ({
   pins,
+  pinLimit,
   onJumpToMessage,
   onUnpin,
+  onMoveToTop,
+  onMoveToBottom,
 }) => {
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
   return (
     <div
-      className="bg-white border border-gray-200 border-t-0 rounded-b-lg shadow-sm animate-pin-slide-down"
+      className="bg-white border border-gray-200 border-t-0 rounded-b-lg shadow-lg animate-pin-slide-down"
       data-testid="pin-bar-expanded"
     >
       <div className="px-4 pt-2 pb-1.5 flex items-center justify-between">
         <div className="text-xs text-gray-500">
-          {pins.length}/3 tin đã ghim trong nhóm
+          {pins.length}/{pinLimit} tin đã ghim trong nhóm
         </div>
       </div>
 
-      <ul className="px-2 pb-2 space-y-1" data-testid="pin-bar-list">
-        {pins.map((pin) => {
+      <ul
+        className="px-2 pb-2 space-y-1 max-h-[300px] overflow-y-auto scrollbar-thin"
+        data-testid="pin-bar-list"
+      >
+        {pins.map((pin, index) => {
           const dateLabel = formatDateTime(pin.sentAt);
+          const isFirst = index === 0;
+          const isLast = index === pins.length - 1;
           return (
             <li
               key={pin.id}
               data-testid={`pin-bar-item-${pin.id}`}
               className="
                 group relative
-                flex items-start gap-2.5
-                px-2.5 py-2 rounded-md
+                flex items-start gap-1
+                px-1.5 py-2 rounded-md
                 hover:bg-brand-50/60
                 cursor-pointer transition-colors
               "
-              onClick={() => onJumpToMessage(pin.messageId)}
+              onClick={() => onJumpToMessage(pin.messageId, pin.parentMessageId)}
             >
               <div className="shrink-0 mt-0.5">
-                {pin.type === "image" ? (
+                {pin.iconKind === "image" ? (
                   <div className="h-8 w-8 rounded bg-emerald-50 flex items-center justify-center">
                     <ImageIcon className="h-4 w-4 text-emerald-600" />
                   </div>
-                ) : pin.type === "file" ? (
+                ) : pin.iconKind === "video" ? (
+                  <div className="h-8 w-8 rounded bg-purple-50 flex items-center justify-center">
+                    <Video className="h-4 w-4 text-purple-600" />
+                  </div>
+                ) : pin.iconKind === "mixed" ? (
+                  <div className="h-8 w-8 rounded bg-slate-100 flex items-center justify-center">
+                    <Files className="h-4 w-4 text-slate-600" />
+                  </div>
+                ) : pin.iconKind === "file" ? (
                   <div className="h-8 w-8 rounded bg-amber-50 flex items-center justify-center">
                     <FileText className="h-4 w-4 text-amber-600" />
                   </div>
@@ -90,21 +120,33 @@ export const PinBarExpanded: React.FC<PinBarExpandedProps> = ({
                   )}
                 </div>
 
-                {pin.type === "text" && pin.content && (
+                {pin.iconKind === "text" && pin.content && (
                   <p className="text-[13px] text-gray-700 line-clamp-2 mt-0.5 break-words">
                     {pin.content}
                   </p>
                 )}
 
-                {pin.type === "image" && (
+                {pin.iconKind === "image" && (
                   <p className="text-[13px] text-gray-700 mt-0.5 truncate">
                     📷 {pin.fileName || "Hình ảnh"}
                   </p>
                 )}
 
-                {pin.type === "file" && (
+                {pin.iconKind === "video" && (
                   <p className="text-[13px] text-gray-700 mt-0.5 truncate">
-                    📎 {pin.fileName}
+                    🎬 {pin.fileName || "Video"}
+                  </p>
+                )}
+
+                {pin.iconKind === "mixed" && (
+                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
+                    📎 Nhiều tệp đính kèm
+                  </p>
+                )}
+
+                {pin.iconKind === "file" && (
+                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
+                    📎 {pin.fileName || "Tệp đính kèm"}
                     {pin.fileSize ? (
                       <span className="text-gray-500">
                         {" "}
@@ -119,36 +161,80 @@ export const PinBarExpanded: React.FC<PinBarExpandedProps> = ({
                 </div>
               </div>
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      data-testid={`pin-bar-unpin-${pin.id}`}
-                      aria-label="Bỏ ghim tin nhắn"
-                      className="
-                        shrink-0 self-start
-                        opacity-0 group-hover:opacity-100
-                        transition-opacity
-                        p-1.5 rounded-md
-                        hover:bg-rose-50 text-gray-400 hover:text-rose-600
-                      "
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onUnpin(pin.id);
-                      }}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="left"
-                    className="bg-gray-800 text-white text-xs px-2 py-1 rounded"
+              <Popover
+                open={menuOpenId === pin.id}
+                onOpenChange={(open) =>
+                  setMenuOpenId(open ? pin.id : null)
+                }
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    data-testid={`pin-bar-menu-${pin.id}`}
+                    aria-label="Thao tác"
+                    className="
+                      shrink-0 self-start mt-1
+                      inline-flex items-center justify-center
+                      h-7 w-7 rounded-full
+                      text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                      transition-colors
+                    "
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    Bỏ ghim
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="bottom"
+                  className="w-48 rounded-lg border border-gray-200 shadow-lg p-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    data-testid={`pin-bar-menu-unpin-${pin.id}`}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-rose-50 text-sm text-gray-700"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnpin(pin.messageId);
+                      setMenuOpenId(null);
+                    }}
+                  >
+                    <PinOff className="h-4 w-4 text-rose-500" />
+                    <span>Bỏ ghim</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`pin-bar-menu-move-top-${pin.id}`}
+                    disabled={isFirst}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isFirst) return;
+                      onMoveToTop(pin.messageId);
+                      setMenuOpenId(null);
+                    }}
+                  >
+                    <ArrowUpToLine className="h-4 w-4 text-brand-600" />
+                    <span>Đưa lên đầu</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`pin-bar-menu-move-bottom-${pin.id}`}
+                    disabled={isLast}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isLast) return;
+                      onMoveToBottom(pin.messageId);
+                      setMenuOpenId(null);
+                    }}
+                  >
+                    <ArrowDownToLine className="h-4 w-4 text-brand-600" />
+                    <span>Đưa xuống cuối</span>
+                  </button>
+                </PopoverContent>
+              </Popover>
             </li>
           );
         })}

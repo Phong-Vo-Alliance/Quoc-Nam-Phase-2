@@ -1,5 +1,5 @@
 import React from "react";
-import { Pin, ChevronDown, ChevronUp, FileText, ImageIcon } from "lucide-react";
+import { Pin, ChevronDown, ChevronUp } from "lucide-react";
 import type { PinnedGroupMessage } from "./usePinBar";
 
 interface PinBarCollapsedProps {
@@ -10,8 +10,10 @@ interface PinBarCollapsedProps {
 }
 
 function getPreview(pin: PinnedGroupMessage): string {
-  if (pin.type === "text") return pin.content?.trim() || "Tin nhắn";
-  if (pin.type === "image") return pin.fileName || "Hình ảnh";
+  if (pin.iconKind === "text") return pin.content?.trim() || "Tin nhắn";
+  if (pin.iconKind === "image") return pin.fileName || "Hình ảnh";
+  if (pin.iconKind === "video") return pin.fileName || "Video";
+  if (pin.iconKind === "mixed") return "Nhiều tệp đính kèm";
   return pin.fileName || "Tệp đính kèm";
 }
 
@@ -43,13 +45,6 @@ export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
         <Pin className="h-4 w-4 text-brand-600 shrink-0 -rotate-45" />
 
         <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
-          {latestPin.type === "image" && (
-            <ImageIcon className="h-3.5 w-3.5 text-gray-500 shrink-0" />
-          )}
-          {latestPin.type === "file" && (
-            <FileText className="h-3.5 w-3.5 text-gray-500 shrink-0" />
-          )}
-
           <span
             className="text-sm text-gray-700 truncate"
             data-testid="pin-bar-latest-preview"

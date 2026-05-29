@@ -118,15 +118,78 @@ export function CategoryItem({
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        {/* Line 1: Category Name + Timestamp */}
+        {/* Line 1: Category Name + Timestamp / 3-dot (hover) */}
         <div className="flex items-center justify-between">
-          <p className="truncate text-sm font-medium">{category.name}</p>
-          {latestConversation?.lastMessage && (
-            <RelativeTime
-              timestamp={latestConversation.lastMessage.sentAt}
-              className="ml-2 text-xs text-gray-400 flex-shrink-0"
-            />
-          )}
+          <p className="truncate text-sm font-medium min-w-0 flex-1">
+            {category.name}
+          </p>
+
+          {/* Right slot: timestamp (idle) / 3-dot menu (hover or open) */}
+          <div className="relative ml-2 flex h-5 min-w-[2.5rem] flex-shrink-0 items-center justify-end">
+            {latestConversation?.lastMessage && (
+              <RelativeTime
+                timestamp={latestConversation.lastMessage.sentAt}
+                className={`text-xs text-gray-400 ${
+                  MOCKUP_PIN_ENABLED
+                    ? menuOpen
+                      ? "invisible"
+                      : "group-hover:invisible"
+                    : ""
+                }`}
+              />
+            )}
+            {/* MOCKUP: 3-dot action menu — appears on hover at timestamp position */}
+            {MOCKUP_PIN_ENABLED && (
+              <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Thao tác"
+                    className={`absolute right-0 inline-flex h-6 w-6 items-center justify-center rounded-full text-gray-500 transition-opacity hover:bg-gray-100 hover:text-gray-700 ${
+                      menuOpen
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                    }`}
+                    data-testid={`category-actions-${category.id}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen((v) => !v);
+                    }}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="bottom"
+                  className="w-44 rounded-lg border border-gray-200 shadow-lg p-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePinned(category.id);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    {pinned ? (
+                      <>
+                        <PinOff className="h-4 w-4 text-gray-500" />
+                        <span>Bỏ ghim</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pin className="h-4 w-4 text-amber-500" />
+                        <span>Ghim hội thoại</span>
+                      </>
+                    )}
+                  </button>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
         </div>
 
         {/* Line 2: Message Preview + Unread Badge */}
@@ -179,6 +242,13 @@ export function CategoryItem({
                     {totalUnread > 99 ? "99+" : totalUnread}
                   </span>
                 )}
+                {/* MOCKUP: pin indicator on the preview row */}
+                {MOCKUP_PIN_ENABLED && pinned && (
+                  <Pin
+                    className="h-3.5 w-3.5 text-amber-500 fill-amber-500 rotate-45 flex-shrink-0"
+                    aria-label="Đã ghim"
+                  />
+                )}
               </div>
               {/* Other unread conversations (work types) */}
               {unreadConversations.length > 1 && (
@@ -222,6 +292,13 @@ export function CategoryItem({
                     {totalUnread > 99 ? "99+" : totalUnread}
                   </span>
                 )}
+                {/* MOCKUP: pin indicator on the preview row */}
+                {MOCKUP_PIN_ENABLED && pinned && (
+                  <Pin
+                    className="h-3.5 w-3.5 text-amber-500 fill-amber-500 rotate-45 flex-shrink-0"
+                    aria-label="Đã ghim"
+                  />
+                )}
               </div>
               {/* Other unread conversations (work types) */}
               {unreadConversations.length > 1 && (
@@ -246,76 +323,21 @@ export function CategoryItem({
               )}
             </>
           ) : (
-            <p className="mt-0.5 truncate text-xs text-gray-400">
-              Chưa có tin nhắn
-            </p>
+            <div className="mt-0.5 flex items-center gap-2">
+              <p className="truncate text-xs text-gray-400 flex-1">
+                Chưa có tin nhắn
+              </p>
+              {/* MOCKUP: pin indicator on the preview row */}
+              {MOCKUP_PIN_ENABLED && pinned && (
+                <Pin
+                  className="h-3.5 w-3.5 text-amber-500 fill-amber-500 rotate-45 flex-shrink-0"
+                  aria-label="Đã ghim"
+                />
+              )}
+            </div>
           )}
         </div>
       </div>
-
-      {/* MOCKUP: right slot — Pin icon (idle) hoặc 3-dot menu (hover) */}
-      {MOCKUP_PIN_ENABLED && (
-      <div className="relative ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center self-center">
-        {pinned && (
-          <Pin
-            className={`h-3.5 w-3.5 text-gray-400 rotate-45 ${
-              menuOpen ? "hidden" : "group-hover:hidden"
-            }`}
-            aria-label="Đã ghim"
-          />
-        )}
-        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="Thao tác"
-              className={`absolute inset-0 inline-flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 ${
-                menuOpen
-                  ? "opacity-100"
-                  : pinned
-                    ? "opacity-0 group-hover:opacity-100"
-                    : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-              }`}
-              data-testid={`category-actions-${category.id}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            side="bottom"
-            className="w-44 rounded-lg border border-gray-200 shadow-lg p-1"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePinned(category.id);
-                setMenuOpen(false);
-              }}
-            >
-              {pinned ? (
-                <>
-                  <PinOff className="h-4 w-4 text-gray-500" />
-                  <span>Bỏ ghim</span>
-                </>
-              ) : (
-                <>
-                  <Pin className="h-4 w-4 text-amber-500" />
-                  <span>Ghim hội thoại</span>
-                </>
-              )}
-            </button>
-          </PopoverContent>
-        </Popover>
-      </div>
-      )}
     </div>
   );
 }
