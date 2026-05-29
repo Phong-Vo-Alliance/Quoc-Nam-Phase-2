@@ -30,6 +30,8 @@ export interface PinnedGroupMessage {
   fileName?: string;
   fileSize?: number;
   fileId?: string;
+  /** Total attachments on the message — drives the "và N tệp khác" suffix. */
+  attachmentCount: number;
   senderName: string;
   sentAt: string;
   pinnedBy: string;
@@ -92,7 +94,7 @@ function resolveIconKind(msg: ChatMessage): PinnedIconKind {
   return "text";
 }
 
-function mapPinnedDtoToView(dto: PinnedMessageDto): PinnedGroupMessage {
+export function mapPinnedDtoToView(dto: PinnedMessageDto): PinnedGroupMessage {
   const msg = dto.message;
   const primary = pickPrimaryAttachment(msg.attachments);
 
@@ -106,6 +108,7 @@ function mapPinnedDtoToView(dto: PinnedMessageDto): PinnedGroupMessage {
     fileName: primary?.fileName ?? undefined,
     fileSize: primary?.fileSize,
     fileId: primary?.fileId,
+    attachmentCount: msg.attachments?.length ?? 0,
     senderName: msg.senderFullName || msg.senderName || "Người dùng",
     sentAt: msg.sentAt,
     pinnedBy: dto.pinnedByFullName || dto.pinnedBy || "Người dùng",

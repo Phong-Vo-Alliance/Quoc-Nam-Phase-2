@@ -42,16 +42,35 @@ function formatDateTime(iso: string): string {
   })}`;
 }
 
-/** Attachment summary line shown above the message text (when any). */
+/**
+ * Attachment summary line shown below the message text (when any).
+ * Rendered as muted metadata — smaller and lighter than the message
+ * content — with a small inline icon so it reads as an attachment, not text.
+ */
 function renderAttachmentLabel(pin: PinnedGroupMessage): React.ReactNode {
-  if (pin.iconKind === "image") return `📷 ${pin.fileName || "Hình ảnh"}`;
-  if (pin.iconKind === "video") return `🎬 ${pin.fileName || "Video"}`;
-  if (pin.iconKind === "mixed") return "📎 Nhiều tệp đính kèm";
+  const Icon =
+    pin.iconKind === "image"
+      ? ImageIcon
+      : pin.iconKind === "video"
+        ? Video
+        : pin.iconKind === "mixed"
+          ? Files
+          : FileText;
+  const primaryName =
+    pin.iconKind === "image"
+      ? pin.fileName || "Hình ảnh"
+      : pin.iconKind === "video"
+        ? pin.fileName || "Video"
+        : pin.fileName || "Tệp đính kèm";
+  const others = pin.attachmentCount > 1 ? pin.attachmentCount - 1 : 0;
   return (
     <>
-      📎 {pin.fileName || "Tệp đính kèm"}
-      {pin.fileSize ? (
-        <span className="text-gray-500"> · {formatFileSize(pin.fileSize)}</span>
+      <Icon className="h-3 w-3 shrink-0" />
+      <span className="truncate min-w-0">{primaryName}</span>
+      {others > 0 ? (
+        <span className="shrink-0">và {others} tệp đính kèm khác</span>
+      ) : pin.iconKind === "file" && pin.fileSize ? (
+        <span className="shrink-0">· {formatFileSize(pin.fileSize)}</span>
       ) : null}
     </>
   );
@@ -135,16 +154,18 @@ export const PinBarExpanded: React.FC<PinBarExpandedProps> = ({
                   )}
                 </div>
 
-                {pin.iconKind !== "text" && (
-                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
-                    {renderAttachmentLabel(pin)}
-                  </p>
-                )}
-
                 {pin.content?.trim() && (
                   <p className="text-[13px] text-gray-700 line-clamp-2 mt-0.5 break-words">
                     {pin.content}
                   </p>
+                )}
+
+                {pin.iconKind !== "text" && (
+                  <div className="mt-1 flex">
+                    <span className="inline-flex items-center gap-1 min-w-0 max-w-full px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[11px]">
+                      {renderAttachmentLabel(pin)}
+                    </span>
+                  </div>
                 )}
 
                 <div className="text-[11px] text-gray-500 mt-0.5">

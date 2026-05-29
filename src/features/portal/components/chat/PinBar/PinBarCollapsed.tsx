@@ -1,5 +1,13 @@
 import React from "react";
-import { Pin, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Pin,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  ImageIcon,
+  Video,
+  Files,
+} from "lucide-react";
 import type { PinnedGroupMessage } from "./usePinBar";
 
 interface PinBarCollapsedProps {
@@ -9,23 +17,48 @@ interface PinBarCollapsedProps {
   onToggle: () => void;
 }
 
-function getPreview(pin: PinnedGroupMessage): string {
+function attachmentPrimaryName(pin: PinnedGroupMessage): string {
+  if (pin.iconKind === "image") return pin.fileName || "Hình ảnh";
+  if (pin.iconKind === "video") return pin.fileName || "Video";
+  return pin.fileName || "Tệp đính kèm";
+}
+
+function attachmentLabel(pin: PinnedGroupMessage): string {
+  const primary = attachmentPrimaryName(pin);
+  const others = pin.attachmentCount > 1 ? pin.attachmentCount - 1 : 0;
+  return others > 0 ? `${primary} và ${others} tệp đính kèm khác` : primary;
+}
+
+/** Plain-text preview for the title/tooltip — no icons. */
+function getPreviewText(pin: PinnedGroupMessage): string {
   const text = pin.content?.trim();
-  if (pin.iconKind === "text") return text || "Tin nhắn";
+  if (pin.iconKind === "text" || text) return text || "Tin nhắn";
+  return attachmentLabel(pin);
+}
 
-  const emoji =
-    pin.iconKind === "image" ? "📷" : pin.iconKind === "video" ? "🎬" : "📎";
-  const fallback =
+/**
+ * Preview shown after the sender name:
+ * - has text          → text only (no icon)
+ * - file, no text     → file name + small lucide icon (mirrors the expanded row)
+ */
+function renderPreview(pin: PinnedGroupMessage): React.ReactNode {
+  const text = pin.content?.trim();
+  if (pin.iconKind === "text" || text) return text || "Tin nhắn";
+
+  const Icon =
     pin.iconKind === "image"
-      ? pin.fileName || "Hình ảnh"
+      ? ImageIcon
       : pin.iconKind === "video"
-        ? pin.fileName || "Video"
+        ? Video
         : pin.iconKind === "mixed"
-          ? "Nhiều tệp đính kèm"
-          : pin.fileName || "Tệp đính kèm";
-
-  // When the attachment also carries text, surface the text after the icon.
-  return `${emoji} ${text || fallback}`;
+          ? Files
+          : FileText;
+  return (
+    <span className="inline-flex items-center gap-1 align-middle">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
+      <span className="truncate">{attachmentLabel(pin)}</span>
+    </span>
+  );
 }
 
 export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
@@ -34,7 +67,7 @@ export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
   isExpanded,
   onToggle,
 }) => {
-  const preview = getPreview(latestPin);
+  const previewText = getPreviewText(latestPin);
 
   return (
     <button
@@ -59,12 +92,12 @@ export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
           <span
             className="text-sm text-gray-700 truncate"
             data-testid="pin-bar-latest-preview"
-            title={preview}
+            title={`${latestPin.senderName}: ${previewText}`}
           >
             <span className="font-medium text-gray-800">
               {latestPin.senderName}:
             </span>{" "}
-            {preview}
+            {renderPreview(latestPin)}
           </span>
         </div>
       </div>

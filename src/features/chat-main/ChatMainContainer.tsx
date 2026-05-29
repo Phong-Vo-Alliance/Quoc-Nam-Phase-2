@@ -16,11 +16,11 @@ import ImagePreviewModal from "@/components/ImagePreviewModal";
 import FilePreviewModal from "@/components/FilePreviewModal";
 import { ChatHeader } from "@/features/portal/components/chat/ChatHeader";
 import { TaskBanner } from "@/features/portal/components/chat/TaskBanner";
-import { PinBar } from "@/features/portal/components/chat/PinBar";
 import {
-  usePinMessage,
-  useUnpinMessage,
-} from "@/hooks/mutations/usePinMessage";
+  PinBar,
+  PinLimitReplaceDialog,
+  usePinReplaceGuard,
+} from "@/features/portal/components/chat/PinBar";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
 
 // Extracted hooks
@@ -207,18 +207,19 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   });
 
   // ── Pin / Unpin ──
-  const pinMessageMutation = usePinMessage({ conversationId });
-  const unpinMessageMutation = useUnpinMessage({ conversationId });
+  // Guards pinning against the per-conversation limit: when full, surfaces a
+  // replace dialog that drops the oldest pin instead of pinning directly.
+  const pinGuard = usePinReplaceGuard(conversationId);
 
   const handleTogglePin = useCallback(
     (messageId: string, isPinned: boolean) => {
       if (isPinned) {
-        unpinMessageMutation.mutate({ messageId });
+        pinGuard.unpin(messageId);
       } else {
-        pinMessageMutation.mutate({ messageId });
+        pinGuard.requestPin(messageId);
       }
     },
-    [pinMessageMutation, unpinMessageMutation],
+    [pinGuard],
   );
 
   // Resolve the task linked to a root message from the message cache.
@@ -603,6 +604,16 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           onClose={closeFilePreview}
         />
       )}
+
+      {/* Pin limit reached → confirm replacing the oldest pin */}
+      <PinLimitReplaceDialog
+        open={pinGuard.dialogOpen}
+        onOpenChange={pinGuard.setDialogOpen}
+        pinToReplace={pinGuard.pinToReplace}
+        pinLimit={pinGuard.pinLimit}
+        onConfirm={pinGuard.confirmReplace}
+        isProcessing={pinGuard.isProcessing}
+      />
     </div>
   );
 };
