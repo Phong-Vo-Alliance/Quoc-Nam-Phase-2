@@ -1075,9 +1075,15 @@ export const VendorMessageBubble: React.FC<VendorMessageBubbleProps> = ({
 
               {/* Attribution — sender name inside right-side ZALO bubbles */}
               {isRight && message.origin === "ZALO" && (() => {
-                const attributionName: string = message.senderId.startsWith("u_")
-                  ? message.senderName
-                  : ((zaloAccounts ?? []).find(a => a.id === message.actingAsZaloAccountId)?.displayName ?? message.senderName);
+                let attributionName: string;
+                if (message.senderId.startsWith("u_")) {
+                  // Internal staff acting via Zalo account → "ZaloName (StaffName)"
+                  const zaloName = (zaloAccounts ?? []).find((a) => a.id === message.actingAsZaloAccountId)?.displayName;
+                  attributionName = zaloName ? `${zaloName} (${message.senderName})` : message.senderName;
+                } else {
+                  // Direct Zalo account message (no individual staff attribution)
+                  attributionName = (zaloAccounts ?? []).find((a) => a.id === message.actingAsZaloAccountId)?.displayName ?? message.senderName;
+                }
                 return (
                   <div className="px-3 -mt-1.5 pt-px pb-1 border-t border-brand-200/60 text-right">
                     <span className="text-[10px] text-brand-700/60 leading-none">{attributionName}</span>
@@ -1087,6 +1093,22 @@ export const VendorMessageBubble: React.FC<VendorMessageBubbleProps> = ({
             </div>
           )}
         </div>
+
+        {/* Attribution below recalled right-side bubbles (mirrors active bubble attribution) */}
+        {message.isRecalled && isRight && message.origin === "ZALO" && (() => {
+          let attributionName: string;
+          if (message.senderId.startsWith("u_")) {
+            const zaloName = (zaloAccounts ?? []).find((a) => a.id === message.actingAsZaloAccountId)?.displayName;
+            attributionName = zaloName ? `${zaloName} (${message.senderName})` : message.senderName;
+          } else {
+            attributionName = (zaloAccounts ?? []).find((a) => a.id === message.actingAsZaloAccountId)?.displayName ?? message.senderName;
+          }
+          return (
+            <div className="mt-0.5 px-1 text-right">
+              <span className="text-[10px] text-gray-400">{attributionName}</span>
+            </div>
+          );
+        })()}
 
         {/* Forwarded-to-admin indicator */}
         {message.isForwardedToAdmin && (

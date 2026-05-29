@@ -196,6 +196,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
 
   // NCC tab filter state (lifted from VendorGroupTabContent so filter bar lives in the fixed header)
   const vendorTags = useDemoConfigStore((s) => s.vendorTags);
+  const currentDemoUser = useDemoConfigStore((s) => s.currentUser);
   const [nccTagIds, setNccTagIds] = React.useState<string[]>([]);
   const [showNccTagMgmt, setShowNccTagMgmt] = React.useState(false);
 
@@ -1064,6 +1065,7 @@ export const ConversationListSidebar: React.FC<LeftSidebarProps> = ({
                 }
                 onClear={() => setNccTagIds([])}
                 onOpenManage={() => setShowNccTagMgmt(true)}
+                isAdmin={currentDemoUser.role === "ADMIN"}
               />
               {nccTagIds.length > 0 && (
                 <div className="flex min-w-0 flex-1 flex-wrap gap-1">
@@ -1499,12 +1501,14 @@ function TagFilterButton({
   onToggle,
   onClear,
   onOpenManage,
+  isAdmin,
 }: {
   vendorTags: VendorTag[];
   selectedTagIds: string[];
   onToggle: (tagId: string) => void;
   onClear: () => void;
   onOpenManage: () => void;
+  isAdmin: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -1597,15 +1601,17 @@ function TagFilterButton({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-100 py-1">
-            <button
-              type="button"
-              onClick={() => { setOpen(false); onOpenManage(); }}
-              className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
-            >
-              Quản lý thẻ phân loại
-            </button>
-          </div>
+          {isAdmin && (
+            <div className="border-t border-gray-100 py-1">
+              <button
+                type="button"
+                onClick={() => { setOpen(false); onOpenManage(); }}
+                className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
+              >
+                Quản lý thẻ phân loại
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1673,7 +1679,7 @@ function VendorGroupTabContent({
 
   const renderItem = (group: VendorGroup) => {
     const zaloAccount =
-      zaloAccounts.find((a) => a.id === group.zaloAccountId) ?? null;
+      zaloAccounts.find((a) => a.id === group.zaloAccountIds?.[0]) ?? null;
     return (
       <li key={group.id}>
         <VendorGroupItem

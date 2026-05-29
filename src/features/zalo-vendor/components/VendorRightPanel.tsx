@@ -22,17 +22,19 @@ import { cn } from "@/lib/utils";
 import { SegmentedTabs } from "@/features/portal/components/SegmentedTabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useVendorMessages, useVendorMembers } from "../hooks/useVendorMessages";
-import { useZaloAccountForGroup } from "../hooks/useVendorGroups";
+import { useZaloAccountsForGroup, resolveActiveZaloAccountId } from "../hooks/useVendorGroups";
 import { useVendorTasks, isToday } from "../hooks/useVendorTasks";
 import { useDemoConfigStore, DEMO_USERS } from "@/stores/demoConfigStore";
 import { RenameGroupModal } from "./RenameGroupModal";
 import { VendorTaskCard } from "./VendorTaskCard";
-import type { VendorMember, VendorGroup, VendorTask } from "@/types/zalo";
+import type { VendorMember, VendorGroup, VendorTask, ZaloAccount } from "@/types/zalo";
 import vendorGroupsRaw from "@/data/zalo/vendor-groups.json";
 import vendorMembersRaw from "@/data/zalo/vendor-members.json";
+import zaloAccountsRaw from "@/data/zalo/zalo-accounts.json";
 
 const allGroups = vendorGroupsRaw as VendorGroup[];
 const allMembersMap = vendorMembersRaw as Record<string, VendorMember[]>;
+const zaloAccounts = zaloAccountsRaw as ZaloAccount[];
 
 interface VendorRightPanelProps {
   groupId: string;
@@ -258,6 +260,8 @@ interface MemberManageModalProps {
   groupName: string;
   members: VendorMember[];
   potentialStaff: VendorMember[];
+  linkedAccountIds: string[];
+  zaloAccountAssignments: Record<string, string[]>;
   onRemove: (memberId: string) => void;
   onToggleDownload: (memberId: string) => void;
   onAdd: (candidate: VendorMember) => void;
@@ -268,6 +272,8 @@ const MemberManageModal: React.FC<MemberManageModalProps> = ({
   groupName,
   members,
   potentialStaff,
+  linkedAccountIds,
+  zaloAccountAssignments,
   onRemove,
   onToggleDownload,
   onAdd,
@@ -455,6 +461,30 @@ const MemberManageModal: React.FC<MemberManageModalProps> = ({
                           <p className="text-[10px] text-gray-400 truncate">
                             {m.email}
                           </p>
+                          {linkedAccountIds.length > 1 && (
+                            <div className="mt-0.5 flex flex-wrap gap-1">
+                              {linkedAccountIds
+                                .filter((id) =>
+                                  (zaloAccountAssignments[id] ?? []).includes(
+                                    m.internalUserId ?? "",
+                                  ),
+                                )
+                                .map((id) => {
+                                  const acc = zaloAccounts.find((a) => a.id === id);
+                                  return acc ? (
+                                    <span
+                                      key={id}
+                                      className="inline-flex items-center gap-0.5 rounded bg-blue-50 px-1 py-0.5 text-[9px] text-blue-600"
+                                    >
+                                      <span className="flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[7px] font-bold text-white">
+                                        Z
+                                      </span>
+                                      {acc.displayName}
+                                    </span>
+                                  ) : null;
+                                })}
+                            </div>
+                          )}
                         </div>
                         <UserPlus className="h-4 w-4 shrink-0 text-brand-400" />
                       </button>
@@ -498,13 +528,15 @@ export const VendorRightPanel: React.FC<VendorRightPanelProps> = ({
   };
   const { data: allMessages } = useVendorMessages(groupId);
   const { data: initialMembers } = useVendorMembers(groupId);
-  const zaloAccount = useZaloAccountForGroup(groupId);
+  const linkedZaloAccounts = useZaloAccountsForGroup(groupId);
   const currentUser = useDemoConfigStore((s) => s.currentUser);
   const groupDisplayNames = useDemoConfigStore((s) => s.groupDisplayNames);
   const addStaffToGroup = useDemoConfigStore((s) => s.addStaffToGroup);
   const removeStaffFromGroup = useDemoConfigStore((s) => s.removeStaffFromGroup);
   const setDownloadPermission = useDemoConfigStore((s) => s.setDownloadPermission);
   const zaloAccountAssignments = useDemoConfigStore((s) => s.zaloAccountAssignments);
+  const groupZaloAccountIds = useDemoConfigStore((s) => s.groupZaloAccountIds);
+  const groupStaffAccountOverride = useDemoConfigStore((s) => s.groupStaffAccountOverride);
   const phoneHidden = useDemoConfigStore((s) => s.phoneHidden);
   const togglePhoneHidden = useDemoConfigStore((s) => s.togglePhoneHidden);
   const isAdmin = currentUser.role === "ADMIN";
@@ -573,10 +605,12 @@ export const VendorRightPanel: React.FC<VendorRightPanelProps> = ({
   }, [groupId]); // intentionally omit initialMembers — we only want to reset on group switch, not on local member edits
 
   const potentialStaffMembers = useMemo(() => {
-    const zaloAccountId = group?.zaloAccountId;
-    if (!zaloAccountId) return [];
+    const accountIds = group?.zaloAccountIds ?? [];
+    if (accountIds.length === 0) return [];
 
-    const assignedStaffIds = new Set(zaloAccountAssignments[zaloAccountId] ?? []);
+    const assignedStaffIds = new Set(
+      accountIds.flatMap((id) => zaloAccountAssignments[id] ?? []),
+    );
     const currentInternalIds = new Set(
       members.filter((m) => m.internalUserId).map((m) => m.internalUserId as string)
     );
@@ -595,6 +629,28 @@ export const VendorRightPanel: React.FC<VendorRightPanelProps> = ({
         canDownload: false,
       }));
   }, [members, groupId, group, zaloAccountAssignments]);
+
+  // Pre-compute active account info for each visible STAFF member (only when group has >1 account)
+  const memberAccountInfo = useMemo(() => {
+    if (linkedZaloAccounts.length <= 1) return {};
+    const result: Record<string, { activeAccount: ZaloAccount | null; hasOverride: boolean }> = {};
+    for (const member of visibleMembers) {
+      if (member.role !== "STAFF" || !member.internalUserId) continue;
+      const activeId = resolveActiveZaloAccountId(
+        groupId,
+        member.internalUserId,
+        groupZaloAccountIds,
+        groupStaffAccountOverride,
+        zaloAccountAssignments,
+      );
+      const overrideId = groupStaffAccountOverride[groupId]?.[member.internalUserId];
+      result[member.id] = {
+        activeAccount: zaloAccounts.find((a) => a.id === activeId) ?? null,
+        hasOverride: !!overrideId && linkedZaloAccounts.some((a) => a.id === overrideId),
+      };
+    }
+    return result;
+  }, [visibleMembers, groupId, linkedZaloAccounts, groupZaloAccountIds, groupStaffAccountOverride, zaloAccountAssignments]);
 
   const mediaAttachments = useMemo(
     () =>
@@ -699,12 +755,27 @@ export const VendorRightPanel: React.FC<VendorRightPanelProps> = ({
                       </button>
                     )}
                   </div>
-                  {zaloAccount && (
-                    <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 max-w-full">
-                      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[8px] font-bold text-white">
-                        Z
-                      </span>
-                      <span className="font-medium truncate">{zaloAccount.displayName}</span>
+                  {linkedZaloAccounts.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {linkedZaloAccounts.slice(0, 2).map((acc) => (
+                        <div
+                          key={acc.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-blue-100 bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700"
+                        >
+                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[8px] font-bold text-white">
+                            Z
+                          </span>
+                          <span className="font-medium truncate max-w-[90px]">{acc.displayName}</span>
+                        </div>
+                      ))}
+                      {linkedZaloAccounts.length > 2 && (
+                        <div
+                          className="inline-flex items-center rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 cursor-default"
+                          title={linkedZaloAccounts.slice(2).map((a) => a.displayName).join(", ")}
+                        >
+                          +{linkedZaloAccounts.length - 2}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -870,14 +941,34 @@ export const VendorRightPanel: React.FC<VendorRightPanelProps> = ({
                     <p className="truncate text-xs font-medium text-gray-800 leading-tight">
                       {member.displayName}
                     </p>
-                    <span
-                      className={cn(
-                        "inline-block rounded px-1 py-0.5 text-[9px] font-medium mt-0.5",
-                        getMemberRoleBadgeClass(member.role)
-                      )}
-                    >
-                      {getMemberRoleLabel(member.role)}
-                    </span>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                      <span
+                        className={cn(
+                          "inline-block rounded px-1 py-0.5 text-[9px] font-medium",
+                          getMemberRoleBadgeClass(member.role)
+                        )}
+                      >
+                        {getMemberRoleLabel(member.role)}
+                      </span>
+                      {member.role === "STAFF" &&
+                        member.internalUserId &&
+                        memberAccountInfo[member.id]?.activeAccount && (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium",
+                              memberAccountInfo[member.id].hasOverride
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-blue-50 text-blue-600",
+                            )}
+                            title="Tài khoản Zalo đại diện"
+                          >
+                            <span className="flex h-3 w-3 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[7px] font-bold text-white">
+                              Z
+                            </span>
+                            {memberAccountInfo[member.id].activeAccount!.displayName}
+                          </span>
+                        )}
+                    </div>
                   </div>
                   {member.role === "STAFF" && member.canDownload && (
                     <Download className="h-3 w-3 shrink-0 text-brand-400" title="Có quyền tải xuống" />
@@ -1223,6 +1314,8 @@ export const VendorRightPanel: React.FC<VendorRightPanelProps> = ({
           groupName={displayName}
           members={members}
           potentialStaff={potentialStaffMembers}
+          linkedAccountIds={linkedZaloAccounts.map((a) => a.id)}
+          zaloAccountAssignments={zaloAccountAssignments}
           onRemove={handleRemoveMember}
           onToggleDownload={handleToggleDownload}
           onAdd={handleAddMember}

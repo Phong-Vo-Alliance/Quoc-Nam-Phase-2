@@ -1,0 +1,333 @@
+src/components/files/FileCard.test.ts(36,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(36,26): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(36,39): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(36,40): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(41,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(41,26): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(41,39): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(41,40): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(48,44): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(48,48): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(48,61): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(48,62): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(63,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(63,26): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(63,38): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(63,60): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(63,71): error TS1005: ':' expected.
+src/components/files/FileCard.test.ts(63,74): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(63,75): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(72,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(72,26): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(72,39): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(72,40): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(79,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(79,26): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(79,39): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(79,40): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(87,26): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(87,30): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(87,43): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(87,44): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(92,26): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(92,30): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(92,43): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(92,44): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(98,26): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(98,30): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(98,43): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(98,44): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(106,26): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(106,30): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(106,43): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(106,44): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(113,48): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(113,52): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(113,65): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(113,66): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(128,26): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(128,30): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(128,42): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(128,64): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(128,75): error TS1005: ':' expected.
+src/components/files/FileCard.test.ts(128,78): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(128,79): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(143,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(143,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(143,41): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(143,42): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(148,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(148,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(148,41): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(148,42): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(154,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(154,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(154,30): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(154,31): error TS1005: ':' expected.
+src/components/files/FileCard.test.ts(154,34): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(154,35): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(162,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(162,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(162,40): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(162,67): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(162,68): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(175,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(175,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(175,41): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(175,42): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(180,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(180,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(180,41): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(180,42): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(186,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(186,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(186,30): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(186,31): error TS1005: ':' expected.
+src/components/files/FileCard.test.ts(186,34): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(186,35): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(194,22): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(194,27): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(194,40): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(194,67): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(194,68): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(205,44): error TS1005: '>' expected.
+src/components/files/FileCard.test.ts(205,49): error TS1005: ',' expected.
+src/components/files/FileCard.test.ts(205,63): error TS1109: Expression expected.
+src/components/files/FileCard.test.ts(205,64): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(46,27): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(52,27): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(52,38): error TS1005: ',' expected.
+src/components/files/FileSearchBar.test.ts(52,56): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(52,57): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(59,27): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(71,27): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(71,35): error TS1005: ',' expected.
+src/components/files/FileSearchBar.test.ts(71,48): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(71,49): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(81,27): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(96,30): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(102,30): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(112,30): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(112,42): error TS1005: ',' expected.
+src/components/files/FileSearchBar.test.ts(112,59): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(112,60): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(121,30): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(129,25): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(135,25): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(141,25): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(160,25): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(160,35): error TS1005: ',' expected.
+src/components/files/FileSearchBar.test.ts(160,41): error TS1005: ':' expected.
+src/components/files/FileSearchBar.test.ts(160,44): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(160,45): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(168,25): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(168,39): error TS1005: ',' expected.
+src/components/files/FileSearchBar.test.ts(168,58): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(168,59): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(200,28): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(205,28): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(212,28): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(218,28): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(226,28): error TS1005: '>' expected.
+src/components/files/FileSearchBar.test.ts(226,40): error TS1005: ',' expected.
+src/components/files/FileSearchBar.test.ts(226,57): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(226,58): error TS1109: Expression expected.
+src/components/files/FileSearchBar.test.ts(235,28): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.integration.test.ts(615,25): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(66,26): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(66,32): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(66,39): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(66,41): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(66,55): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(66,58): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(66,65): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(80,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(80,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(80,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(80,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(80,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(80,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(80,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(80,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(82,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(82,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(92,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(92,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(92,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(92,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(92,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(92,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(92,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(92,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(95,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(95,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(105,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(105,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(105,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(105,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(105,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(105,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(105,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(105,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(108,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(108,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(118,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(118,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(118,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(118,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(118,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(118,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(118,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(118,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(121,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(121,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(132,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(132,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(132,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(132,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(132,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(132,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(132,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(132,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(138,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(138,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(149,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(149,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(149,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(149,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(149,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(149,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(149,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(149,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(161,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(161,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(171,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(171,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(171,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(171,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(171,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(171,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(171,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(171,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(173,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(173,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(183,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(183,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(183,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(183,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(183,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(183,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(183,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(183,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(190,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(190,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(200,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(200,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(200,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(200,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(200,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(200,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(200,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(200,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(204,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(204,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(218,26): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(218,32): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(218,38): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(218,40): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(218,69): error TS1109: Expression expected.
+src/components/files/ViewAllFilesModal.test.ts(219,5): error TS1109: Expression expected.
+src/components/files/ViewAllFilesModal.test.ts(237,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(237,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(237,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(237,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(237,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(237,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(237,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(237,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(239,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(239,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(249,31): error TS1005: '>' expected.
+src/components/files/ViewAllFilesModal.test.ts(249,37): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(249,43): error TS1005: ':' expected.
+src/components/files/ViewAllFilesModal.test.ts(249,45): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(249,59): error TS1136: Property assignment expected.
+src/components/files/ViewAllFilesModal.test.ts(249,62): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(249,67): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(249,69): error TS1005: ',' expected.
+src/components/files/ViewAllFilesModal.test.ts(260,3): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(260,4): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(261,1): error TS1128: Declaration or statement expected.
+src/components/files/ViewAllFilesModal.test.ts(261,2): error TS1128: Declaration or statement expected.
+src/features/portal/workspace/InformationPanel.test.ts(14,34): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(14,45): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(14,60): error TS1005: ':' expected.
+src/features/portal/workspace/InformationPanel.test.ts(14,66): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(14,74): error TS1139: Type parameter declaration expected.
+src/features/portal/workspace/InformationPanel.test.ts(14,79): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(15,1): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(15,3): error TS1005: ';' expected.
+src/features/portal/workspace/InformationPanel.test.ts(51,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(51,16): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(52,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(53,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(54,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(55,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(71,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(71,16): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(72,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(73,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(74,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(75,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(95,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(95,16): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(96,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(97,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(98,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(99,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(100,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(114,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(114,16): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(115,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(116,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(117,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(118,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(137,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(137,17): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(138,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(139,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(140,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(141,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(142,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(143,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(158,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(158,17): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(159,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(160,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(161,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(162,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(163,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(164,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(173,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(173,16): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(174,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(175,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(176,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(177,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(191,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(191,16): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(192,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(193,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(194,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(195,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(208,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(208,18): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(209,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(210,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(211,5): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(221,9): error TS1005: '>' expected.
+src/features/portal/workspace/InformationPanel.test.ts(221,16): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(222,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(223,9): error TS1005: ',' expected.
+src/features/portal/workspace/InformationPanel.test.ts(224,8): error TS1109: Expression expected.
+src/features/portal/workspace/InformationPanel.test.ts(225,5): error TS1109: Expression expected.

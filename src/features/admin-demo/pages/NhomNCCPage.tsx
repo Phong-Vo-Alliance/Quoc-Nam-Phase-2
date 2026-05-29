@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronDown,
   ChevronRight,
@@ -15,29 +16,36 @@ import {
   Pin,
   Check,
   Settings2,
+  ChevronDown as ChevronDownSm,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDemoConfigStore, DEMO_USERS } from "@/stores/demoConfigStore";
+import { resolveGroupAccountIds, resolveActiveZaloAccountId } from "@/features/zalo-vendor/hooks/useVendorGroups";
 import { RenameGroupModal } from "@/features/zalo-vendor/components/RenameGroupModal";
 import { TagManagementModal } from "@/features/admin-demo/components/TagManagementModal";
 import { Switch } from "@/components/ui/switch";
-import vendorGroups from "@/data/zalo/vendor-groups.json";
-import zaloAccounts from "@/data/zalo/zalo-accounts.json";
+import vendorGroupsJson from "@/data/zalo/vendor-groups.json";
+import zaloAccountsJson from "@/data/zalo/zalo-accounts.json";
+import type { ZaloAccount } from "@/types/zalo";
+
+const vendorGroups = vendorGroupsJson as { id: string; name: string; zaloGroupId: string; avatarUrl: string | null; zaloAccountIds: string[]; memberCount: number; lastMessage: unknown; unreadCount: number; isPinned: boolean; syncedAt: string; createdAt: string }[];
+const zaloAccounts = zaloAccountsJson as ZaloAccount[];
 
 // ─── Add Staff Dialog ──────────────────────────────────────────────────────────
 
 interface AddStaffDialogProps {
   groupId: string;
-  zaloAccountId: string;
+  zaloAccountIds: string[];
   currentStaffIds: string[];
   onClose: () => void;
 }
 
-function AddStaffDialog({ groupId, zaloAccountId, currentStaffIds, onClose }: AddStaffDialogProps) {
+function AddStaffDialog({ groupId, zaloAccountIds, currentStaffIds, onClose }: AddStaffDialogProps) {
   const { addStaffToGroup, zaloAccountAssignments } = useDemoConfigStore();
-  const eligibleIds = zaloAccountAssignments[zaloAccountId] ?? [];
+  // Union of staff assigned to any linked account
+  const eligibleIds = new Set(zaloAccountIds.flatMap((id) => zaloAccountAssignments[id] ?? []));
   const available = DEMO_USERS.filter(
-    (u) => u.role === "STAFF" && eligibleIds.includes(u.id) && !currentStaffIds.includes(u.id),
+    (u) => u.role === "STAFF" && eligibleIds.has(u.id) && !currentStaffIds.includes(u.id),
   );
 
   if (available.length === 0) {
@@ -157,6 +165,138 @@ function TagAssignmentDropdown({
   );
 }
 
+// ─── Staff Account Override Select ─────────────────────────────────────────────
+// Uses createPortal + position:fixed to escape overflow:hidden table containers.
+
+function StaffAccountOverrideSelect({
+  groupId,
+  staffId,
+  eligibleAccountIds,
+}: {
+  groupId: string;
+  staffId: string;
+  eligibleAccountIds: string[];
+}) {
+  const {
+    groupStaffAccountOverride,
+    groupZaloAccountIds,
+    zaloAccountAssignments,
+    setStaffAccountOverride,
+    clearStaffAccountOverride,
+  } = useDemoConfigStore();
+  const [open, setOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node)) return;
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleToggle = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const dropdownH = 160; // estimated height
+      const top = spaceBelow >= dropdownH ? rect.bottom + 4 : rect.top - dropdownH - 4;
+      setDropdownStyle({ position: "fixed", top, left: rect.left, zIndex: 9999 });
+    }
+    setOpen((v) => !v);
+  };
+
+  const activeId = resolveActiveZaloAccountId(
+    groupId,
+    staffId,
+    groupZaloAccountIds,
+    groupStaffAccountOverride,
+    zaloAccountAssignments,
+  );
+  const hasOverride = !!(groupStaffAccountOverride[groupId]?.[staffId]);
+  const activeAccount = zaloAccounts.find((a) => a.id === activeId);
+
+  if (eligibleAccountIds.length <= 1) {
+    return (
+      <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+        {activeAccount?.displayName ?? "—"}
+      </span>
+    );
+  }
+
+  const dropdownEl = (
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="w-48 rounded-xl bg-white shadow-2xl border border-gray-100 py-1"
+    >
+      {eligibleAccountIds.map((accountId) => {
+        const account = zaloAccounts.find((a) => a.id === accountId);
+        const isActive = accountId === activeId;
+        return (
+          <button
+            key={accountId}
+            type="button"
+            onClick={() => {
+              setStaffAccountOverride(groupId, staffId, accountId);
+              setOpen(false);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 hover:bg-gray-50"
+          >
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[9px] font-bold text-white">
+              Z
+            </span>
+            <span className="flex-1 text-left text-xs text-gray-700">
+              {account?.displayName ?? accountId}
+            </span>
+            {isActive && <Check className="h-3 w-3 text-brand-600 shrink-0" />}
+          </button>
+        );
+      })}
+      {hasOverride && (
+        <>
+          <div className="border-t border-gray-100 my-1" />
+          <button
+            type="button"
+            onClick={() => {
+              clearStaffAccountOverride(groupId, staffId);
+              setOpen(false);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-500 hover:bg-gray-50"
+          >
+            Về mặc định
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={handleToggle}
+        className={cn(
+          "flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+          hasOverride
+            ? "bg-amber-50 text-amber-700 border border-amber-200"
+            : "bg-blue-50 text-blue-700",
+        )}
+      >
+        {activeAccount?.displayName ?? "—"}
+        <ChevronDownSm className="h-3 w-3" />
+      </button>
+      {open && createPortal(dropdownEl, document.body)}
+    </>
+  );
+}
+
 // ─── Row More Menu ─────────────────────────────────────────────────────────────
 
 function RowMoreMenu({
@@ -242,6 +382,9 @@ export function NhomNCCPage() {
     togglePinGroup,
     vendorTags,
     groupTagIds,
+    groupZaloAccountIds,
+    groupStaffAccountOverride,
+    zaloAccountAssignments,
   } = useDemoConfigStore();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -253,6 +396,13 @@ export function NhomNCCPage() {
   const [accountFilter, setAccountFilter] = useState("all");
   const [phoneFilter, setPhoneFilter] = useState<PhoneFilter>("all");
   const [tagFilter, setTagFilter] = useState<string | null>(null); // null = tất cả
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 });
+
+  useEffect(() => {
+    const el = tabRefs.current[phoneFilter];
+    if (el) setTabIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [phoneFilter]);
 
   const matchedStaff = useMemo(() => {
     const q = staffSearchQuery.trim().toLowerCase();
@@ -282,7 +432,8 @@ export function NhomNCCPage() {
         .toLowerCase();
       const originalName = group.name.replace(/^NCC\s*[-–]\s*/i, "").toLowerCase();
       const matchesSearch = !q || displayName.includes(q) || originalName.includes(q);
-      const matchesAccount = accountFilter === "all" || group.zaloAccountId === accountFilter;
+      const groupAccountIds = resolveGroupAccountIds(group.id, groupZaloAccountIds);
+      const matchesAccount = accountFilter === "all" || groupAccountIds.includes(accountFilter);
 
       const staffIds = groupMemberships[group.id] ?? [];
       const matchesStaff =
@@ -297,9 +448,9 @@ export function NhomNCCPage() {
       const assignedTags = groupTagIds[group.id] ?? [];
       const matchesTag = tagFilter === null || assignedTags.includes(tagFilter);
 
-      return matchesSearch && matchesAccount && matchesStaff && matchesPhone && matchesTag;
+        return matchesSearch && matchesAccount && matchesStaff && matchesPhone && matchesTag;
     });
-  }, [searchQuery, staffSearchQuery, accountFilter, phoneFilter, tagFilter, groupDisplayNames, groupMemberships, matchedStaffIds, isStaffSearchActive, phoneHidden, groupTagIds]);
+  }, [searchQuery, staffSearchQuery, accountFilter, phoneFilter, tagFilter, groupDisplayNames, groupMemberships, matchedStaffIds, isStaffSearchActive, phoneHidden, groupTagIds, groupZaloAccountIds]);
 
   const phoneFilterTabs: { key: PhoneFilter; label: string; count: number }[] = [
     { key: "all", label: "Tất cả", count: vendorGroups.length },
@@ -384,19 +535,20 @@ export function NhomNCCPage() {
       </div>
 
       {/* Phone filter tab row */}
-      <div className="mb-3 flex items-center gap-1 border-b border-gray-200">
+      <div className="relative mb-3 flex items-center gap-1 border-b border-gray-200">
         {phoneFilterTabs.map((tab) => (
           <button
             key={tab.key}
+            ref={(el) => { tabRefs.current[tab.key] = el; }}
             type="button"
             onClick={() => setPhoneFilter(tab.key)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              "flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-0 outline-none focus-visible:outline-none transition-colors duration-200",
               phoneFilter === tab.key
                 ? tab.key === "hidden"
-                  ? "border-orange-500 text-orange-700"
-                  : "border-brand-600 text-brand-700"
-                : "border-transparent text-gray-500 hover:text-gray-700",
+                  ? "text-orange-700"
+                  : "text-brand-700"
+                : "text-gray-400 hover:text-gray-600",
             )}
           >
             {tab.key === "hidden" && <EyeOff className="h-3.5 w-3.5" />}
@@ -418,6 +570,13 @@ export function NhomNCCPage() {
             )}
           </button>
         ))}
+        <span
+          className={cn(
+            "absolute bottom-0 h-0.5 transition-all duration-300 ease-in-out",
+            phoneFilter === "hidden" ? "bg-orange-500" : "bg-brand-600",
+          )}
+          style={{ left: tabIndicator.left, width: tabIndicator.width }}
+        />
       </div>
 
       {/* Tag filter chips */}
@@ -526,7 +685,10 @@ export function NhomNCCPage() {
               const hasRename = !!(groupDisplayNames[group.id]);
               const staffIds = groupMemberships[group.id] ?? [];
               const staffUsers = DEMO_USERS.filter((u) => staffIds.includes(u.id));
-              const account = zaloAccounts.find((a) => a.id === group.zaloAccountId);
+              const linkedAccountIds = resolveGroupAccountIds(group.id, groupZaloAccountIds);
+              const linkedAccounts = linkedAccountIds
+                .map((id) => zaloAccounts.find((a) => a.id === id))
+                .filter((a): a is ZaloAccount => !!a);
               const isHidden = phoneHidden[group.id] ?? false;
               const isPinned = pinnedGroups.includes(group.id);
               const assignedTagIds = groupTagIds[group.id] ?? [];
@@ -578,9 +740,21 @@ export function NhomNCCPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-400">{group.name.replace(/^NCC\s*[-–]\s*/i, "")}</td>
                     <td className="px-4 py-3">
-                      <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                        {account?.displayName ?? group.zaloAccountId}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {linkedAccounts.slice(0, 2).map((acc) => (
+                          <span key={acc.id} className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 whitespace-nowrap">
+                            {acc.displayName}
+                          </span>
+                        ))}
+                        {linkedAccounts.length > 2 && (
+                          <span
+                            title={linkedAccounts.slice(2).map((a) => a.displayName).join(", ")}
+                            className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 cursor-default"
+                          >
+                            +{linkedAccounts.length - 2}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center text-sm text-gray-600">
                       {staffIds.length}
@@ -649,12 +823,17 @@ export function NhomNCCPage() {
                                 <tr className="border-b border-gray-100 bg-gray-50">
                                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Thành viên</th>
                                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Phòng ban</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Đại diện qua</th>
                                   <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Thao tác</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {staffUsers.map((u) => {
                                   const isHighlighted = matchedStaffIds.has(u.id);
+                                  // Accounts this staff is eligible for in this group
+                                  const eligibleAccountIds = linkedAccountIds.filter((id) =>
+                                    (zaloAccountAssignments[id] ?? []).includes(u.id),
+                                  );
                                   return (
                                     <tr
                                       key={u.id}
@@ -686,6 +865,17 @@ export function NhomNCCPage() {
                                         </div>
                                       </td>
                                       <td className="px-3 py-2 text-gray-500">{u.department}</td>
+                                      <td className="px-3 py-2">
+                                        {eligibleAccountIds.length > 0 ? (
+                                          <StaffAccountOverrideSelect
+                                            groupId={group.id}
+                                            staffId={u.id}
+                                            eligibleAccountIds={eligibleAccountIds}
+                                          />
+                                        ) : (
+                                          <span className="text-xs text-gray-400">—</span>
+                                        )}
+                                      </td>
                                       <td className="px-3 py-2 text-right">
                                         <button
                                           onClick={() => removeStaffFromGroup(group.id, u.id)}
@@ -728,7 +918,7 @@ export function NhomNCCPage() {
         return g ? (
           <AddStaffDialog
             groupId={addStaffModal}
-            zaloAccountId={g.zaloAccountId}
+            zaloAccountIds={resolveGroupAccountIds(addStaffModal, groupZaloAccountIds)}
             currentStaffIds={groupMemberships[addStaffModal] ?? []}
             onClose={() => setAddStaffModal(null)}
           />

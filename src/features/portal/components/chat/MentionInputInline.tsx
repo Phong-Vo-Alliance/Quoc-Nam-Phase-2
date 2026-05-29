@@ -54,6 +54,7 @@ export interface MentionData {
 export interface MentionInputHandle {
   focus: () => void;
   clear: () => void;
+  send: () => void;
   openShortcutPicker: () => void;
 }
 
@@ -69,6 +70,12 @@ export interface MentionInputProps {
   className?: string;
   /** Allow sending with Enter even when text is empty (e.g., when files are attached) */
   canSendWithoutText?: boolean;
+  /**
+   * Override the member list shown in the @ dropdown.
+   * When provided, skips the useMentionMembers hook entirely.
+   * Use this to pass a filtered/custom member list (e.g. vendor-only members).
+   */
+  members?: ConversationMember[];
 }
 
 /**
@@ -111,6 +118,7 @@ export const MentionInputInline = forwardRef<
       autoFocus,
       className,
       canSendWithoutText = false,
+      members: membersProp,
     },
     forwardedRef,
   ) => {
@@ -199,10 +207,12 @@ export const MentionInputInline = forwardRef<
     );
 
     // Source mention members from the categories cache (mention.members).
-    const { data: members = [] } = useMentionMembers({
+    // If `membersProp` is provided via props, use it directly instead.
+    const { data: membersFromHook = [] } = useMentionMembers({
       conversationId: conversationId || "",
-      enabled: !!conversationId,
+      enabled: !!conversationId && !membersProp,
     });
+    const members = membersProp ?? membersFromHook;
 
     // Get current user for filtering
     const { user: currentUser } = useAuthStore();
@@ -224,6 +234,7 @@ export const MentionInputInline = forwardRef<
             onMentionsChange([]);
           }
         },
+        send: () => performSendRef.current(),
         openShortcutPicker: () => {
           if (!editorRef.current || disabled || shortcuts.length === 0) return;
 
@@ -619,6 +630,22 @@ export const MentionInputInline = forwardRef<
       }
 
       return result;
+    };
+
+    // Ref that always holds a fresh "send" function so useImperativeHandle
+    // can expose send() without a stale closure or extra deps.
+    const performSendRef = useRef<() => void>(() => {});
+    performSendRef.current = () => {
+      const text = getTextContent();
+      if (!text.trim() && !canSendWithoutText) return;
+      const mentionsForApi = buildMentionsForApi(text, mentionsRef.current);
+      onSend(text, mentionsForApi);
+      if (editorRef.current) editorRef.current.innerHTML = "";
+      mentionsRef.current = [];
+      setMentionsState([]);
+      onChange("");
+      if (onMentionsChange) onMentionsChange([]);
+      setTimeout(() => editorRef.current?.focus(), 0);
     };
 
     // Sync mentions state with DOM: drop any mention whose span was removed

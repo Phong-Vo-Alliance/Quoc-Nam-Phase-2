@@ -1232,6 +1232,7 @@ export const ConversationListSidebar: React.FC<
                 }
                 onClear={() => setSelectedTagIds([])}
                 onOpenManage={() => setShowNccTagManagement(true)}
+                isAdmin={currentDemoUser.role === "ADMIN"}
               />
             </div>
           )}
@@ -1278,7 +1279,7 @@ export const ConversationListSidebar: React.FC<
                   <>
                     {pinnedVendorList.map((group) => {
                       const zaloAccount =
-                        zaloAccounts.find((a) => a.id === group.zaloAccountId) ??
+                        zaloAccounts.find((a) => a.id === group.zaloAccountIds?.[0]) ??
                         null;
 
                       return (
@@ -1312,7 +1313,7 @@ export const ConversationListSidebar: React.FC<
 
                 {unpinnedVendorList.map((group) => {
                   const zaloAccount =
-                    zaloAccounts.find((a) => a.id === group.zaloAccountId) ?? null;
+                    zaloAccounts.find((a) => a.id === group.zaloAccountIds?.[0]) ?? null;
 
                   return (
                     <li key={group.id}>
@@ -1566,12 +1567,14 @@ function NccTagFilterButton({
   onToggle,
   onClear,
   onOpenManage,
+  isAdmin,
 }: {
   vendorTags: VendorTag[];
   selectedTagIds: string[];
   onToggle: (tagId: string) => void;
   onClear: () => void;
   onOpenManage: () => void;
+  isAdmin: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -1686,15 +1689,17 @@ function NccTagFilterButton({
             )}
           </div>
 
-          <div className="border-t border-gray-100 py-1">
-            <button
-              type="button"
-              onClick={() => { setOpen(false); onOpenManage(); }}
-              className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
-            >
-              Quản lý thẻ phân loại
-            </button>
-          </div>
+          {isAdmin && (
+            <div className="border-t border-gray-100 py-1">
+              <button
+                type="button"
+                onClick={() => { setOpen(false); onOpenManage(); }}
+                className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
+              >
+                Quản lý thẻ phân loại
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

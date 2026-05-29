@@ -35,7 +35,7 @@ export interface VendorGroup {
   zaloGroupId: string
   name: string
   avatarUrl: string | null
-  zaloAccountId: string       // which Zalo account synced this group
+  zaloAccountIds: string[]    // Zalo accounts that sync this group (multi-account support)
   memberCount: number
   lastMessage: VendorLastMessage | null
   unreadCount: number

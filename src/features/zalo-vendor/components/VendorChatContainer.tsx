@@ -24,6 +24,10 @@ import { useZaloAccountForGroup } from "../hooks/useVendorGroups";
 import { useVendorActions } from "../hooks/useVendorActions";
 import { usePhoneRevealActions } from "../hooks/usePhoneRevealActions";
 import { useVendorMembers } from "../hooks/useVendorMessages";
+import { useVendorMentionMembers } from "../hooks/useVendorMentionMembers";
+import { MentionInputInline } from "@/features/portal/components/chat/MentionInputInline";
+import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
+import type { MentionInputDto } from "@/types/messages";
 import { ZaloIdentityBar } from "./ZaloIdentityBar";
 import { VendorMessageBubble } from "./VendorMessageBubble";
 import { VendorAssignTaskSheet } from "./VendorAssignTaskSheet";
@@ -285,6 +289,7 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
   const zaloAccount = useZaloAccountForGroup(groupId);
   const group = vendorGroups.find((g) => g.id === groupId);
   const { data: groupMembers } = useVendorMembers(groupId);
+  const { data: vendorMentionMembers } = useVendorMentionMembers(groupId);
   const memberCount = useMemo(
     () => (isAdmin ? groupMembers.length : groupMembers.filter((m) => m.role !== "VENDOR").length),
     [isAdmin, groupMembers]
@@ -347,6 +352,7 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
   );
 
   const [inputText, setInputText] = useState("");
+  const [currentMentions, setCurrentMentions] = useState<MentionInputDto[]>([]);
   const [replyingTo, setReplyingTo] = useState<VendorMessage | null>(null);
   const [imagePreview, setImagePreview] = useState<{
     images: { url: string; fileName: string }[];
@@ -359,7 +365,7 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<MentionInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -411,6 +417,7 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
     if (replyingTo) inputRef.current?.focus();
   }, [replyingTo]);
 
+
   // Focus search input when shown
   useEffect(() => {
     if (showSearch) searchInputRef.current?.focus();
@@ -436,8 +443,9 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
     });
   };
 
-  const handleSend = () => {
-    const hasText = !!inputText.trim();
+  // Called by MentionInputInline.onSend (Enter key) and the send button
+  const handleSend = useCallback((content: string = inputText) => {
+    const hasText = !!content.trim();
     const hasFiles = pendingFiles.length > 0;
     if (!hasText && !hasFiles) return;
 
@@ -463,22 +471,27 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
         contentType: pf.file.type || "application/octet-stream",
         url: pf.objectUrl,
       }));
-      sendMessage(hasText ? inputText.trim() : null, contentType, replyRef, attachments);
+      sendMessage(hasText ? content.trim() : null, contentType, replyRef, attachments);
       setPendingFiles([]);
     } else {
-      sendMessage(inputText.trim(), "TXT", replyRef);
+      sendMessage(content.trim(), "TXT", replyRef);
     }
 
     setInputText("");
+    setCurrentMentions([]);
     setReplyingTo(null);
-  };
+  }, [inputText, pendingFiles, replyingTo, sendMessage]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  // Send button click: delegate to MentionInputInline's internal send so it
+  // calculates fresh mention positions from the DOM, then clears itself.
+  const handleSendButtonClick = useCallback(() => {
+    if (pendingFiles.length > 0 && !inputText.trim()) {
+      // File-only send: bypass MentionInputInline (no text/mention needed)
+      handleSend("");
+      return;
     }
-  };
+    inputRef.current?.send();
+  }, [pendingFiles.length, inputText, handleSend]);
 
   const pinnedMessages = messages.filter((m) => m.isPinned && !m.isRecalled);
 
@@ -664,7 +677,7 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
         onUnpin={pinMessage}
         onExpandedChange={setPinnedExpanded}
         zaloAccounts={zaloAccounts}
-        groupZaloAccountId={group?.zaloAccountId ?? null}
+        groupZaloAccountId={group?.zaloAccountIds?.[0] ?? null}
       />
 
       {/* ── Content area (message list + reply + input) ────────── */}
@@ -708,7 +721,7 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
                   return t ? { id: t.id, logCount: t.logCount ?? 0 } : undefined;
                 })()}
                 zaloAccounts={zaloAccounts}
-                groupZaloAccountId={group?.zaloAccountId ?? null}
+                groupZaloAccountId={group?.zaloAccountIds?.[0] ?? null}
                 onReply={setReplyingTo}
                 onRecall={recallMessage}
                 onPin={pinMessage}
@@ -820,7 +833,7 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
       })()}
 
       {/* ── Input area ─────────────────────────────────────────── */}
-      <div className="border-t border-gray-100 px-4 py-3 shrink-0">
+      <div className="border-t border-gray-100 px-3 pt-2.5 pb-2 shrink-0">
         {/* Hidden file inputs */}
         <input
           ref={fileInputRef}
@@ -839,10 +852,11 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
           onChange={handleFileSelect}
         />
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 focus-within:border-emerald-400 focus-within:bg-white transition-colors">
-          {/* Pending file preview strip */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm hover:border-gray-300 focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-50 transition-all duration-200 overflow-hidden">
+
+          {/* Pending file preview strip — shown above the input row */}
           {pendingFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-3 pt-2.5 pb-1">
+            <div className="flex flex-wrap gap-2 px-3 pt-3 pb-2.5 border-b border-gray-100">
               {pendingFiles.map((pf) => {
                 const isImg = pf.file.type.startsWith("image/");
                 const isVid = pf.file.type.startsWith("video/");
@@ -850,26 +864,20 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
                   <div key={pf.id} className="relative group/pending">
                     {isImg ? (
                       <div className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
-                        <img
-                          src={pf.objectUrl}
-                          alt={pf.file.name}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={pf.objectUrl} alt={pf.file.name} className="w-full h-full object-cover" />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 py-1.5 max-w-[140px]">
-                        {isVid ? (
-                          <Play className="h-4 w-4 text-gray-400 shrink-0" />
-                        ) : (
-                          <FileText className="h-4 w-4 text-gray-400 shrink-0" />
-                        )}
+                      <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 max-w-[140px]">
+                        {isVid
+                          ? <Play className="h-4 w-4 text-gray-400 shrink-0" />
+                          : <FileText className="h-4 w-4 text-gray-400 shrink-0" />}
                         <span className="text-xs text-gray-600 truncate">{pf.file.name}</span>
                       </div>
                     )}
                     <button
                       type="button"
                       onClick={() => handleRemovePending(pf.id)}
-                      className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-gray-600 text-white flex items-center justify-center opacity-0 group-hover/pending:opacity-100 transition-opacity"
+                      className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-gray-500 text-white flex items-center justify-center opacity-0 group-hover/pending:opacity-100 transition-opacity cursor-pointer"
                       aria-label="Xóa tệp"
                     >
                       <X className="h-2.5 w-2.5" />
@@ -880,56 +888,79 @@ export const VendorChatContainer: React.FC<VendorChatContainerProps> = ({
             </div>
           )}
 
-          {/* Text input row */}
-          <div className="flex items-end gap-2 px-3 py-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors mb-0.5"
-              aria-label="Đính kèm tệp"
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors mb-0.5"
-              aria-label="Gửi hình ảnh"
-            >
-              <ImageIcon className="h-3.5 w-3.5" />
-            </button>
-            <textarea
-              ref={inputRef}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              placeholder="Nhập tin nhắn..."
-              className={cn(
-                "flex-1 resize-none bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none",
-                "max-h-32 overflow-y-auto leading-relaxed"
-              )}
-              style={{ minHeight: "1.5rem" }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!inputText.trim() && pendingFiles.length === 0}
-              className={cn(
-                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors mb-0.5",
-                (inputText.trim() || pendingFiles.length > 0)
-                  ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
-              )}
-              aria-label="Gửi"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
+          {/* ── Single input row ─────────────────────────────────── */}
+          {/* Three zones: [actions | input | send] all items-center  */}
+          <div className="flex items-center gap-1 px-2 py-1.5">
+
+            {/* Zone 1 — attachment buttons */}
+            <div className="flex items-center shrink-0">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Đính kèm tệp"
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                title="Gửi hình ảnh"
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <ImageIcon className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div className="w-px h-5 bg-gray-200 shrink-0 mx-0.5" />
+
+            {/* Zone 2 — text input (grows) */}
+            <div className="flex-1 min-w-0 flex items-center px-1">
+              <MentionInputInline
+                ref={inputRef}
+                value={inputText}
+                onChange={setInputText}
+                onSend={(content) => handleSend(content)}
+                onMentionsChange={setCurrentMentions}
+                conversationId={undefined}
+                members={vendorMentionMembers}
+                placeholder="Nhập tin nhắn..."
+                canSendWithoutText={pendingFiles.length > 0}
+                className="w-full"
+              />
+            </div>
+
+            {/* Divider */}
+            <div className="w-px h-5 bg-gray-200 shrink-0 mx-0.5" />
+
+            {/* Zone 3 — send button */}
+            <div className="shrink-0">
+              <button
+                onClick={handleSendButtonClick}
+                disabled={!inputText.trim() && pendingFiles.length === 0}
+                title="Gửi tin nhắn"
+                className={cn(
+                  "h-8 w-8 rounded-lg flex items-center justify-center transition-all duration-200",
+                  (inputText.trim() || pendingFiles.length > 0)
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm cursor-pointer"
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                )}
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
 
-        <p className="mt-1 text-[10px] text-gray-400 text-center">
-          Enter để gửi · Shift+Enter xuống dòng
-        </p>
+        {/* Keyboard hint */}
+        <div className="mt-1.5 flex items-center justify-center gap-2.5 text-[10px] text-gray-400">
+          <span>Enter gửi</span>
+          <span className="text-gray-300">·</span>
+          <span>Shift+Enter xuống dòng</span>
+          <span className="text-gray-300">·</span>
+          <span className="text-emerald-500 font-medium">@ tag NCC</span>
+        </div>
       </div>
       </div>{/* end content area wrapper */}
 

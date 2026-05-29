@@ -50,7 +50,8 @@ function MoreMenu({
   onTogglePin: () => void;
   onOpenTagManage?: () => void;
 }) {
-  const { vendorTags, groupTagIds, toggleGroupTag } = useDemoConfigStore();
+  const { vendorTags, groupTagIds, toggleGroupTag, currentUser } = useDemoConfigStore();
+  const isAdmin = currentUser.role === "ADMIN";
   const [open, setOpen] = React.useState(false);
   const [view, setView] = React.useState<MenuView>("main");
   const ref = React.useRef<HTMLDivElement>(null);
@@ -166,19 +167,21 @@ function MoreMenu({
               </div>
 
               {/* Footer */}
-              <div className="border-t border-gray-100 py-1">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(false);
-                    onOpenTagManage?.();
-                  }}
-                  className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
-                >
-                  Quản lý thẻ phân loại
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="border-t border-gray-100 py-1">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpen(false);
+                      onOpenTagManage?.();
+                    }}
+                    className="flex w-full items-center px-4 py-2 text-sm text-brand-600 hover:bg-brand-50"
+                  >
+                    Quản lý thẻ phân loại
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

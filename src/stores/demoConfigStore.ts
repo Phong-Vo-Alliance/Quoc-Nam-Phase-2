@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { DemoUser, DownloadPermission, VendorAttachment, VendorMessageContentType } from "@/types/zalo";
+import vendorGroupsRaw from "@/data/zalo/vendor-groups.json";
 
 // ─── Vendor Tag ───────────────────────────────────────────────────────────────
 
@@ -228,6 +229,14 @@ interface DemoConfigState {
   // forwarded messages (feature #11): staff forwards vendor message to admin DM
   forwardedMessages: ForwardedMessage[];
 
+  // groupId → accountIds[] — runtime override of which Zalo accounts are linked
+  // falls back to vendor-groups.json zaloAccountIds when not set
+  groupZaloAccountIds: Record<string, string[]>;
+
+  // groupId → staffId → accountId — which Zalo account a staff member represents in a group
+  // falls back to resolveActiveZaloAccountId logic when not set
+  groupStaffAccountOverride: Record<string, Record<string, string>>;
+
   // ─── Actions ───────────────────────────────────────────────────────────────
 
   setDemoSession: (v: boolean) => void;
@@ -264,6 +273,11 @@ interface DemoConfigState {
   addForwardedMessage: (msg: ForwardedMessage) => void;
   clearForwardedMessages: () => void;
   dismissForwardedMessage: (id: string) => void;
+
+  addAccountToGroup: (groupId: string, accountId: string) => void;
+  removeAccountFromGroup: (groupId: string, accountId: string) => void;
+  setStaffAccountOverride: (groupId: string, staffId: string, accountId: string) => void;
+  clearStaffAccountOverride: (groupId: string, staffId: string) => void;
 
   // Convenience: check if current user can access a group
   canCurrentUserAccessGroup: (groupId: string) => boolean;
@@ -303,6 +317,8 @@ export const useDemoConfigStore = create<DemoConfigState>()(
       forwardedMessages: [],
       vendorTags: DEFAULT_VENDOR_TAGS,
       groupTagIds: {},
+      groupZaloAccountIds: {},
+      groupStaffAccountOverride: {},
 
       setDemoSession: (v) => set({ isDemoSession: v }),
       setCurrentUser: (user) => set({ currentUser: user }),
@@ -474,6 +490,63 @@ export const useDemoConfigStore = create<DemoConfigState>()(
           forwardedMessages: state.forwardedMessages.filter((m) => m.id !== id),
         })),
 
+      addAccountToGroup: (groupId, accountId) =>
+        set((state) => {
+          const current = state.groupZaloAccountIds[groupId]
+            ?? (vendorGroupsRaw as { id: string; zaloAccountIds: string[] }[]).find((g) => g.id === groupId)?.zaloAccountIds
+            ?? [];
+          if (current.includes(accountId)) return state;
+          return {
+            groupZaloAccountIds: {
+              ...state.groupZaloAccountIds,
+              [groupId]: [...current, accountId],
+            },
+          };
+        }),
+
+      removeAccountFromGroup: (groupId, accountId) =>
+        set((state) => {
+          const current = state.groupZaloAccountIds[groupId]
+            ?? (vendorGroupsRaw as { id: string; zaloAccountIds: string[] }[]).find((g) => g.id === groupId)?.zaloAccountIds
+            ?? [];
+          const next = current.filter((id) => id !== accountId);
+          // Clear staff overrides that pointed to the removed account
+          const existingOverrides = state.groupStaffAccountOverride[groupId] ?? {};
+          const cleanedOverrides = Object.fromEntries(
+            Object.entries(existingOverrides).filter(([, aId]) => aId !== accountId),
+          );
+          return {
+            groupZaloAccountIds: { ...state.groupZaloAccountIds, [groupId]: next },
+            groupStaffAccountOverride: {
+              ...state.groupStaffAccountOverride,
+              [groupId]: cleanedOverrides,
+            },
+          };
+        }),
+
+      setStaffAccountOverride: (groupId, staffId, accountId) =>
+        set((state) => ({
+          groupStaffAccountOverride: {
+            ...state.groupStaffAccountOverride,
+            [groupId]: {
+              ...(state.groupStaffAccountOverride[groupId] ?? {}),
+              [staffId]: accountId,
+            },
+          },
+        })),
+
+      clearStaffAccountOverride: (groupId, staffId) =>
+        set((state) => {
+          const groupOverrides = { ...(state.groupStaffAccountOverride[groupId] ?? {}) };
+          delete groupOverrides[staffId];
+          return {
+            groupStaffAccountOverride: {
+              ...state.groupStaffAccountOverride,
+              [groupId]: groupOverrides,
+            },
+          };
+        }),
+
       canCurrentUserAccessGroup: (groupId) => {
         const { currentUser, groupMemberships } = get();
         if (currentUser.role === "ADMIN") return true;
@@ -519,6 +592,8 @@ export const useDemoConfigStore = create<DemoConfigState>()(
           forwardedMessages: [],
           vendorTags: DEFAULT_VENDOR_TAGS,
           groupTagIds: {},
+          groupZaloAccountIds: {},
+          groupStaffAccountOverride: {},
         }),
     }),
     {
@@ -539,6 +614,8 @@ export const useDemoConfigStore = create<DemoConfigState>()(
         forwardedMessages: state.forwardedMessages,
         vendorTags: state.vendorTags,
         groupTagIds: state.groupTagIds,
+        groupZaloAccountIds: state.groupZaloAccountIds,
+        groupStaffAccountOverride: state.groupStaffAccountOverride,
       }),
     },
   ),

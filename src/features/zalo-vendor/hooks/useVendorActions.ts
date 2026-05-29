@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useDemoConfigStore } from "@/stores/demoConfigStore";
 import { useVendorMessagesStore } from "@/stores/vendorMessagesStore";
 import { useVendorTasksStore } from "@/stores/vendorTasksStore";
+import { useActiveZaloAccountId } from "./useVendorGroups";
 import type { VendorMessage, VendorTaskChecklist, VendorAttachment, VendorGroup } from "@/types/zalo";
 import vendorGroupsRaw from "@/data/zalo/vendor-groups.json";
 
@@ -26,12 +27,9 @@ export function useVendorActions(groupId: string | null) {
   );
   const dispatch = useVendorMessagesStore((s) => s.dispatch);
 
-  // Zalo account used by this group — applied to outgoing messages so reply preview
-  // can show "ZaloName (staffName)" format instead of just the staff name.
-  const groupZaloAccountId = useMemo(
-    () => (vendorGroupsRaw as VendorGroup[]).find((g) => g.id === groupId)?.zaloAccountId ?? null,
-    [groupId],
-  );
+  // Active Zalo account for the current user in this group — respects admin override.
+  // Applied to outgoing messages so reply preview shows "ZaloName (staffName)" format.
+  const groupZaloAccountId = useActiveZaloAccountId(groupId ?? "");
   const addTask = useVendorTasksStore((s) => s.addTask);
 
   const sendMessage = useCallback(
@@ -69,6 +67,7 @@ export function useVendorActions(groupId: string | null) {
       };
       dispatch({ type: "SEND_MESSAGE", groupId, message: newMsg });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [groupId, groupZaloAccountId, currentUser, dispatch],
   );
 
