@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { PinBarCollapsed } from "./PinBarCollapsed";
 import { PinBarExpanded } from "./PinBarExpanded";
 import { usePinBar } from "./usePinBar";
@@ -26,6 +26,8 @@ export const PinBar: React.FC<PinBarProps> = ({
     pinLimit,
   } = usePinBar(conversationId);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const handleJumpToMessage = useCallback(
     (messageId: string, parentMessageId?: string) => {
       collapse();
@@ -34,10 +36,29 @@ export const PinBar: React.FC<PinBarProps> = ({
     [collapse, onJumpToMessage],
   );
 
+  // Close the expanded dropdown when clicking anywhere outside it.
+  // The row "..." menu renders in a Radix portal, so treat clicks inside
+  // any popper content as inside the pin bar.
+  useEffect(() => {
+    if (!isExpanded) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (containerRef.current?.contains(target as Node)) return;
+      if (target?.closest("[data-radix-popper-content-wrapper]")) return;
+      collapse();
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isExpanded, collapse]);
+
   if (!visible || !latestPin) return null;
 
   return (
-    <div className="relative flex-1 min-w-0" data-testid="pin-bar">
+    <div
+      ref={containerRef}
+      className="relative flex-1 min-w-0"
+      data-testid="pin-bar"
+    >
       <PinBarCollapsed
         latestPin={latestPin}
         totalCount={totalCount}

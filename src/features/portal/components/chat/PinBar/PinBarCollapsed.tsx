@@ -10,11 +10,22 @@ interface PinBarCollapsedProps {
 }
 
 function getPreview(pin: PinnedGroupMessage): string {
-  if (pin.iconKind === "text") return pin.content?.trim() || "Tin nhắn";
-  if (pin.iconKind === "image") return pin.fileName || "Hình ảnh";
-  if (pin.iconKind === "video") return pin.fileName || "Video";
-  if (pin.iconKind === "mixed") return "Nhiều tệp đính kèm";
-  return pin.fileName || "Tệp đính kèm";
+  const text = pin.content?.trim();
+  if (pin.iconKind === "text") return text || "Tin nhắn";
+
+  const emoji =
+    pin.iconKind === "image" ? "📷" : pin.iconKind === "video" ? "🎬" : "📎";
+  const fallback =
+    pin.iconKind === "image"
+      ? pin.fileName || "Hình ảnh"
+      : pin.iconKind === "video"
+        ? pin.fileName || "Video"
+        : pin.iconKind === "mixed"
+          ? "Nhiều tệp đính kèm"
+          : pin.fileName || "Tệp đính kèm";
+
+  // When the attachment also carries text, surface the text after the icon.
+  return `${emoji} ${text || fallback}`;
 }
 
 export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({

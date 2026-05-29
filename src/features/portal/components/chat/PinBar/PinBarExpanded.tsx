@@ -42,6 +42,21 @@ function formatDateTime(iso: string): string {
   })}`;
 }
 
+/** Attachment summary line shown above the message text (when any). */
+function renderAttachmentLabel(pin: PinnedGroupMessage): React.ReactNode {
+  if (pin.iconKind === "image") return `📷 ${pin.fileName || "Hình ảnh"}`;
+  if (pin.iconKind === "video") return `🎬 ${pin.fileName || "Video"}`;
+  if (pin.iconKind === "mixed") return "📎 Nhiều tệp đính kèm";
+  return (
+    <>
+      📎 {pin.fileName || "Tệp đính kèm"}
+      {pin.fileSize ? (
+        <span className="text-gray-500"> · {formatFileSize(pin.fileSize)}</span>
+      ) : null}
+    </>
+  );
+}
+
 export const PinBarExpanded: React.FC<PinBarExpandedProps> = ({
   pins,
   pinLimit,
@@ -120,39 +135,15 @@ export const PinBarExpanded: React.FC<PinBarExpandedProps> = ({
                   )}
                 </div>
 
-                {pin.iconKind === "text" && pin.content && (
+                {pin.iconKind !== "text" && (
+                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
+                    {renderAttachmentLabel(pin)}
+                  </p>
+                )}
+
+                {pin.content?.trim() && (
                   <p className="text-[13px] text-gray-700 line-clamp-2 mt-0.5 break-words">
                     {pin.content}
-                  </p>
-                )}
-
-                {pin.iconKind === "image" && (
-                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
-                    📷 {pin.fileName || "Hình ảnh"}
-                  </p>
-                )}
-
-                {pin.iconKind === "video" && (
-                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
-                    🎬 {pin.fileName || "Video"}
-                  </p>
-                )}
-
-                {pin.iconKind === "mixed" && (
-                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
-                    📎 Nhiều tệp đính kèm
-                  </p>
-                )}
-
-                {pin.iconKind === "file" && (
-                  <p className="text-[13px] text-gray-700 mt-0.5 truncate">
-                    📎 {pin.fileName || "Tệp đính kèm"}
-                    {pin.fileSize ? (
-                      <span className="text-gray-500">
-                        {" "}
-                        · {formatFileSize(pin.fileSize)}
-                      </span>
-                    ) : null}
                   </p>
                 )}
 
