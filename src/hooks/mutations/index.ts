@@ -25,3 +25,11 @@ export {
 
 // Group mutations
 export { useAddGroupMember, useUpdateGroupName } from './useGroupMutations';
+
+// Pin conversation/category mutations
+export {
+  usePinCategory,
+  useUnpinCategory,
+  usePinConversation,
+  useUnpinConversation,
+} from './usePinConversationMutations';

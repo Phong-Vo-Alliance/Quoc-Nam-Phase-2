@@ -79,6 +79,30 @@ export const markConversationAsRead = async (
   await apiClient.post(`/api/conversations/${conversationId}/mark-read`, body);
 };
 /**
+ * POST /api/conversations/{id}/pin
+ * Pin a conversation for the current user
+ *
+ * @param conversationId - UUID of conversation to pin
+ */
+export const pinConversation = async (
+  conversationId: string,
+): Promise<void> => {
+  await apiClient.post(`/api/conversations/${conversationId}/pin`);
+};
+
+/**
+ * DELETE /api/conversations/{id}/pin
+ * Unpin a conversation for the current user
+ *
+ * @param conversationId - UUID of conversation to unpin
+ */
+export const unpinConversation = async (
+  conversationId: string,
+): Promise<void> => {
+  await apiClient.delete(`/api/conversations/${conversationId}/pin`);
+};
+
+/**
  * POST /api/groups
  * Create a new group conversation
  *

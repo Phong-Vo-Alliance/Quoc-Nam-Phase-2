@@ -73,6 +73,12 @@ interface BaseConversation {
   updatedAt: string | null;
   unreadCount: number;
   lastMessage: LastMessage | null;
+  /** Whether this conversation is pinned by the current user (read model — populated by API) */
+  isPinned?: boolean;
+  /** When the conversation was pinned (ISO 8601), null if not pinned */
+  pinnedAt?: string | null;
+  /** Sort order among pinned conversations (ascending; 0 = first) */
+  pinOrder?: number;
 }
 
 // Category reference within conversation (from API)

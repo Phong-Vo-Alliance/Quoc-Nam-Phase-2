@@ -19,13 +19,8 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-// MOCKUP: pin local state — remove with feature wire-up
-import {
-  isPinned,
-  togglePinned,
-  usePinnedSet,
-  MOCKUP_PIN_ENABLED,
-} from "../_mockPinned";
+import { useUnpinConversation } from "@/hooks/mutations/usePinConversationMutations";
+import { usePinLimitGuard } from "../PinLimitGuardContext";
 
 export function DirectMessageItem({
   contact,
@@ -39,10 +34,20 @@ export function DirectMessageItem({
   const unreadCount = contact.conversation?.unreadCount ?? 0;
   const hasUnread = unreadCount > 0 && !isActive && !isDisabled;
 
-  // MOCKUP: pin state — remove with backend wire-up
-  usePinnedSet();
-  const pinned = hasConversation ? isPinned(contact.id) : false;
+  // Pin state comes from the read model (isPinned flag on the conversation).
+  const pinned = hasConversation ? !!contact.conversation?.isPinned : false;
   const [menuOpen, setMenuOpen] = useState(false);
+  const unpinConversation = useUnpinConversation();
+  const { requestPinConversation } = usePinLimitGuard();
+
+  const handleTogglePin = () => {
+    if (pinned) {
+      unpinConversation.mutate(contact.id);
+    } else {
+      requestPinConversation({ id: contact.id, name: contact.name });
+    }
+    setMenuOpen(false);
+  };
 
   // Handle click based on whether conversation exists
   const handleClick = () => {
@@ -142,17 +147,12 @@ export function DirectMessageItem({
                 <RelativeTime
                   timestamp={contact.conversation.lastMessage.sentAt}
                   className={`text-xs text-gray-400 ${
-                    MOCKUP_PIN_ENABLED
-                      ? menuOpen
-                        ? "invisible"
-                        : "group-hover:invisible"
-                      : ""
+                    menuOpen ? "invisible" : "group-hover:invisible"
                   }`}
                 />
               )}
-              {/* MOCKUP: 3-dot action menu — appears on hover at timestamp position */}
-              {MOCKUP_PIN_ENABLED && (
-                <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+              {/* 3-dot action menu — appears on hover at timestamp position */}
+              <Popover open={menuOpen} onOpenChange={setMenuOpen}>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
@@ -182,8 +182,7 @@ export function DirectMessageItem({
                       className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700"
                       onClick={(e) => {
                         e.stopPropagation();
-                        togglePinned(contact.id);
-                        setMenuOpen(false);
+                        handleTogglePin();
                       }}
                     >
                       {pinned ? (
@@ -199,8 +198,7 @@ export function DirectMessageItem({
                       )}
                     </button>
                   </PopoverContent>
-                </Popover>
-              )}
+              </Popover>
             </div>
           )}
         </div>
@@ -226,8 +224,8 @@ export function DirectMessageItem({
             </span>
           )}
 
-          {/* MOCKUP: pin indicator on the preview row */}
-          {MOCKUP_PIN_ENABLED && pinned && (
+          {/* Pin indicator on the preview row */}
+          {pinned && (
             <Pin
               className="h-3.5 w-3.5 text-amber-500 fill-amber-500 rotate-45 flex-shrink-0"
               aria-label="Đã ghim"

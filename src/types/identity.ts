@@ -138,6 +138,8 @@ export interface AppUploadLimitsConfig {
 
 export interface AppChatConfig {
   maxPinnedMessages?: number;
+  maxPinnedCategories?: number;
+  maxPinnedDmConversations?: number;
 }
 
 export interface AppConfigResponse {

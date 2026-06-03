@@ -19,13 +19,8 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-// MOCKUP: pin local state — remove with feature wire-up
-import {
-  isPinned,
-  togglePinned,
-  usePinnedSet,
-  MOCKUP_PIN_ENABLED,
-} from "../_mockPinned";
+import { useUnpinCategory } from "@/hooks/mutations/usePinConversationMutations";
+import { usePinLimitGuard } from "../PinLimitGuardContext";
 
 // Get initials from name (max 2 chars)
 const getInitials = (name: string) =>
@@ -46,10 +41,20 @@ export function CategoryItem({
     (leader) => leader.id === currentUserId && leader.isActive,
   );
 
-  // MOCKUP: pin state — remove with backend wire-up
-  usePinnedSet();
-  const pinned = isPinned(category.id);
+  // Pin state comes from the read model (isPinned flag on the category).
+  const pinned = !!category.isPinned;
   const [menuOpen, setMenuOpen] = useState(false);
+  const unpinCategory = useUnpinCategory();
+  const { requestPinCategory } = usePinLimitGuard();
+
+  const handleTogglePin = () => {
+    if (pinned) {
+      unpinCategory.mutate(category.id);
+    } else {
+      requestPinCategory({ id: category.id, name: category.name });
+    }
+    setMenuOpen(false);
+  };
 
   // Find the latest conversation with a message
   const latestConversation = category.conversations
@@ -130,17 +135,12 @@ export function CategoryItem({
               <RelativeTime
                 timestamp={latestConversation.lastMessage.sentAt}
                 className={`text-xs text-gray-400 ${
-                  MOCKUP_PIN_ENABLED
-                    ? menuOpen
-                      ? "invisible"
-                      : "group-hover:invisible"
-                    : ""
+                  menuOpen ? "invisible" : "group-hover:invisible"
                 }`}
               />
             )}
-            {/* MOCKUP: 3-dot action menu — appears on hover at timestamp position */}
-            {MOCKUP_PIN_ENABLED && (
-              <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+            {/* 3-dot action menu — appears on hover at timestamp position */}
+            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
@@ -170,8 +170,7 @@ export function CategoryItem({
                     className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700"
                     onClick={(e) => {
                       e.stopPropagation();
-                      togglePinned(category.id);
-                      setMenuOpen(false);
+                      handleTogglePin();
                     }}
                   >
                     {pinned ? (
@@ -187,8 +186,7 @@ export function CategoryItem({
                     )}
                   </button>
                 </PopoverContent>
-              </Popover>
-            )}
+            </Popover>
           </div>
         </div>
 
@@ -242,8 +240,8 @@ export function CategoryItem({
                     {totalUnread > 99 ? "99+" : totalUnread}
                   </span>
                 )}
-                {/* MOCKUP: pin indicator on the preview row */}
-                {MOCKUP_PIN_ENABLED && pinned && (
+                {/* Pin indicator on the preview row */}
+                {pinned && (
                   <Pin
                     className="h-3.5 w-3.5 text-amber-500 fill-amber-500 rotate-45 flex-shrink-0"
                     aria-label="Đã ghim"
@@ -292,8 +290,8 @@ export function CategoryItem({
                     {totalUnread > 99 ? "99+" : totalUnread}
                   </span>
                 )}
-                {/* MOCKUP: pin indicator on the preview row */}
-                {MOCKUP_PIN_ENABLED && pinned && (
+                {/* Pin indicator on the preview row */}
+                {pinned && (
                   <Pin
                     className="h-3.5 w-3.5 text-amber-500 fill-amber-500 rotate-45 flex-shrink-0"
                     aria-label="Đã ghim"
@@ -327,8 +325,8 @@ export function CategoryItem({
               <p className="truncate text-xs text-gray-400 flex-1">
                 Chưa có tin nhắn
               </p>
-              {/* MOCKUP: pin indicator on the preview row */}
-              {MOCKUP_PIN_ENABLED && pinned && (
+              {/* Pin indicator on the preview row */}
+              {pinned && (
                 <Pin
                   className="h-3.5 w-3.5 text-amber-500 fill-amber-500 rotate-45 flex-shrink-0"
                   aria-label="Đã ghim"
