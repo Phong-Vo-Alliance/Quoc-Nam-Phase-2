@@ -31,6 +31,7 @@ interface MessageListProps {
   threadUnreadCounts?: Record<string, number>;
   threadCurrentSessionCounts?: Record<string, number>;
   onLoadMore: () => void;
+  onTogglePin?: (messageId: string, isPinned: boolean) => void;
   onToggleStar?: (messageId: string, isStarred: boolean) => void;
   onCreateTask?: (messageId: string) => void;
   onConfirmInfo?: (messageId: string) => void;
@@ -60,6 +61,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   threadUnreadCounts,
   threadCurrentSessionCounts,
   onLoadMore,
+  onTogglePin,
   onToggleStar,
   onCreateTask,
   onConfirmInfo,
@@ -130,6 +132,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     formatTime={formatTime}
                     onFilePreviewClick={onFilePreviewClick}
                     onImageClick={onImageClick}
+                    onTogglePin={onTogglePin}
                     onToggleStar={onToggleStar}
                     onCreateTask={isDirect ? undefined : onCreateTask}
                     onConfirmInfo={isDirect ? undefined : onConfirmInfo}

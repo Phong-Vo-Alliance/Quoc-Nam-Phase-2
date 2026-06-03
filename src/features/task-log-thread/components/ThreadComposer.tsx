@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   SendHorizonal,
   Loader2,
   Paperclip,
   Image as ImageIcon,
   MessageSquareText,
+  Upload,
 } from "lucide-react";
 import type { MentionInputDto } from "@/types/messages";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
@@ -30,6 +31,7 @@ interface ThreadComposerProps {
   handleRemoveFile: (fileId: string) => void;
   handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handlePaste: (e: React.ClipboardEvent) => void;
+  handleDrop?: (files: File[]) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   imageInputRef: React.RefObject<HTMLInputElement | null>;
   mentionInputRef: React.RefObject<MentionInputHandle | null>;
@@ -54,6 +56,7 @@ export const ThreadComposer: React.FC<ThreadComposerProps> = ({
   handleRemoveFile,
   handleFileSelect,
   handlePaste,
+  handleDrop,
   fileInputRef,
   imageInputRef,
   mentionInputRef,
@@ -62,8 +65,59 @@ export const ThreadComposer: React.FC<ThreadComposerProps> = ({
   setThreadReplyTarget,
   quickMessageCount,
 }) => {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer.types.includes("Files")) setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDropInternal = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+      if (!handleDrop || isFileLimitReached || sending || loading) return;
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) handleDrop(files);
+    },
+    [handleDrop, isFileLimitReached, sending, loading],
+  );
+
   return (
-    <>
+    <div
+      className="relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDropInternal}
+    >
+      {/* Drag-and-drop overlay */}
+      {isDragOver && !isFileLimitReached && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-brand-400 bg-brand-50/95 pointer-events-none">
+          <Upload className="h-8 w-8 text-brand-500" />
+          <p className="text-sm font-semibold text-brand-600">
+            Thả file vào đây để đính kèm
+          </p>
+          <p className="text-xs text-brand-400">
+            Ảnh (JPG, PNG, GIF…) · Tài liệu (PDF, DOC, XLS…) · Video (MP4…)
+          </p>
+        </div>
+      )}
+
       {/* Quoted Message Preview (Reply) */}
       {threadReplyTarget && (
         <div className="border-t border-gray-200 bg-gray-50 px-4 py-2">
@@ -191,6 +245,6 @@ export const ThreadComposer: React.FC<ThreadComposerProps> = ({
           làm rối hội thoại chính.
         </p>
       </div>
-    </>
+    </div>
   );
 };

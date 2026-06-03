@@ -27,6 +27,9 @@ const fileApiClient = axios.create({
   baseURL: FILE_API_BASE_URL,
   timeout: 30000,
   responseType: "blob", // Expect binary data
+  headers: {
+    "X-Platform": "web",
+  },
 });
 
 // Add auth token to requests

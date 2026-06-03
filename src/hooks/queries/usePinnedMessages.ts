@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getPinnedMessages } from "@/api/pinned_and_starred.api";
 import { pinnedStarredKeys } from "./keys/pinnedStarredKeys";
-import type { PinnedMessageDto } from "@/types/pinned_and_starred";
+import type { GetPinnedMessagesResponse } from "@/types/pinned_and_starred";
 
 interface UsePinnedMessagesOptions {
   conversationId: string;
@@ -38,17 +38,17 @@ export function usePinnedMessages({
  * Helper function to get pinned message count
  */
 export function getPinnedMessageCount(
-  data: PinnedMessageDto[] | undefined
+  data: GetPinnedMessagesResponse | undefined
 ): number {
-  return data?.length ?? 0;
+  return data?.items?.length ?? 0;
 }
 
 /**
  * Helper function to check if a message is pinned
  */
 export function isMessagePinned(
-  data: PinnedMessageDto[] | undefined,
+  data: GetPinnedMessagesResponse | undefined,
   messageId: string
 ): boolean {
-  return data?.some((pinned) => pinned.messageId === messageId) ?? false;
+  return data?.items?.some((pinned) => pinned.messageId === messageId) ?? false;
 }

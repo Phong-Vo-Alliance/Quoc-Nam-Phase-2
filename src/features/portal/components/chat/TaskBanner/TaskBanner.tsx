@@ -25,7 +25,7 @@ export const TaskBanner: React.FC<TaskBannerProps> = ({
   if (!visible) return null;
 
   return (
-    <div className="mx-4 mt-2">
+    <div className="flex-1 min-w-0">
       <TaskBannerCollapsed
         breakdown={breakdown}
         totalCount={totalCount}

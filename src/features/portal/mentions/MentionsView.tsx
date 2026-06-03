@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { AtSign, Search, X, Loader2 } from "lucide-react";
+import { AtSign, Search, X, Loader2, CheckCheck, MailOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,10 @@ import {
   useMentionsHistory,
   flattenMentionPages,
 } from "@/hooks/queries/useMentionsHistory";
+import {
+  useMarkAllMentionsAsRead,
+  useMarkAllMentionsAsUnread,
+} from "@/hooks/mutations/useMarkMentionAsRead";
 import type { MentionDto } from "@/types/mentions";
 
 type ReadFilter = "all" | "unread" | "read";
@@ -61,6 +65,9 @@ function MentionsSkeleton({ count = 16 }: { count?: number }) {
 export function MentionsView({ onOpenMention }: MentionsViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+
+  const markAllAsRead = useMarkAllMentionsAsRead();
+  const markAllAsUnread = useMarkAllMentionsAsUnread();
 
   const {
     data,
@@ -146,9 +153,7 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{READ_FILTER_LABEL.all}</SelectItem>
-              <SelectItem value="unread">
-                {READ_FILTER_LABEL.unread}
-              </SelectItem>
+              <SelectItem value="unread">{READ_FILTER_LABEL.unread}</SelectItem>
               <SelectItem value="read">{READ_FILTER_LABEL.read}</SelectItem>
             </SelectContent>
           </Select>
@@ -168,17 +173,54 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
         </div>
 
         {!isLoading && !isError && (
-          <p
-            className="mt-2 text-xs text-gray-500"
-            data-testid="mentions-total-count"
-          >
-            Hiển thị{" "}
-            <span className="font-semibold text-gray-700">
-              {filtered.length}
-            </span>{" "}
-            / Tổng số{" "}
-            <span className="font-semibold text-gray-700">{totalCount}</span>
-          </p>
+          <div className="mt-2 flex items-center justify-between">
+            <p
+              className="text-xs text-gray-500"
+              data-testid="mentions-total-count"
+            >
+              Hiển thị{" "}
+              <span className="font-semibold text-gray-700">
+                {filtered.length}
+              </span>{" "}
+              / Tổng số{" "}
+              <span className="font-semibold text-gray-700">{totalCount}</span>
+            </p>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-gray-600 hover:bg-brand-500 hover:text-white"
+                disabled={markAllAsRead.isPending || filtered.length === 0}
+                onClick={() => markAllAsRead.mutate(undefined)}
+                title="Đánh dấu đã đọc tất cả"
+                data-testid="mentions-mark-all-read-button"
+              >
+                {markAllAsRead.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <CheckCheck className="h-3.5 w-3.5 mr-1" />
+                )}
+                Đã đọc tất cả
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-gray-600 hover:bg-brand-500 hover:text-white"
+                disabled={markAllAsUnread.isPending || filtered.length === 0}
+                onClick={() => markAllAsUnread.mutate(undefined)}
+                title="Đánh dấu chưa đọc tất cả"
+                data-testid="mentions-mark-all-unread-button"
+              >
+                {markAllAsUnread.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <MailOpen className="h-3.5 w-3.5 mr-1" />
+                )}
+                Chưa đọc tất cả
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 
@@ -199,11 +241,18 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
               <AtSign className="h-8 w-8 text-brand-400" />
             </div>
             <p className="text-sm font-medium text-gray-700 mb-1">
-              Chưa có tin nhắn nào nhắc đến bạn
+              {readFilter === "unread"
+                ? "Không có tin nhắn chưa đọc"
+                : readFilter === "read"
+                  ? "Không có tin nhắn đã đọc"
+                  : "Chưa có tin nhắn nào nhắc đến bạn"}
             </p>
-            <p className="text-xs text-gray-400 max-w-[220px] leading-relaxed">
-              Khi ai đó nhắc đến bạn bằng @tên trong một cuộc trò chuyện, tin
-              nhắn đó sẽ xuất hiện ở đây.
+            <p className="text-xs text-gray-400 leading-relaxed">
+              {readFilter === "unread"
+                ? "Tất cả tin nhắn nhắc đến bạn đã được đọc."
+                : readFilter === "read"
+                  ? "Chưa có tin nhắn nào được đánh dấu đã đọc."
+                  : "Khi ai đó nhắc đến bạn bằng @tên trong một cuộc trò chuyện, tin nhắn đó sẽ xuất hiện ở đây."}
             </p>
           </div>
         )}

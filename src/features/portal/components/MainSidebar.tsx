@@ -292,8 +292,8 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
                 </span>
               </div>
 
-              {/* Quản lý loại việc (chỉ hiện khi user là leader ở ≥1 nhóm chat) */}
-              {isLeaderInAnyCategory && (
+              {/* Quản lý loại việc (chỉ hiện khi user là admin) */}
+              {hasRole("Admin") && (
                 <div
                   className="flex flex-col items-center text-center text-gray-500 hover:text-brand-700 cursor-pointer"
                   data-testid="tools-worktype-manager-button"
@@ -312,15 +312,15 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
           </PopoverContent>
         </Popover>
 
-        {/* Cẩm nang - Guide button */}
-        <button
+        {/* Cẩm nang - Guide button (hidden) */}
+        {/* <button
           title="Cẩm nang"
           onClick={() => openGuideWithToken()}
           data-testid="sidebar-guide-button"
           className="p-2 rounded-lg transition-colors bg-brand-600 text-white/90 hover:text-white hover:bg-white/10"
         >
           <BookOpen className="h-6 w-6" />
-        </button>
+        </button> */}
 
         {/* NEW: User avatar with Popover */}
         <Popover open={openProfile} onOpenChange={setOpenProfile}>

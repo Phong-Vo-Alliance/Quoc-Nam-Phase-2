@@ -41,8 +41,8 @@ export interface ChatMainContainerProps {
     confirmedInfoId?: string;
   }) => void;
 
-  // 🆕 NEW: Open task log thread
-  onTaskLogClick?: (taskId: string) => void;
+  // 🆕 NEW: Open task log thread (targetMessageId scrolls to a specific reply)
+  onTaskLogClick?: (taskId: string, targetMessageId?: string) => void;
 
   // Thread unread counts per task
   threadUnreadCounts?: Record<string, number>;

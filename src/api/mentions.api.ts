@@ -54,11 +54,26 @@ export const markMentionAsRead = async (mentionId: string): Promise<void> => {
   await apiClient.put(`/api/mentions/${mentionId}/read`);
 };
 
+export const markMentionAsUnread = async (mentionId: string): Promise<void> => {
+  await apiClient.put(`/api/mentions/${mentionId}/unread`);
+};
+
 export const markAllMentionsAsRead = async (
   conversationId?: string,
 ): Promise<MarkAllReadResponse> => {
   const response = await apiClient.put<MarkAllReadResponse>(
     "/api/mentions/read-all",
+    null,
+    { params: conversationId ? { conversationId } : undefined },
+  );
+  return response.data;
+};
+
+export const markAllMentionsAsUnread = async (
+  conversationId?: string,
+): Promise<MarkAllReadResponse> => {
+  const response = await apiClient.put<MarkAllReadResponse>(
+    "/api/mentions/unread-all",
     null,
     { params: conversationId ? { conversationId } : undefined },
   );

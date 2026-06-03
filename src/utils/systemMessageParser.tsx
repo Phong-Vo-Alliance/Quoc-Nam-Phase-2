@@ -53,6 +53,15 @@
  *
  * 19. "[user] đã thêm ghi chú cho mục "[name]""
  *    → Highlight: user, Item-name: name
+ *
+ * 20. "[user] đã ghim/đã bỏ ghim tin nhắn [preview]"
+ *    → Pin-actor: user (→ "Bạn" for the actor), Content-name: preview
+ *
+ * 21. "[user] đã ghim/đã bỏ ghim một hình ảnh/video/tệp | nhiều tệp đính kèm"
+ *    → Pin-actor: user (→ "Bạn" for the actor)
+ *
+ * 22. "[user] đã chỉnh sửa danh sách ghim"
+ *    → Pin-actor: user (→ "Bạn" for the actor)
  */
 
 import React from "react";
@@ -67,7 +76,8 @@ export interface SystemMessagePart {
     | "task-name"
     | "item-name"
     | "status"
-    | "content-name"; // For content in receive info messages
+    | "content-name" // For content in receive info messages
+    | "pin-actor"; // Actor of a pin/unpin/reorder — rendered as "Bạn" for the actor's own view
   content: string;
   statusType?:
     | "todo"
@@ -89,6 +99,39 @@ export function parseSystemMessageContent(
   if (!content) return [];
 
   const parts: SystemMessagePart[] = [];
+
+  // Pattern 20: "[actor] đã ghim/đã bỏ ghim tin nhắn [preview]"
+  // Checked first so the distinct "ghim" verbs win before generic patterns.
+  const pinTextMatch = content.match(
+    /^(.+?)\s+(đã bỏ ghim|đã ghim)\s+tin nhắn\s+([\s\S]+)$/,
+  );
+  if (pinTextMatch) {
+    const [, actor, verb, preview] = pinTextMatch;
+    parts.push({ type: "pin-actor", content: actor.trim() });
+    parts.push({ type: "text", content: ` ${verb} tin nhắn ` });
+    parts.push({ type: "content-name", content: preview.trim() });
+    return parts;
+  }
+
+  // Pattern 21: "[actor] đã ghim/đã bỏ ghim một hình ảnh/video/tệp | nhiều tệp đính kèm"
+  const pinAttachmentMatch = content.match(
+    /^(.+?)\s+(đã bỏ ghim|đã ghim)\s+(một hình ảnh|một video|một tệp|nhiều tệp đính kèm)$/,
+  );
+  if (pinAttachmentMatch) {
+    const [, actor, verb, noun] = pinAttachmentMatch;
+    parts.push({ type: "pin-actor", content: actor.trim() });
+    parts.push({ type: "text", content: ` ${verb} ${noun}` });
+    return parts;
+  }
+
+  // Pattern 22: "[actor] đã chỉnh sửa danh sách ghim"
+  const pinReorderMatch = content.match(/^(.+?)\s+đã chỉnh sửa danh sách ghim$/);
+  if (pinReorderMatch) {
+    const [, actor] = pinReorderMatch;
+    parts.push({ type: "pin-actor", content: actor.trim() });
+    parts.push({ type: "text", content: " đã chỉnh sửa danh sách ghim" });
+    return parts;
+  }
 
   // Pattern 1: "[Nội dung] đã được tiếp nhận bởi [user] lúc [time]"
   // Regex: captures content in quotes, "đã được tiếp nhận bởi", username, "lúc", time
@@ -489,6 +532,19 @@ export interface RenderSystemMessageOptions {
     completed?: string;
     cancelled?: string;
   };
+
+  /**
+   * Class for the pin/unpin/reorder actor name.
+   * @default highlightClassName
+   */
+  pinActorClassName?: string;
+
+  /**
+   * When true, the `pin-actor` part renders as "Bạn" instead of the full name —
+   * set this when the current user is the actor of the pin action.
+   * @default false
+   */
+  pinActorSelf?: boolean;
 }
 
 /**
@@ -524,6 +580,8 @@ export function renderSystemMessageWithHighlights(
         "font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded",
       cancelled: "font-semibold text-gray-600 bg-gray-100 px-1 rounded",
     },
+    pinActorClassName = highlightClassName,
+    pinActorSelf = false,
   } = options;
 
   const parts = parseSystemMessageContent(content);
@@ -581,6 +639,12 @@ export function renderSystemMessageWithHighlights(
             return (
               <span key={index} className={contentNameClassName}>
                 {part.content}
+              </span>
+            );
+          case "pin-actor":
+            return (
+              <span key={index} className={pinActorClassName}>
+                {pinActorSelf ? "Bạn" : part.content}
               </span>
             );
           case "status":

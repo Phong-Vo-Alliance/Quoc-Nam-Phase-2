@@ -37,6 +37,7 @@ interface ThreadMessageListProps {
   handleLoadMore: () => void;
   handleLoadMoreDownward: () => void;
   handleScrollToQuoted: (quotedMessageId: string) => void;
+  onTogglePin?: (messageId: string, isPinned: boolean) => void;
   onReply: (replyData: QuotedMessageData) => void;
   onFilePreviewClick: (fileId: string, fileName: string) => void;
   onImageClick: (
@@ -61,6 +62,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   handleLoadMore,
   handleLoadMoreDownward,
   handleScrollToQuoted,
+  onTogglePin,
   onReply,
   onFilePreviewClick,
   onImageClick,
@@ -175,6 +177,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
                   onFilePreviewClick={onFilePreviewClick}
                   onImageClick={onImageClick}
                   onScrollToQuoted={handleScrollToQuoted}
+                  onTogglePin={onTogglePin}
                   onReply={onReply}
                 />
                 {/* Gap-fill trigger */}

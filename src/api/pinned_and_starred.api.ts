@@ -6,6 +6,8 @@ import type {
   PinMessageResponse,
   UnpinMessageResponse,
   GetPinnedMessagesResponse,
+  ReorderPinnedMessagesRequest,
+  ReorderPinnedMessagesResponse,
   StarMessageResponse,
   UnstarMessageResponse,
   GetStarredMessagesResponse,
@@ -48,10 +50,32 @@ export const unpinMessage = async (
 export const getPinnedMessages = async (
   conversationId: string
 ): Promise<GetPinnedMessagesResponse> => {
-  const response = await apiClient.get<GetPinnedMessagesResponse>(
+  const response = await apiClient.get<GetPinnedMessagesResponse | null>(
     `/api/conversations/${conversationId}/pinned-messages`
   );
-  return response.data;
+  const body = response.data;
+  return {
+    items: Array.isArray(body?.items) ? body!.items : [],
+    maxPinnedMessages:
+      typeof body?.maxPinnedMessages === "number"
+        ? body!.maxPinnedMessages
+        : undefined,
+  };
+};
+
+/**
+ * PATCH /api/conversations/{conversationId}/pinned-messages/reorder
+ * Reorder pinned messages within a conversation.
+ * Returns 204 No Content on success.
+ */
+export const reorderPinnedMessages = async (
+  conversationId: string,
+  request: ReorderPinnedMessagesRequest
+): Promise<ReorderPinnedMessagesResponse> => {
+  await apiClient.patch(
+    `/api/conversations/${conversationId}/pinned-messages/reorder`,
+    request
+  );
 };
 
 // =============================================================
