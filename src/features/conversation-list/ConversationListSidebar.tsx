@@ -57,13 +57,17 @@ import { useDemoConfigStore, DEMO_USERS } from "@/stores/demoConfigStore";
 import type { VendorTag } from "@/stores/demoConfigStore";
 import { TagManagementModal as NccTagManagementModal } from "@/features/admin-demo/components/TagManagementModal";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useCreateDirectMessage } from "@/hooks/mutations/useConversationMutations";
 import type { VendorGroup } from "@/types/zalo";
+import type { GetConversationsResponse } from "@/types/conversations";
 
 // Internal components
 import { DirectMessageItem } from "./components/DirectMessageItem";
 import { CategoryItem } from "./components/CategoryItem";
 import type { ChatTarget, ContactItem } from "./types";
+// MOCKUP: pin local state — remove with feature wire-up
+import { usePinnedSet } from "./_mockPinned";
 
 /* ===================== Props ===================== */
 export interface ConversationListSidebarProps {
@@ -159,7 +163,7 @@ const NotificationBadge: React.FC<NotificationBadgeProps> = ({
   }
 
   return (
-    <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center z-50">
+    <span className="absolute -top-[0.4rem] -right-2 flex h-4 w-4 items-center justify-center z-50">
       {pulse && (
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
       )}
@@ -234,6 +238,8 @@ export const ConversationListSidebar: React.FC<
   const [tab, setTab] = React.useState<"group" | "dm" | "ncc">(getInitialTab());
   const [q, setQ] = React.useState("");
   const [openTools, setOpenTools] = React.useState(false);
+  // MOCKUP: subscribe to pinned set → sort pinned items to the top
+  const pinnedSet = usePinnedSet();
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] =
     React.useState<string | null>(null);
@@ -268,6 +274,7 @@ export const ConversationListSidebar: React.FC<
   // Unread count cho tab Mentions (badge dot)
   const { data: unreadMentions } = useUnreadMentionCount();
   const hasUnreadMentions = (unreadMentions?.count ?? 0) > 0;
+  const mentionCount = unreadMentions?.count ?? 0;
   const directsQuery = useDirectMessages({ enabled: useApiData });
   const departmentMembersQuery = useDepartmentColleagues({
     enabled: useApiData && tab === "dm",
@@ -605,6 +612,19 @@ export const ConversationListSidebar: React.FC<
     };
   }, [vendorGroups, pinnedVendorGroups, q, selectedTagIds, groupTagIds]);
 
+  // MOCKUP: re-order to promote pinned items to the top (stable within group)
+  const orderedApiCategories = React.useMemo(() => {
+    const pinned = filteredApiCategories.filter((c) => pinnedSet.has(c.id));
+    const others = filteredApiCategories.filter((c) => !pinnedSet.has(c.id));
+    return [...pinned, ...others];
+  }, [filteredApiCategories, pinnedSet]);
+
+  const orderedApiDirects = React.useMemo(() => {
+    const pinned = filteredApiDirects.filter((c) => pinnedSet.has(c.id));
+    const others = filteredApiDirects.filter((c) => !pinnedSet.has(c.id));
+    return [...pinned, ...others];
+  }, [filteredApiDirects, pinnedSet]);
+
   // Handlers
   const handleGroupSelect = React.useCallback(
     (
@@ -666,22 +686,22 @@ export const ConversationListSidebar: React.FC<
         updatedAt: newConversation.updatedAt || new Date().toISOString(),
       };
 
-      queryClient.setQueryData(conversationKeys.directs(), (oldData: any) => {
-        if (!oldData) return oldData;
+      queryClient.setQueryData<GetConversationsResponse>(
+        conversationKeys.directs(),
+        (oldData) => {
+          if (!oldData) return { items: [directConversation] };
 
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: any, index: number) => {
-            if (index === 0) {
-              return {
-                ...page,
-                items: [directConversation, ...page.items],
-              };
-            }
-            return page;
-          }),
-        };
-      });
+          const alreadyExists = oldData.items.some(
+            (dm) => dm.id === directConversation.id,
+          );
+          if (alreadyExists) return oldData;
+
+          return {
+            ...oldData,
+            items: [directConversation, ...oldData.items],
+          };
+        },
+      );
 
       if (contactsListRef.current) {
         contactsListRef.current.scrollTop = 0;
@@ -690,11 +710,10 @@ export const ConversationListSidebar: React.FC<
       handleDirectSelect(directConversation);
     } catch (error) {
       console.error("[CreateConversation] Failed:", error);
-      alert(
-        "Không thể tạo cuộc trò chuyện. Vui lòng thử lại sau.\n\n" +
-          "Lỗi: " +
-          (error instanceof Error ? error.message : "Unknown error"),
-      );
+      toast.error("Không thể tạo cuộc trò chuyện", {
+        description:
+          error instanceof Error ? error.message : "Vui lòng thử lại sau.",
+      });
     }
   };
 
@@ -1081,14 +1100,10 @@ export const ConversationListSidebar: React.FC<
                   disabled={isAnyTabLoading}
                   data-testid="conversation-tab-group"
                 >
-                  <span className="relative inline-flex items-center gap-1">
-                    Nhóm
+                  <span className="relative inline-flex items-center justify-center">
+                    <Users className="h-4 w-4" />
                     {tab === "dm" && totalGroupUnread > 0 && (
-                      <NotificationBadge
-                        count={totalGroupUnread}
-                        pulse={!hasShownGroupBadge}
-                        inline
-                      />
+                      <span className="absolute -top-0.5 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white" />
                     )}
                   </span>
                 </ToggleGroupItem>
@@ -1103,14 +1118,10 @@ export const ConversationListSidebar: React.FC<
                   disabled={isAnyTabLoading}
                   data-testid="conversation-tab-dm"
                 >
-                  <span className="relative inline-flex items-center gap-1">
-                    Cá nhân
+                  <span className="relative inline-flex items-center justify-center">
+                    <User className="h-4 w-4" />
                     {tab === "group" && totalDmUnread > 0 && (
-                      <NotificationBadge
-                        count={totalDmUnread}
-                        pulse={!hasShownDmBadge}
-                        inline
-                      />
+                      <span className="absolute -top-0.5 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white" />
                     )}
                   </span>
                 </ToggleGroupItem>
@@ -1364,7 +1375,7 @@ export const ConversationListSidebar: React.FC<
                 </div>
               ) : (
                 <ul className="mt-2">
-                  {filteredApiCategories.map((category) => (
+                  {orderedApiCategories.map((category) => (
                     <li key={category.id}>
                       <CategoryItem
                         category={category}
@@ -1489,7 +1500,7 @@ export const ConversationListSidebar: React.FC<
                 </div>
               )}
 
-              {filteredApiDirects.map((contact) => (
+              {orderedApiDirects.map((contact) => (
                 <li key={contact.id}>
                   <DirectMessageItem
                     contact={contact}

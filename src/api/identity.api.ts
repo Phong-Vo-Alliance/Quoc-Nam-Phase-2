@@ -6,6 +6,7 @@ import type {
   PagedUserProfileResponse,
   CreateUserProfileRequest,
   UpdateUserProfileRequest,
+  AppConfigResponse,
 } from '@/types/identity';
 
 // ==========================================
@@ -107,4 +108,19 @@ export async function updateUser(
  */
 export async function deleteUser(userId: string): Promise<void> {
   await identityApiClient.delete(`/api/v1/users/${userId}`);
+}
+
+// ==========================================
+// App Config
+// ==========================================
+
+/**
+ * Get app config for the current user
+ * GET /api/config/me
+ */
+export async function getAppConfig(): Promise<AppConfigResponse> {
+  const response = await identityApiClient.get<AppConfigResponse>(
+    '/api/config/me'
+  );
+  return response.data;
 }

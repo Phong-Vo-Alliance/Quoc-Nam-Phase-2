@@ -2,12 +2,13 @@
  * File validation hook with toast notifications
  */
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import type { FileValidationRules, SelectedFile } from "@/types/files";
 import { DEFAULT_FILE_RULES } from "@/types/files";
 import { validateFiles } from "@/utils/fileValidation";
 import { fileToSelectedFile } from "@/utils/fileHelpers";
+import { useUploadLimits } from "@/config/uploadLimits";
 
 interface UseFileValidationOptions {
   rules?: Partial<FileValidationRules>;
@@ -29,10 +30,16 @@ interface UseFileValidationReturn {
 export function useFileValidation(
   options: UseFileValidationOptions = {}
 ): UseFileValidationReturn {
-  const rules: FileValidationRules = {
-    ...DEFAULT_FILE_RULES,
-    ...options.rules,
-  };
+  const uploadLimits = useUploadLimits();
+  const rules: FileValidationRules = useMemo(
+    () => ({
+      ...DEFAULT_FILE_RULES,
+      maxSize: uploadLimits.maxFileSize,
+      maxFiles: uploadLimits.maxFilesPerMessage,
+      ...options.rules,
+    }),
+    [uploadLimits, options.rules],
+  );
 
   const validateAndAdd = useCallback(
     (files: FileList | File[], currentCount: number): SelectedFile[] => {

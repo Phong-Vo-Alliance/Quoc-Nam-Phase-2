@@ -497,6 +497,16 @@ export default function PortalWireframes({
       setSelectedConversationStore(target);
       setSelectedChat({ type: "group", id: mention.conversationId });
 
+      // Sync sidebar's local active tab to the mention's conversation type.
+      // Reuses the existing `notification-click` listener in
+      // ConversationListSidebar, which uses `isAutoSwitchingTabRef` to switch
+      // tabs without clearing the just-set selection.
+      window.dispatchEvent(
+        new CustomEvent("notification-click", {
+          detail: { conversationId: mention.conversationId },
+        }),
+      );
+
       setPendingMentionTarget({
         conversationId: mention.conversationId,
         messageId: mention.messageId,

@@ -219,6 +219,8 @@ export interface MessagePinnedEvent {
   messageId: string;
   conversationId: string;
   pinnedBy: string;
+  pinnedByName?: string;
+  displayOrder?: number;
   timestamp: string;
 }
 
@@ -226,6 +228,15 @@ export interface MessageUnpinnedEvent {
   messageId: string;
   conversationId: string;
   unpinnedBy: string;
+  unpinnedByName?: string;
+  timestamp: string;
+}
+
+export interface PinnedMessagesReorderedEvent {
+  conversationId: string;
+  reorderedBy: string;
+  reorderedByName?: string;
+  orders: Array<{ messageId: string; displayOrder: number }>;
   timestamp: string;
 }
 

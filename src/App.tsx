@@ -6,6 +6,7 @@ import { useSecurity } from "./hooks/useSecurity";
 import { useEffect } from "react";
 import { useAuthStore } from "./stores/authStore";
 import { useDemoConfigStore } from "./stores/demoConfigStore";
+import { useAppConfigStore } from "./stores/appConfigStore";
 import { initializeViewMode } from "./stores/uiStore";
 import { getCurrentUser } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
@@ -45,6 +46,13 @@ export default function App() {
       initializeViewMode();
     }
   }, [isAuthenticated, user?.id]);
+
+  // Fetch app config (/api/config/me) once after authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      useAppConfigStore.getState().loadConfig();
+    }
+  }, [isAuthenticated]);
 
   // Check and update user info on app initialization/refresh
   useEffect(() => {

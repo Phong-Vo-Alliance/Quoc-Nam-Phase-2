@@ -20,6 +20,44 @@ export interface MessageCacheContext {
   getOpenThreadMessageId: () => string | null | undefined;
 }
 
+/**
+ * Flip the `isPinned` flag on a single message already in the conversation
+ * cache so its pin icon updates in place — without refetching the whole list.
+ * No-op if the conversation isn't cached or the message isn't loaded.
+ */
+export function setMessagePinnedFlag(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+  isPinned: boolean,
+): void {
+  if (!conversationId || !messageId) return;
+
+  queryClient.setQueryData<{
+    pages: GetMessagesResponse[];
+    pageParams: (string | undefined)[];
+  }>(messageKeys.conversation(conversationId), (old) => {
+    if (!old?.pages?.length) return old;
+
+    let changed = false;
+    const pages = old.pages.map((page) => {
+      let pageChanged = false;
+      const items = page.items.map((msg) => {
+        if (msg.id === messageId && msg.isPinned !== isPinned) {
+          pageChanged = true;
+          return { ...msg, isPinned };
+        }
+        return msg;
+      });
+      if (!pageChanged) return page;
+      changed = true;
+      return { ...page, items };
+    });
+
+    return changed ? { ...old, pages } : old;
+  });
+}
+
 export function handleMessageSent(
   ctx: MessageCacheContext,
   message: ChatMessage,
@@ -139,9 +177,10 @@ export function handleMessageSent(
     return { ...old, pages: newPages };
   });
 
-  if (message.contentType === "SYS" && message.conversationId) {
-    queryClient.refetchQueries({
-      queryKey: tasksKeys.list({ conversationId: message.conversationId }),
-    });
-  }
+  // If the message is a system message that may affect tasks, trigger a refetch of the task list for this conversation to keep it up to date.
+  // if (message.contentType === "SYS" && message.conversationId) {
+  //   queryClient.refetchQueries({
+  //     queryKey: tasksKeys.list({ conversationId: message.conversationId }),
+  //   });
+  // }
 }

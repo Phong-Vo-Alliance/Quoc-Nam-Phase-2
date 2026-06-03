@@ -29,20 +29,20 @@ export const TaskBannerCollapsed: React.FC<TaskBannerCollapsedProps> = ({
       <button
         onClick={onToggle}
         data-testid="task-banner-collapsed-button"
-        className="
+        className={`
         flex items-center justify-between w-full
-        px-4 py-2.5
-        bg-amber-50 border-[2px] border-amber-300 border-l-amber-400
-        rounded-lg
+        px-4 py-2
+        bg-amber-50 border border-amber-300 border-l-[3px] border-l-amber-400
+        ${isExpanded ? "rounded-t-lg" : "rounded-lg"}
         hover:bg-amber-100/70 transition-colors
         cursor-pointer
-      "
+      `}
         aria-expanded={isExpanded}
         aria-label="Xem chi tiết công việc"
       >
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <Bell
-            className={`h-5 w-5 text-amber-500 shrink-0 ${
+            className={`h-4 w-4 text-amber-500 shrink-0 ${
               isAnimating ? "animate-bell-ring" : ""
             }`}
           />
@@ -87,16 +87,16 @@ export const TaskBannerCollapsed: React.FC<TaskBannerCollapsedProps> = ({
 
         <div className="flex items-center gap-1.5 shrink-0 ml-3">
           <span
-            className="inline-flex items-center gap-1 border-2 border-amber-400 rounded-full px-2.5 py-0.5 text-sm font-semibold text-amber-600"
+            className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold"
             data-testid="task-banner-total-count"
           >
             {totalCount}
-            {isExpanded ? (
-              <ChevronUp className="h-4 w-4 text-gray-500" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-gray-500" />
-            )}
           </span>
+          {isExpanded ? (
+            <ChevronUp className="h-4 w-4 text-gray-500" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-gray-500" />
+          )}
         </div>
       </button>
 

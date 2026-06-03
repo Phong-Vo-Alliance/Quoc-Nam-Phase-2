@@ -14,7 +14,10 @@ import type { ChatMessage } from "./messages";
 export interface PinnedMessageDto {
   messageId: string;
   pinnedBy: string;
+  pinnedByFullName?: string | null;
+  pinnedByIdentifier?: string | null;
   pinnedAt: string; // ISO 8601 datetime
+  displayOrder?: number;
   message: ChatMessage;
   parentMessageId?: string; // For replies, may be null for top-level messages
 }
@@ -35,7 +38,30 @@ export type UnpinMessageResponse = void;
  * Response for getting pinned messages
  * GET /api/conversations/{id}/pinned-messages
  */
-export type GetPinnedMessagesResponse = PinnedMessageDto[];
+export interface GetPinnedMessagesResponse {
+  items: PinnedMessageDto[];
+  maxPinnedMessages?: number;
+}
+
+/**
+ * Single entry in a reorder request payload
+ */
+export interface PinnedMessageOrder {
+  messageId: string;
+  newOrder: number;
+}
+
+/**
+ * Request body for PATCH /api/conversations/{conversationId}/pinned-messages/reorder
+ */
+export interface ReorderPinnedMessagesRequest {
+  orders: PinnedMessageOrder[];
+}
+
+/**
+ * Response for reordering pinned messages (204 No Content)
+ */
+export type ReorderPinnedMessagesResponse = void;
 
 // =============================================================
 // Starred Messages Types

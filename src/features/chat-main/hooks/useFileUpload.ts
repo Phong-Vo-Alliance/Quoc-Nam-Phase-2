@@ -6,8 +6,8 @@ import {
 } from "@/utils/fileHelpers";
 import { toast } from "sonner";
 import type { FileUploadProgressState, SelectedFile } from "@/types/files";
-import { MAX_FILES_PER_MESSAGE, getMaxSizeForFile } from "@/types/files";
-import { FILE_UPLOAD_LIMITS } from "@/config/env.config";
+import { getMaxSizeForFile } from "@/types/files";
+import { useUploadLimits } from "@/config/uploadLimits";
 import { formatFileSize } from "../utils/chatHelpers";
 
 export function useFileUpload() {
@@ -20,15 +20,18 @@ export function useFileUpload() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
+  const uploadLimits = useUploadLimits();
+  const maxFilesPerMessage = uploadLimits.maxFilesPerMessage;
+  const maxTotalSize = uploadLimits.maxTotalSize;
+
   const { validateAndAdd } = useFileValidation();
 
   // Compute file limit status
   const totalSize = selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
-  const MAX_TOTAL_SIZE = FILE_UPLOAD_LIMITS.maxTotalSize;
-  const remainingSize = MAX_TOTAL_SIZE - totalSize;
+  const remainingSize = maxTotalSize - totalSize;
 
   const isFileLimitReached =
-    selectedFiles.length >= MAX_FILES_PER_MESSAGE || remainingSize < 1024;
+    selectedFiles.length >= maxFilesPerMessage || remainingSize < 1024;
 
   // Handle file selection
   const handleFileSelect = useCallback(
@@ -38,7 +41,7 @@ export function useFileUpload() {
 
       const fileArray = Array.from(files);
       const currentCount = selectedFiles.length;
-      const remainingSlots = MAX_FILES_PER_MESSAGE - currentCount;
+      const remainingSlots = maxFilesPerMessage - currentCount;
 
       // STEP 1: Check total size FIRST
       const currentTotalSize = selectedFiles.reduce(
@@ -46,14 +49,14 @@ export function useFileUpload() {
         0,
       );
       const newFilesSize = fileArray.reduce((sum, f) => sum + f.size, 0);
-      const MAX_TOTAL_SIZE = FILE_UPLOAD_LIMITS.maxTotalSize;
-      const remainingSize = MAX_TOTAL_SIZE - currentTotalSize;
+      const remainingSize = maxTotalSize - currentTotalSize;
+      const totalLimitLabel = formatFileSize(maxTotalSize);
 
-      if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
+      if (currentTotalSize + newFilesSize > maxTotalSize) {
         toast.error(
           remainingSize <= 0
-            ? "Đã đạt giới hạn 100MB. Vui lòng xóa file cũ để chọn file mới."
-            : `Tổng dung lượng vượt quá 100MB. Còn trống ${formatFileSize(
+            ? `Đã đạt giới hạn ${totalLimitLabel}. Vui lòng xóa file cũ để chọn file mới.`
+            : `Tổng dung lượng vượt quá ${totalLimitLabel}. Còn trống ${formatFileSize(
                 remainingSize,
               )}.`,
         );
@@ -64,7 +67,7 @@ export function useFileUpload() {
       // STEP 2: Check if already at file count limit
       if (remainingSlots === 0) {
         toast.error(
-          `Đã đủ ${MAX_FILES_PER_MESSAGE} file. Vui lòng xóa file cũ để chọn file mới.`,
+          `Đã đủ ${maxFilesPerMessage} file. Vui lòng xóa file cũ để chọn file mới.`,
         );
         e.target.value = "";
         return;
@@ -76,8 +79,8 @@ export function useFileUpload() {
         filesToAdd = fileArray.slice(0, remainingSlots);
         const discardedCount = fileArray.length - remainingSlots;
         toast.warning(
-          remainingSlots === MAX_FILES_PER_MESSAGE
-            ? `Chỉ chọn được ${MAX_FILES_PER_MESSAGE} file. Đã tự động bỏ ${discardedCount} file.`
+          remainingSlots === maxFilesPerMessage
+            ? `Chỉ chọn được ${maxFilesPerMessage} file. Đã tự động bỏ ${discardedCount} file.`
             : `Đã có ${currentCount} file. Chỉ chọn thêm được ${remainingSlots} file nữa.`,
         );
       }
@@ -85,13 +88,13 @@ export function useFileUpload() {
       // Validate batch
       const validationError = validateBatchFileSelection(
         filesToAdd,
-        MAX_FILES_PER_MESSAGE,
+        maxFilesPerMessage,
         Math.max(
-          FILE_UPLOAD_LIMITS.maxImageSize,
-          FILE_UPLOAD_LIMITS.maxVideoSize,
-          FILE_UPLOAD_LIMITS.maxFileSize,
+          uploadLimits.maxImageSize,
+          uploadLimits.maxVideoSize,
+          uploadLimits.maxFileSize,
         ),
-        FILE_UPLOAD_LIMITS.maxTotalSize,
+        maxTotalSize,
       );
 
       if (validationError) {
@@ -108,7 +111,74 @@ export function useFileUpload() {
 
       e.target.value = "";
     },
-    [selectedFiles, validateAndAdd],
+    [selectedFiles, validateAndAdd, uploadLimits, maxFilesPerMessage, maxTotalSize],
+  );
+
+  // Handle drag-and-drop files
+  const handleDrop = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) return;
+
+      const currentCount = selectedFiles.length;
+      const remainingSlots = maxFilesPerMessage - currentCount;
+
+      const currentTotalSize = selectedFiles.reduce(
+        (sum, f) => sum + f.file.size,
+        0,
+      );
+      const newFilesSize = files.reduce((sum, f) => sum + f.size, 0);
+      const remainingSize = maxTotalSize - currentTotalSize;
+      const totalLimitLabel = formatFileSize(maxTotalSize);
+
+      if (currentTotalSize + newFilesSize > maxTotalSize) {
+        toast.error(
+          remainingSize <= 0
+            ? `Đã đạt giới hạn ${totalLimitLabel}. Vui lòng xóa file cũ để chọn file mới.`
+            : `Tổng dung lượng vượt quá ${totalLimitLabel}. Còn trống ${formatFileSize(remainingSize)}.`,
+        );
+        return;
+      }
+
+      if (remainingSlots === 0) {
+        toast.error(
+          `Đã đủ ${maxFilesPerMessage} file. Vui lòng xóa file cũ để chọn file mới.`,
+        );
+        return;
+      }
+
+      let filesToAdd = files;
+      if (files.length > remainingSlots) {
+        filesToAdd = files.slice(0, remainingSlots);
+        const discardedCount = files.length - remainingSlots;
+        toast.warning(
+          remainingSlots === maxFilesPerMessage
+            ? `Chỉ chọn được ${maxFilesPerMessage} file. Đã tự động bỏ ${discardedCount} file.`
+            : `Đã có ${currentCount} file. Chỉ chọn thêm được ${remainingSlots} file nữa.`,
+        );
+      }
+
+      const validationError = validateBatchFileSelection(
+        filesToAdd,
+        maxFilesPerMessage,
+        Math.max(
+          uploadLimits.maxImageSize,
+          uploadLimits.maxVideoSize,
+          uploadLimits.maxFileSize,
+        ),
+        maxTotalSize,
+      );
+
+      if (validationError) {
+        toast.error(validationError.message);
+        return;
+      }
+
+      const validFiles = validateAndAdd(filesToAdd, currentCount);
+      if (validFiles.length > 0) {
+        setSelectedFiles((prev) => [...prev, ...validFiles]);
+      }
+    },
+    [selectedFiles, validateAndAdd, uploadLimits, maxFilesPerMessage, maxTotalSize],
   );
 
   // 🆕 v1.3.0: Handle paste image from clipboard
@@ -126,11 +196,11 @@ export function useFileUpload() {
       event.preventDefault();
 
       const currentCount = selectedFiles.length;
-      const remainingSlots = MAX_FILES_PER_MESSAGE - currentCount;
+      const remainingSlots = maxFilesPerMessage - currentCount;
 
       if (remainingSlots === 0) {
         toast.error(
-          `Đã đủ ${MAX_FILES_PER_MESSAGE} file. Vui lòng xóa file cũ để paste ảnh mới.`,
+          `Đã đủ ${maxFilesPerMessage} file. Vui lòng xóa file cũ để paste ảnh mới.`,
         );
         return;
       }
@@ -166,7 +236,7 @@ export function useFileUpload() {
         toast.success(`Đã paste ${newFiles.length} ảnh`);
       }
     },
-    [selectedFiles.length],
+    [selectedFiles.length, maxFilesPerMessage],
   );
 
   // Handle remove file
@@ -204,6 +274,7 @@ export function useFileUpload() {
     imageInputRef,
     isFileLimitReached,
     handleFileSelect,
+    handleDrop,
     handlePaste,
     handleRemoveFile,
     clearFiles,

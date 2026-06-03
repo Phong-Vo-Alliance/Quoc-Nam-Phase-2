@@ -3,6 +3,7 @@
 import type { ID, Timestamps } from "./common";
 import type { User } from "./auth";
 import { FILE_UPLOAD_LIMITS, FILE_ALLOWED_TYPES } from "@/config/env.config";
+import { getUploadLimits } from "@/config/uploadLimits";
 
 export interface FileAttachment extends Timestamps {
   id: ID;
@@ -139,28 +140,27 @@ export interface FileValidationRules {
 }
 
 /**
- * Maximum number of files that can be attached to a single message
- * Applies to both images and other file types combined
- * API limit: 10 files, 100MB total
+ * Maximum number of files that can be attached to a single message.
+ * Fallback only — env-based default. For the current effective limit
+ * (API config > env > default), use `getUploadLimits()` / `useUploadLimits()`.
  */
 export const MAX_FILES_PER_MESSAGE = FILE_UPLOAD_LIMITS.maxFilesPerMessage;
 
 /**
- * Get max file size based on MIME type
- * Image: VITE_MAX_IMAGE_SIZE_MB (default 10MB)
- * Video: VITE_MAX_VIDEO_SIZE_MB (default 20MB)
- * Other: VITE_MAX_FILE_SIZE_MB (default 10MB)
+ * Get max file size for a given file. Resolves limits with priority:
+ * /api/config/me uploadLimits > env (VITE_MAX_*_MB) > default.
  */
 export function getMaxSizeForFile(file: File): number {
+  const limits = getUploadLimits();
   const ext = file.name.lastIndexOf(".") !== -1
     ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase()
     : "";
   const mime = file.type || "";
   const isImage = mime.startsWith("image/") || [".heic", ".heif", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
   const isVideo = mime.startsWith("video/") || [".mp4", ".webm", ".ogg", ".mov"].includes(ext);
-  if (isImage) return FILE_UPLOAD_LIMITS.maxImageSize;
-  if (isVideo) return FILE_UPLOAD_LIMITS.maxVideoSize;
-  return FILE_UPLOAD_LIMITS.maxFileSize;
+  if (isImage) return limits.maxImageSize;
+  if (isVideo) return limits.maxVideoSize;
+  return limits.maxFileSize;
 }
 
 // Default validation rules for client-side validation

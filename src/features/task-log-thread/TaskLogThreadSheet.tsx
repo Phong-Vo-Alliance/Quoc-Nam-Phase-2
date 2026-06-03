@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { QuotedMessageData } from "@/stores/replyStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
@@ -15,6 +21,10 @@ import { useThreadSignalR } from "./hooks/useThreadSignalR";
 import { useThreadScroll } from "./hooks/useThreadScroll";
 import { useThreadSendMessage } from "./hooks/useThreadSendMessage";
 import { useThreadUnread } from "./hooks/useThreadUnread";
+import {
+  usePinMessage,
+  useUnpinMessage,
+} from "@/hooks/mutations/usePinMessage";
 import {
   ThreadHeader,
   ThreadMessageList,
@@ -72,6 +82,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     imageInputRef,
     isFileLimitReached,
     handleFileSelect,
+    handleDrop,
     handlePaste,
     handleRemoveFile,
     clearFiles,
@@ -161,6 +172,53 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     threadReplyTarget,
     setThreadReplyTarget,
   });
+
+  // ── Pin / Unpin thread messages ──
+  // Pin is conversation-scoped at the API level, so we reuse the same mutations
+  // as the main chat. The actor's own toggle is flipped locally in threadData
+  // because thread replies don't live in the conversation message cache that
+  // setMessagePinnedFlag updates.
+  const conversationId = task?.conversationId;
+  const pinMessageMutation = usePinMessage({
+    conversationId: conversationId ?? "",
+  });
+  const unpinMessageMutation = useUnpinMessage({
+    conversationId: conversationId ?? "",
+  });
+
+  const handleTogglePin = useCallback(
+    (messageId: string, isPinned: boolean) => {
+      if (!conversationId) return;
+
+      const flipLocal = (pinned: boolean) =>
+        setThreadData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            replies: (prev.replies ?? []).map((r) =>
+              r.id === messageId ? { ...r, isPinned: pinned } : r,
+            ),
+            parentMessage:
+              prev.parentMessage?.id === messageId
+                ? { ...prev.parentMessage, isPinned: pinned }
+                : prev.parentMessage,
+          };
+        });
+
+      if (isPinned) {
+        unpinMessageMutation.mutate(
+          { messageId },
+          { onSuccess: () => flipLocal(false) },
+        );
+      } else {
+        pinMessageMutation.mutate(
+          { messageId },
+          { onSuccess: () => flipLocal(true) },
+        );
+      }
+    },
+    [conversationId, pinMessageMutation, unpinMessageMutation, setThreadData],
+  );
 
   // Focus input when sheet opens and loading completes
   useEffect(() => {
@@ -257,6 +315,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
             handleLoadMore={handleLoadMore}
             handleLoadMoreDownward={handleLoadMoreDownward}
             handleScrollToQuoted={handleScrollToQuoted}
+            onTogglePin={handleTogglePin}
             onReply={(replyData) => {
               setThreadReplyTarget(replyData);
               setTimeout(() => {
@@ -298,6 +357,7 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
           uploadProgress={uploadProgress}
           handleRemoveFile={handleRemoveFile}
           handleFileSelect={handleFileSelect}
+          handleDrop={handleDrop}
           handlePaste={handlePaste}
           fileInputRef={fileInputRef}
           imageInputRef={imageInputRef}

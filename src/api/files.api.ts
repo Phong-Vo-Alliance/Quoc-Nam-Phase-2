@@ -364,6 +364,36 @@ export function revokeBlobUrl(url: string): void {
 }
 
 /**
+ * Rotation action that the client tracks while the user rotates an image in the preview modal.
+ * The sequence is sent to the backend as-is on Save so the server can replay the exact rotations.
+ */
+export type RotateAction = "left" | "right" | "flip";
+
+/**
+ * Persist a rotation sequence for an image file.
+ * API: POST /api/Files/{id}/rotate?direction=left,right,flip,...
+ *
+ * @param fileId File ID
+ * @param actions Ordered list of rotation actions performed in the UI
+ * @throws Error if file not found (404), forbidden (403), or unauthorized (401)
+ */
+export async function rotateFile(
+  fileId: string,
+  actions: RotateAction[],
+): Promise<void> {
+  if (actions.length === 0) return;
+
+  await fileApiClient.post(
+    `/api/Files/${fileId}/rotate`,
+    null,
+    {
+      params: { direction: actions.join(",") },
+      timeout: 30000,
+    },
+  );
+}
+
+/**
  * Download original file (no watermark)
  * API: GET /api/Files/{id}/download
  *

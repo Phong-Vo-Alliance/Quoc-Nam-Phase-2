@@ -115,3 +115,34 @@ export interface AuthMeResponse {
   departments?: UserDepartmentDto[];
 }
 
+// ==========================================
+// App Config (/api/config/me)
+// ==========================================
+
+export interface AppWebsiteConfig {
+  MinutesIdleTimeout?: number;
+  TimeToHideUnreadSeparator?: number;
+}
+
+export interface AppGeneralConfig {
+  WebsiteConfig?: AppWebsiteConfig;
+}
+
+export interface AppUploadLimitsConfig {
+  maxFilesPerUpload?: number;
+  maxFileSizeMB?: number;
+  maxImageSizeMB?: number;
+  maxVideoSizeMB?: number;
+  maxTotalUploadSizeMB?: number;
+}
+
+export interface AppChatConfig {
+  maxPinnedMessages?: number;
+}
+
+export interface AppConfigResponse {
+  general?: AppGeneralConfig;
+  uploadLimits?: AppUploadLimitsConfig;
+  chat?: AppChatConfig;
+}
+

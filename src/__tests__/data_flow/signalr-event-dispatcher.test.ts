@@ -19,6 +19,9 @@ vi.mock("@/lib/signalr", () => ({
     MEMBER_ADDED: "MemberAdded",
     MEMBER_REMOVED: "MemberRemoved",
     CATEGORY_DEPARTMENT_LINKED: "CategoryDepartmentLinked",
+    MESSAGE_PINNED: "MessagePinned",
+    MESSAGE_UNPINNED: "MessageUnpinned",
+    PINNED_MESSAGES_REORDERED: "PinnedMessagesReordered",
   },
 }));
 
@@ -49,6 +52,7 @@ vi.mock("@/lib/signalr-group-manager", () => ({
 vi.mock("@/lib/cache-updaters/message-cache", () => ({
   handleMessageSent: vi.fn(),
   resetProcessedMessages: vi.fn(),
+  setMessagePinnedFlag: vi.fn(),
 }));
 
 vi.mock("@/lib/cache-updaters/category-cache", () => ({
@@ -70,6 +74,7 @@ vi.mock("@/lib/cache-updaters/conversation-cache", () => ({
 }));
 
 import { chatHub, SIGNALR_EVENTS } from "@/lib/signalr";
+import { pinnedStarredKeys } from "@/hooks/queries/keys/pinnedStarredKeys";
 import { groupManager } from "@/lib/signalr-group-manager";
 import * as messageCache from "@/lib/cache-updaters/message-cache";
 import * as categoryCache from "@/lib/cache-updaters/category-cache";
@@ -115,14 +120,14 @@ describe("signalr-event-dispatcher", () => {
   // ────────────────────────────────────────────────────────
 
   describe("registerAllEventHandlers", () => {
-    it("registers 7 event handlers", () => {
+    it("registers 18 event handlers", () => {
       registerAllEventHandlers(queryClient);
-      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(7);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(18);
     });
 
-    it("returns 7 cleanup functions", () => {
+    it("returns 18 cleanup functions", () => {
       const cleanups = registerAllEventHandlers(queryClient);
-      expect(cleanups).toHaveLength(7);
+      expect(cleanups).toHaveLength(18);
       cleanups.forEach((fn) => expect(typeof fn).toBe("function"));
     });
 
@@ -332,6 +337,94 @@ describe("signalr-event-dispatcher", () => {
       });
 
       expect(categoryCache.handleCategoryDepartmentLinked).toHaveBeenCalled();
+    });
+
+    // ── Pinned messages (current user is "user-1") ──
+
+    it("MESSAGE_PINNED from another user refetches the pinned list and flips the message flag", () => {
+      capturedHandlers["MessagePinned"]({
+        messageId: "msg-1",
+        conversationId: "conv-1",
+        pinnedBy: "user-2",
+      });
+
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: pinnedStarredKeys.pinnedByConversation("conv-1"),
+        }),
+      );
+      expect(messageCache.setMessagePinnedFlag).toHaveBeenCalledWith(
+        queryClient,
+        "conv-1",
+        "msg-1",
+        true,
+      );
+    });
+
+    it("MESSAGE_PINNED from the current user is skipped (mutation already refetched)", () => {
+      capturedHandlers["MessagePinned"]({
+        messageId: "msg-1",
+        conversationId: "conv-1",
+        pinnedBy: "user-1",
+      });
+
+      expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+      expect(messageCache.setMessagePinnedFlag).not.toHaveBeenCalled();
+    });
+
+    it("MESSAGE_UNPINNED from another user refetches the pinned list and clears the message flag", () => {
+      capturedHandlers["MessageUnpinned"]({
+        messageId: "msg-1",
+        conversationId: "conv-1",
+        unpinnedBy: "user-2",
+      });
+
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: pinnedStarredKeys.pinnedByConversation("conv-1"),
+        }),
+      );
+      expect(messageCache.setMessagePinnedFlag).toHaveBeenCalledWith(
+        queryClient,
+        "conv-1",
+        "msg-1",
+        false,
+      );
+    });
+
+    it("MESSAGE_UNPINNED from the current user is skipped", () => {
+      capturedHandlers["MessageUnpinned"]({
+        messageId: "msg-1",
+        conversationId: "conv-1",
+        unpinnedBy: "user-1",
+      });
+
+      expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+      expect(messageCache.setMessagePinnedFlag).not.toHaveBeenCalled();
+    });
+
+    it("PINNED_MESSAGES_REORDERED from another user refetches the pinned list", () => {
+      capturedHandlers["PinnedMessagesReordered"]({
+        conversationId: "conv-1",
+        reorderedBy: "user-2",
+        orders: [{ messageId: "msg-1", displayOrder: 0 }],
+      });
+
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: pinnedStarredKeys.pinnedByConversation("conv-1"),
+        }),
+      );
+    });
+
+    it("PINNED_MESSAGES_REORDERED from the current user is skipped", () => {
+      capturedHandlers["PinnedMessagesReordered"]({
+        conversationId: "conv-1",
+        reorderedBy: "user-1",
+        orders: [{ messageId: "msg-1", displayOrder: 0 }],
+      });
+
+      expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
     });
 
     it("MESSAGE_SENT normalizes contentType before dispatching", () => {
