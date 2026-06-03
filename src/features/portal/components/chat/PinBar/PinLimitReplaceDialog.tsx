@@ -112,7 +112,7 @@ export const PinLimitReplaceDialog: React.FC<PinLimitReplaceDialogProps> = ({
                 <div className="text-sm font-medium text-gray-800">
                   Tin nhắn
                 </div>
-                <div className="truncate text-[13px] text-gray-600">
+                <div className="line-clamp-2 text-[13px] leading-snug text-gray-600 [overflow-wrap:anywhere]">
                   <span className="font-medium text-gray-700">
                     {pinToReplace.senderName}:
                   </span>{" "}
