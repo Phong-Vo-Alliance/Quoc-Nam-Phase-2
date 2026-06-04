@@ -20,7 +20,8 @@ import type { PinnedGroupMessage } from "./usePinBar";
 interface PinLimitReplaceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pinToReplace: PinnedGroupMessage | null;
+  /** Bottom pins that will be dropped — one normally, more when over the limit. */
+  pinsToReplace: PinnedGroupMessage[];
   pinLimit: number;
   onConfirm: () => void;
   isProcessing?: boolean;
@@ -66,11 +67,14 @@ function renderPreview(pin: PinnedGroupMessage): React.ReactNode {
 export const PinLimitReplaceDialog: React.FC<PinLimitReplaceDialogProps> = ({
   open,
   onOpenChange,
-  pinToReplace,
+  pinsToReplace,
   pinLimit,
   onConfirm,
   isProcessing = false,
 }) => {
+  const replaceCount = pinsToReplace.length;
+  const isMultiple = replaceCount > 1;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
@@ -99,26 +103,44 @@ export const PinLimitReplaceDialog: React.FC<PinLimitReplaceDialogProps> = ({
           </div>
 
           <p className="text-sm leading-relaxed text-gray-600">
-            Đã đạt giới hạn {pinLimit} ghim. Ghim cũ dưới đây sẽ được bỏ để cập
-            nhật nội dung mới.
+            {isMultiple ? (
+              <>
+                Mỗi nhóm chỉ được ghim tối đa {pinLimit} tin nhắn.{" "}
+                <span className="font-medium text-gray-700">
+                  {replaceCount} ghim cuối
+                </span>{" "}
+                dưới đây sẽ được bỏ để ghim tin mới.
+              </>
+            ) : (
+              <>Đã đạt giới hạn {pinLimit} ghim. Ghim cũ dưới đây sẽ được bỏ để
+              ghim tin mới.</>
+            )}
           </p>
 
-          {pinToReplace && (
-            <div className="flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
-                <Pin className="h-4 w-4 -rotate-45 text-brand-600" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-gray-800">
-                  Tin nhắn
+          {replaceCount > 0 && (
+            <div className="max-h-[220px] space-y-1.5 overflow-y-auto scrollbar-thin">
+              {pinsToReplace.map((pin) => (
+                <div
+                  key={pin.id}
+                  data-testid={`pin-limit-replace-item-${pin.id}`}
+                  className="flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"
+                >
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
+                    <Pin className="h-4 w-4 -rotate-45 text-brand-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-gray-800">
+                      Tin nhắn
+                    </div>
+                    <div className="line-clamp-2 text-[13px] leading-snug text-gray-600 [overflow-wrap:anywhere]">
+                      <span className="font-medium text-gray-700">
+                        {pin.senderName}:
+                      </span>{" "}
+                      {renderPreview(pin)}
+                    </div>
+                  </div>
                 </div>
-                <div className="line-clamp-2 text-[13px] leading-snug text-gray-600 [overflow-wrap:anywhere]">
-                  <span className="font-medium text-gray-700">
-                    {pinToReplace.senderName}:
-                  </span>{" "}
-                  {renderPreview(pinToReplace)}
-                </div>
-              </div>
+              ))}
             </div>
           )}
 
@@ -133,7 +155,7 @@ export const PinLimitReplaceDialog: React.FC<PinLimitReplaceDialogProps> = ({
             </Button>
             <Button
               onClick={onConfirm}
-              disabled={isProcessing || !pinToReplace}
+              disabled={isProcessing || replaceCount === 0}
               data-testid="pin-limit-replace-confirm"
               className="bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus-visible:ring-brand-500"
             >

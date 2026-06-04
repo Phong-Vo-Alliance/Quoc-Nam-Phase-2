@@ -12,6 +12,8 @@
 // fields (isPinned / pinnedAt / pinOrder) and ordering stay in sync.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { getPinErrorMessage } from "./pinErrorMessage";
 import { categoriesApi } from "@/api/categories.api";
 import { pinConversation, unpinConversation } from "@/api/conversations.api";
 import { categoriesKeys } from "@/hooks/queries/useCategories";
@@ -31,7 +33,10 @@ export function usePinCategory() {
     mutationFn: (categoryId: string) => categoriesApi.pinCategory(categoryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: categoriesKeys.all });
+      toast.success("Đã ghim nhóm");
     },
+    onError: (error) =>
+      toast.error(getPinErrorMessage(error, "Không thể ghim nhóm")),
   });
 }
 
@@ -49,7 +54,10 @@ export function useUnpinCategory() {
     mutationFn: (categoryId: string) => categoriesApi.unpinCategory(categoryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: categoriesKeys.all });
+      toast.success("Đã bỏ ghim nhóm");
     },
+    onError: (error) =>
+      toast.error(getPinErrorMessage(error, "Không thể bỏ ghim nhóm")),
   });
 }
 
@@ -67,7 +75,10 @@ export function usePinConversation() {
     mutationFn: (conversationId: string) => pinConversation(conversationId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: conversationKeys.directs() });
+      toast.success("Đã ghim hội thoại");
     },
+    onError: (error) =>
+      toast.error(getPinErrorMessage(error, "Không thể ghim hội thoại")),
   });
 }
 
@@ -85,6 +96,9 @@ export function useUnpinConversation() {
     mutationFn: (conversationId: string) => unpinConversation(conversationId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: conversationKeys.directs() });
+      toast.success("Đã bỏ ghim hội thoại");
     },
+    onError: (error) =>
+      toast.error(getPinErrorMessage(error, "Không thể bỏ ghim hội thoại")),
   });
 }

@@ -59,6 +59,13 @@ export const PinLimitDialog: React.FC<PinLimitDialogProps> = ({
   canConfirm,
   isProcessing = false,
 }) => {
+  const current = pinnedItems.length;
+  // Over the cap because the limit was lowered (config change) — the user must
+  // unpin more than one before a slot frees. Below: how many are still needed
+  // so that after pinning the new one the total lands back at `limit`.
+  const isOverLimit = current > limit;
+  const requiredUnpin = Math.max(0, current - limit + 1);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
@@ -86,14 +93,31 @@ export const PinLimitDialog: React.FC<PinLimitDialogProps> = ({
             </DialogPrimitive.Close>
           </div>
 
-          <div className="space-y-1 text-sm leading-relaxed text-gray-600">
-            <p>Bạn chỉ được ghim tối đa {limit} trò chuyện.</p>
-            <p>
-              Để ghim trò chuyện{" "}
-              <span className="font-semibold text-gray-900">{targetName}</span>,
-              vui lòng bỏ ghim ít nhất 1 trò chuyện bên dưới.
-            </p>
-          </div>
+          {isOverLimit ? (
+            <div
+              className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm leading-relaxed text-amber-800"
+              data-testid="pin-limit-config-changed"
+            >
+              <p className="font-semibold">Giới hạn ghim đã thay đổi</p>
+              <p>
+                Hiện chỉ cho phép ghim tối đa {limit} trò chuyện, nhưng bạn đang
+                ghim {current}. Để ghim{" "}
+                <span className="font-semibold">{targetName}</span>, vui lòng bỏ
+                ghim ít nhất{" "}
+                <span className="font-semibold">{requiredUnpin}</span> trò chuyện
+                bên dưới.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1 text-sm leading-relaxed text-gray-600">
+              <p>Bạn chỉ được ghim tối đa {limit} trò chuyện.</p>
+              <p>
+                Để ghim trò chuyện{" "}
+                <span className="font-semibold text-gray-900">{targetName}</span>
+                , vui lòng bỏ ghim ít nhất 1 trò chuyện bên dưới.
+              </p>
+            </div>
+          )}
 
           <ul className="max-h-[280px] space-y-1 overflow-y-auto scrollbar-thin">
             {pinnedItems.map((item) => {

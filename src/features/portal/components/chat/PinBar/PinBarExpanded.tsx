@@ -85,16 +85,25 @@ export const PinBarExpanded: React.FC<PinBarExpandedProps> = ({
   onMoveToBottom,
 }) => {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const isOverLimit = pins.length > pinLimit;
 
   return (
     <div
       className="bg-white border border-gray-200 border-t-0 rounded-b-lg shadow-lg animate-pin-slide-down"
       data-testid="pin-bar-expanded"
     >
-      <div className="px-4 pt-2 pb-1.5 flex items-center justify-between">
+      <div className="px-4 pt-2 pb-1.5">
         <div className="text-xs text-gray-500">
           {pins.length}/{pinLimit} tin đã ghim trong nhóm
         </div>
+        {isOverLimit && (
+          <p
+            className="mt-1 text-[11px] text-amber-600"
+            data-testid="pin-bar-limit-note"
+          >
+            Từ nay mỗi nhóm chỉ được ghim tối đa {pinLimit} tin nhắn.
+          </p>
+        )}
       </div>
 
       <ul

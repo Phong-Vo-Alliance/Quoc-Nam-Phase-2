@@ -605,11 +605,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         />
       )}
 
-      {/* Pin limit reached → confirm replacing the oldest pin */}
+      {/* Pin limit reached → confirm replacing the bottom pin(s) */}
       <PinLimitReplaceDialog
         open={pinGuard.dialogOpen}
         onOpenChange={pinGuard.setDialogOpen}
-        pinToReplace={pinGuard.pinToReplace}
+        pinsToReplace={pinGuard.pinsToReplace}
         pinLimit={pinGuard.pinLimit}
         onConfirm={pinGuard.confirmReplace}
         isProcessing={pinGuard.isProcessing}
