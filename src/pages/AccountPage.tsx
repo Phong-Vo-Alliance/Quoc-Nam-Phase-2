@@ -4,6 +4,7 @@ import { ArrowLeft, Bell, Volume2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useNotificationPermission } from "@/hooks/useNotificationPermission";
+import { brandTitle } from "@/config/brand.config";
 
 export function AccountPage() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export function AccountPage() {
   const { permissionStatus, requestPermission } = useNotificationPermission();
 
   useEffect(() => {
-    document.title = "Tài khoản - Quốc Nam";
+    document.title = brandTitle("Tài khoản");
   }, []);
 
   return (

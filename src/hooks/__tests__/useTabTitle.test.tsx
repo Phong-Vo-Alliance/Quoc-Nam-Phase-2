@@ -2,7 +2,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, test, expect, beforeEach, vi } from "vitest";
 import { useTabTitle } from "../useTabTitle";
+import { BRAND } from "@/config/brand.config";
 import { conversationKeys } from "../queries/keys/conversationKeys";
+
+// Base title đến từ brand config (đổi theo VITE_BRAND)
+const BASE = BRAND.portalTitle;
 import type { GetConversationsResponse } from "@/types/conversations";
 import type { DirectConversation } from "@/types/conversations";
 
@@ -20,7 +24,7 @@ describe("useTabTitle", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    document.title = "Quoc Nam Portal"; // Reset to base title
+    document.title = BASE; // Reset to base title
     vi.clearAllMocks();
   });
 
@@ -60,7 +64,7 @@ describe("useTabTitle", () => {
 
     renderHook(() => useTabTitle(), { wrapper });
 
-    expect(document.title).toBe("Quoc Nam Portal");
+    expect(document.title).toBe(BASE);
   });
 
   test("TC-1.2: shows badge with unread count", async () => {
@@ -76,7 +80,7 @@ describe("useTabTitle", () => {
     renderHook(() => useTabTitle(), { wrapper });
 
     await waitFor(() => {
-      expect(document.title).toBe("(3) Quoc Nam Portal");
+      expect(document.title).toBe(`(3) ${BASE}`);
     });
   });
 
@@ -93,7 +97,7 @@ describe("useTabTitle", () => {
     renderHook(() => useTabTitle(), { wrapper });
 
     await waitFor(() => {
-      expect(document.title).toBe("(99+) Quoc Nam Portal");
+      expect(document.title).toBe(`(99+) ${BASE}`);
     });
   });
 
@@ -110,7 +114,7 @@ describe("useTabTitle", () => {
     const { rerender } = renderHook(() => useTabTitle(), { wrapper });
 
     await waitFor(() => {
-      expect(document.title).toBe("(1) Quoc Nam Portal");
+      expect(document.title).toBe(`(1) ${BASE}`);
     });
 
     // Update: 3 unread (2 + 1)
@@ -125,7 +129,7 @@ describe("useTabTitle", () => {
     rerender();
 
     await waitFor(() => {
-      expect(document.title).toBe("(3) Quoc Nam Portal");
+      expect(document.title).toBe(`(3) ${BASE}`);
     });
   });
 
@@ -141,7 +145,7 @@ describe("useTabTitle", () => {
     renderHook(() => useTabTitle({ enabled: false }), { wrapper });
 
     // Title should NOT change when disabled
-    expect(document.title).toBe("Quoc Nam Portal");
+    expect(document.title).toBe(BASE);
   });
 
   test("TC-1.6: restores base title on unmount", async () => {
@@ -156,12 +160,12 @@ describe("useTabTitle", () => {
     const { unmount } = renderHook(() => useTabTitle(), { wrapper });
 
     await waitFor(() => {
-      expect(document.title).toBe("(5) Quoc Nam Portal");
+      expect(document.title).toBe(`(5) ${BASE}`);
     });
 
     unmount();
 
-    expect(document.title).toBe("Quoc Nam Portal");
+    expect(document.title).toBe(BASE);
   });
 
   test("TC-1.7: sums unread counts across many conversations", async () => {
@@ -182,7 +186,7 @@ describe("useTabTitle", () => {
 
     // Total: 2 + 3 + 1 + 4 = 10
     await waitFor(() => {
-      expect(document.title).toBe("(10) Quoc Nam Portal");
+      expect(document.title).toBe(`(10) ${BASE}`);
     });
   });
 
@@ -203,7 +207,7 @@ describe("useTabTitle", () => {
 
     // Should only count dm-3: 2 unread
     await waitFor(() => {
-      expect(document.title).toBe("(2) Quoc Nam Portal");
+      expect(document.title).toBe(`(2) ${BASE}`);
     });
   });
 
@@ -218,7 +222,7 @@ describe("useTabTitle", () => {
 
     renderHook(() => useTabTitle(), { wrapper });
 
-    expect(document.title).toBe("Quoc Nam Portal");
+    expect(document.title).toBe(BASE);
   });
 
   test("TC-1.10: handles undefined conversations data", () => {
@@ -229,7 +233,7 @@ describe("useTabTitle", () => {
 
     renderHook(() => useTabTitle(), { wrapper });
 
-    expect(document.title).toBe("Quoc Nam Portal");
+    expect(document.title).toBe(BASE);
   });
 
   test("TC-1.11: uses custom base title", async () => {

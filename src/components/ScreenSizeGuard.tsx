@@ -34,9 +34,9 @@ export function ScreenSizeGuard({ children }: ScreenSizeGuardProps) {
           {/* Logo / Icon */}
           <div
             className="flex h-20 w-20 items-center justify-center rounded-2xl"
-            style={{ background: "rgba(56,174,60,0.1)" }}
+            style={{ background: "rgb(var(--brand-500) / 0.1)" }}
           >
-            <Monitor className="h-10 w-10" style={{ color: "#38ae3c" }} />
+            <Monitor className="h-10 w-10" style={{ color: "rgb(var(--brand-500))" }} />
           </div>
 
           {/* Heading */}
@@ -79,7 +79,7 @@ export function ScreenSizeGuard({ children }: ScreenSizeGuardProps) {
                 >
                   <Download
                     className="h-3.5 w-3.5"
-                    style={{ color: "#38ae3c" }}
+                    style={{ color: "rgb(var(--brand-500))" }}
                   />
                   App Store
                 </a>
@@ -91,7 +91,7 @@ export function ScreenSizeGuard({ children }: ScreenSizeGuardProps) {
                 >
                   <Download
                     className="h-3.5 w-3.5"
-                    style={{ color: "#38ae3c" }}
+                    style={{ color: "rgb(var(--brand-500))" }}
                   />
                   Google Play
                 </a>
@@ -121,7 +121,7 @@ function CurrentWidthBadge() {
       <span className="font-mono font-semibold text-red-500">{width}px</span>
       <span className="text-gray-300">→</span>
       <span className="text-gray-400">Yêu cầu</span>
-      <span className="font-mono font-semibold" style={{ color: "#38ae3c" }}>
+      <span className="font-mono font-semibold" style={{ color: "rgb(var(--brand-500))" }}>
         {MIN_WIDTH}px
       </span>
     </div>

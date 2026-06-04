@@ -11,7 +11,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { AUTH_CONFIG } from "@/lib/auth/config";
 import { ROUTES } from "@/routes/routes";
 import type { LoginResponse } from "@/types/auth";
-import logoImage from "@/assets/Quocnam_logo.png";
+import { BRAND, brandTitle } from "@/config/brand.config";
 
 /**
  * Login page - centered layout with branding
@@ -22,7 +22,7 @@ export function LoginPage() {
 
   // Set page title
   useEffect(() => {
-    document.title = "Login - Quốc Nam";
+    document.title = brandTitle("Login");
   }, []);
 
   // Redirect to portal if already authenticated
@@ -55,8 +55,8 @@ export function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img
-            src={logoImage}
-            alt="Quốc Nam Logo"
+            src={BRAND.logo}
+            alt={`${BRAND.name} Logo`}
             className="w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 object-contain"
             data-testid="login-logo"
           />
@@ -81,7 +81,7 @@ export function LoginPage() {
 
         {/* Footer */}
         <p className="mt-6 text-center text-sm text-gray-500">
-          © {new Date().getFullYear()} Quốc Nam. All rights reserved.
+          © {new Date().getFullYear()} {BRAND.copyright}. All rights reserved.
         </p>
       </div>
     </div>

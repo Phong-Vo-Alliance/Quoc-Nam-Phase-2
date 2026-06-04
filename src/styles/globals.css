@@ -1,12 +1,29 @@
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 47.4% 11.2%;
+  /* Brand tokens dưới đây là FALLBACK (Quốc Nam). Runtime sẽ override theo
+     VITE_BRAND qua applyBrandTheme() — xem src/config/brand.config.ts */
   --primary: 142 52% 45%; /* #38AE3C */
   --primary-foreground: 0 0% 100%;
   --border: 142 52% 45%;
   --ring: 142 52% 45%;
   --accent: 142 52% 45%;
   --accent-foreground: 0 0% 100%;
+  /* Brand palette dưới dạng RGB channels (fallback Quốc Nam) cho
+     Tailwind brand.* = rgb(var(--brand-N) / <alpha-value>) */
+  --brand-50: 230 247 231;
+  --brand-100: 197 239 199;
+  --brand-200: 159 228 164;
+  --brand-300: 121 217 129;
+  --brand-400: 87 206 97;
+  --brand-500: 56 174 60;
+  --brand-600: 47 145 50;
+  --brand-700: 37 114 41;
+  --brand-800: 28 86 31;
+  --brand-900: 19 59 21;
+  --brand-link: #38ae3c;
+  --brand-link-hover: #2f9132;
+  --brand-glow: rgba(56, 174, 60, 0.6);
 }
 
 /* .dark {
@@ -27,7 +44,7 @@ button:hover {
 
 @keyframes fadeHighlight {
   0% {
-    background-color: rgb(230 247 231 / 1); /* brand-50 */
+    background-color: rgb(var(--brand-50)); /* brand-50 */
   }
   100% {
     background-color: rgb(255 255 255 / 1); /* white */
@@ -54,8 +71,8 @@ button:hover {
 
 @keyframes fadeBorder {
   0% {
-    border-color: #38AE3C;
-    box-shadow: 0 0 6px rgba(56, 174, 60, 0.6);
+    border-color: rgb(var(--brand-500));
+    box-shadow: 0 0 6px var(--brand-glow);
   }
   100% {
     border-color: transparent;
@@ -65,7 +82,7 @@ button:hover {
 
 /* Hiệu ứng khi user nhảy đến tin nhắn được pin */
 .pinned-highlight {
-  border: 2px solid #38AE3C !important;
+  border: 2px solid rgb(var(--brand-500)) !important;
   border-radius: 8px;
   animation: fadeBorder 2s ease forwards;
 }

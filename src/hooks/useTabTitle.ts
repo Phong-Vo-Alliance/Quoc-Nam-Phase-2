@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useDirectMessages } from "./queries/useDirectMessages";
 import { useCategories } from "./queries/useCategories";
+import { BRAND } from "@/config/brand.config";
 
 interface UseTabTitleOptions {
   baseTitle?: string;
@@ -23,7 +24,7 @@ interface UseTabTitleOptions {
  * ```
  */
 export function useTabTitle(options: UseTabTitleOptions = {}) {
-  const { baseTitle = "Quoc Nam Portal", enabled = true } = options;
+  const { baseTitle = BRAND.portalTitle, enabled = true } = options;
 
   // Get all DM conversations from cache
   const { data: directConversations } = useDirectMessages();

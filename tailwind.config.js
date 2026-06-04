@@ -1,3 +1,14 @@
+// Brand palette dùng CSS variables (RGB channels) → switch brand ở RUNTIME
+// qua applyBrandTheme() (src/config/brand.config.ts). Fallback định nghĩa trong
+// src/styles/globals.css :root. Dùng dạng `rgb(var(--brand-N) / <alpha-value>)`
+// để vẫn hỗ trợ opacity modifier (vd: bg-brand-600/10).
+const brandPalette = Object.fromEntries(
+  [50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map((n) => [
+    n,
+    `rgb(var(--brand-${n}) / <alpha-value>)`,
+  ]),
+);
+
 /** @type {import('tailwindcss').Config} */
 export default {
     darkMode: ["class"],
@@ -17,9 +28,9 @@ export default {
 				'surface-lg':
 					'0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.05)',
 				'brand-sm':
-					'0 1px 3px rgba(56,174,60,0.15)', // brand glow nhẹ
+					'0 1px 3px var(--brand-glow)', // brand glow nhẹ
 				'brand-md':
-					'0 2px 8px rgba(56,174,60,0.18), 0 1px 2px rgba(0,0,0,0.04)',
+					'0 2px 8px var(--brand-glow), 0 1px 2px rgba(0,0,0,0.04)',
 			},
 
   		colors: {
@@ -63,20 +74,48 @@ export default {
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
   			},
-				brand: {
-          50:  '#e6f7e7',
-          100: '#c5efc7',
-          200: '#9fe4a4',
-          300: '#79d981',
-          400: '#57ce61',
-          500: '#38ae3c', // main brand color
-          600: '#2f9132',
-          700: '#257229',
-          800: '#1c561f',
-          900: '#133b15',
-        },
+				brand: brandPalette,
+				// emerald được dùng như "brand green" rải rác trong UI cũ →
+				// alias sang palette brand để theo brand (Alliance/Quốc Nam).
+				emerald: brandPalette,
   		}
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),    
+    function ({ addUtilities }) {
+      addUtilities({
+        // Ẩn scrollbar hoàn toàn
+        '.scrollbar-hide': {
+          /* Firefox */
+          'scrollbar-width': 'none',
+          /* Safari and Chrome */
+          '&::-webkit-scrollbar': {
+            display: 'none',
+          },
+        },
+        
+        // Scrollbar mỏng cho desktop (optional)
+        '.scrollbar-thin': {
+          /* Firefox */
+          'scrollbar-width': 'thin',
+          /* Chrome, Safari */
+          '&::-webkit-scrollbar': {
+            width: '6px',
+            height: '6px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#cbd5e0',
+            borderRadius: '10px',
+          },
+          '&::-webkit-scrollbar-thumb:hover':  {
+            background: '#a0aec0',
+          },
+        },
+      });
+    },
+  ],
 }

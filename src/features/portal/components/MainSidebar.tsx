@@ -21,7 +21,7 @@ import {
 import { ROUTES } from "@/routes/routes";
 import { cn } from "@/lib/utils";
 import { openGuideWithToken } from "@/lib/auth/guideToken";
-import QuocnamLogo from "@/assets/Quocnam_logo.png";
+import { BRAND } from "@/config/brand.config";
 import {
   Popover,
   PopoverTrigger,
@@ -169,9 +169,12 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
       {/* Logo */}
       <div className="flex flex-col items-center mt-4">
         <img
-          src={QuocnamLogo}
-          alt="Quốc Nam Logo"
-          className="h-10 w-10 rounded-full border border-white/30 shadow-sm"
+          src={BRAND.logo}
+          alt={`${BRAND.name} Logo`}
+          className={cn(
+            "h-10 w-10 rounded-full border border-white/30 shadow-sm",
+            BRAND.logoNeedsLightBg && "bg-white object-contain p-1",
+          )}
         />
 
         {/* Icon section */}

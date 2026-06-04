@@ -16,10 +16,10 @@
   transition: filter 300ms;
 }
 .logo:hover {
-  filter: drop-shadow(0 0 2em #38ae3caa);
+  filter: drop-shadow(0 0 2em rgb(var(--brand-500) / 0.67));
 }
 .logo.react:hover {
-  filter: drop-shadow(0 0 2em #2f9132aa);
+  filter: drop-shadow(0 0 2em rgb(var(--brand-600) / 0.67));
 }
 
 @keyframes logo-spin {
@@ -54,19 +54,19 @@
   padding: 0.25rem;      /* p-1 */
   border-radius: 1.5rem; /* rounded-3xl */
 
-  /* gradient nhẹ brand + trắng */
+  /* gradient nhẹ brand + trắng (theo brand qua --brand-*) */
   background: linear-gradient(
     135deg,
-    rgba(209, 250, 229, 0.95),  /* emerald-50 */
+    rgb(var(--brand-50) / 0.95),
     rgba(255, 255, 255, 0.9),
-    rgba(209, 250, 229, 0.7)
+    rgb(var(--brand-50) / 0.7)
   );
 
   /* blur nhẹ kiểu glass */
   backdrop-filter: blur(6px);
 
   /* viền brand rất nhạt */
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  border: 1px solid rgb(var(--brand-500) / 0.35);
 
   /* shadow 3D mềm */
   box-shadow:
