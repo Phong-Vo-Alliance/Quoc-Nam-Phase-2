@@ -113,6 +113,7 @@ export function handleMessageSent(
               senderId: message.senderId,
               senderName: message.senderFullName || message.senderName || "",
               content: message.content || "",
+              contentType: message.contentType,
               sentAt: message.sentAt,
               attachments: message.attachments?.map((att) => ({
                 type: att.contentType?.startsWith("image/") ? "image" : "file",

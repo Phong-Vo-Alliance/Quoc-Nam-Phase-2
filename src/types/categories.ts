@@ -78,6 +78,8 @@ export interface LastMessageDto {
   senderName: string;
   /** Message content/text */
   content: string;
+  /** Message content type (TXT, IMG, FILE, VID, SYS, TASK) */
+  contentType?: string;
   /** Message sent timestamp (ISO 8601) */
   sentAt: string;
   /** Optional: Message attachments (images, files) */
