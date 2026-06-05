@@ -19,6 +19,8 @@ import { TaskBanner } from "@/features/portal/components/chat/TaskBanner";
 import {
   PinBar,
   PinLimitReplaceDialog,
+  UnpinConfirmDialog,
+  useUnpinConfirm,
   usePinReplaceGuard,
 } from "@/features/portal/components/chat/PinBar";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
@@ -211,15 +213,19 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
   // replace dialog that drops the oldest pin instead of pinning directly.
   const pinGuard = usePinReplaceGuard(conversationId);
 
+  // Unpinning (from the hover action) goes through a confirm dialog first;
+  // pinning is unchanged.
+  const unpinConfirm = useUnpinConfirm(pinGuard.unpin);
+
   const handleTogglePin = useCallback(
     (messageId: string, isPinned: boolean) => {
       if (isPinned) {
-        pinGuard.unpin(messageId);
+        unpinConfirm.requestUnpin(messageId);
       } else {
         pinGuard.requestPin(messageId);
       }
     },
-    [pinGuard],
+    [pinGuard, unpinConfirm],
   );
 
   // Resolve the task linked to a root message from the message cache.
@@ -613,6 +619,15 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         pinLimit={pinGuard.pinLimit}
         onConfirm={pinGuard.confirmReplace}
         isProcessing={pinGuard.isProcessing}
+      />
+
+      {/* Confirm before unpinning from the message hover action */}
+      <UnpinConfirmDialog
+        open={unpinConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) unpinConfirm.cancel();
+        }}
+        onConfirm={unpinConfirm.confirm}
       />
     </div>
   );

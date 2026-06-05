@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { PinBarCollapsed } from "./PinBarCollapsed";
 import { PinBarExpanded } from "./PinBarExpanded";
 import { usePinBar } from "./usePinBar";
+import { useUnpinConfirm } from "./useUnpinConfirm";
+import { UnpinConfirmDialog } from "./UnpinConfirmDialog";
 
 interface PinBarProps {
   conversationId: string | undefined;
@@ -25,6 +27,8 @@ export const PinBar: React.FC<PinBarProps> = ({
     totalCount,
     pinLimit,
   } = usePinBar(conversationId);
+
+  const unpinConfirm = useUnpinConfirm(unpin);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -71,12 +75,20 @@ export const PinBar: React.FC<PinBarProps> = ({
             pins={pins}
             pinLimit={pinLimit}
             onJumpToMessage={handleJumpToMessage}
-            onUnpin={unpin}
+            onUnpin={unpinConfirm.requestUnpin}
             onMoveToTop={moveToTop}
             onMoveToBottom={moveToBottom}
           />
         </div>
       )}
+
+      <UnpinConfirmDialog
+        open={unpinConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) unpinConfirm.cancel();
+        }}
+        onConfirm={unpinConfirm.confirm}
+      />
     </div>
   );
 };
