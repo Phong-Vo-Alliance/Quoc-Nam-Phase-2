@@ -42,10 +42,7 @@ import type {
   GroupConversation,
   DirectConversation,
 } from "@/types/conversations";
-import {
-  sortConversationsByLatest,
-  comparePinned,
-} from "@/utils/sortConversationsByLatest";
+import { sortConversationsByLatest } from "@/utils/sortConversationsByLatest";
 import {
   saveSelectedConversation,
   getSelectedConversation,
@@ -540,24 +537,30 @@ export const ConversationListSidebar: React.FC<
     (c) => match(c.name) || match(c.lastMessage),
   );
 
-  // Promote pinned items to the top, ordered by pin metadata (pinOrder, then
-  // pinnedAt) — NOT by latest message, so a new message never reorders a pin.
-  // Non-pinned items keep their existing (latest-message) order.
+  // Promote pinned items to the top. Pinned items keep the exact order the API
+  // returns (the server owns pin ordering — the UI never re-sorts them). Only
+  // non-pinned items are sorted client-side by latest message.
   const orderedApiCategories = React.useMemo(() => {
-    const pinned = filteredApiCategories
-      .filter((c) => c.isPinned)
-      .sort(comparePinned);
+    const pinnedIds = new Set(
+      filteredApiCategories.filter((c) => c.isPinned).map((c) => c.id),
+    );
+    // Source pinned from the raw API list so their server order is preserved.
+    const pinned = apiCategories.filter((c) => pinnedIds.has(c.id));
     const others = filteredApiCategories.filter((c) => !c.isPinned);
     return [...pinned, ...others];
-  }, [filteredApiCategories]);
+  }, [apiCategories, filteredApiCategories]);
 
   const orderedApiDirects = React.useMemo(() => {
-    const pinned = filteredApiDirects
-      .filter((c) => c.conversation?.isPinned)
-      .sort((a, b) => comparePinned(a.conversation!, b.conversation!));
+    const pinnedIds = new Set(
+      filteredApiDirects
+        .filter((c) => c.conversation?.isPinned)
+        .map((c) => c.id),
+    );
+    // mergedContacts mirrors the API order for items that have a conversation.
+    const pinned = mergedContacts.filter((c) => pinnedIds.has(c.id));
     const others = filteredApiDirects.filter((c) => !c.conversation?.isPinned);
     return [...pinned, ...others];
-  }, [filteredApiDirects]);
+  }, [mergedContacts, filteredApiDirects]);
 
   // Pinned lists feed the pin-limit dialog (unfiltered by search so the count
   // always reflects the real number of pins).
@@ -565,7 +568,6 @@ export const ConversationListSidebar: React.FC<
     () =>
       apiCategories
         .filter((c) => c.isPinned)
-        .sort(comparePinned)
         .map((c) => ({ id: c.id, name: c.name })),
     [apiCategories],
   );
@@ -574,7 +576,6 @@ export const ConversationListSidebar: React.FC<
     () =>
       mergedContacts
         .filter((c) => c.hasConversation && c.conversation?.isPinned)
-        .sort((a, b) => comparePinned(a.conversation!, b.conversation!))
         .map((c) => ({ id: c.id, name: c.name, avatarUrl: c.avatarUrl })),
     [mergedContacts],
   );
