@@ -3,7 +3,12 @@
  * Supports message grouping with dynamic border-radius
  */
 
-import React, { useRef, useState, useCallback } from "react";
+import React, {
+  useRef,
+  useState,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
 import {
   Pin,
   PinOff,
@@ -18,6 +23,7 @@ import {
   Paperclip,
   MessageSquarePlus,
   Play,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
@@ -35,6 +41,13 @@ import { renderMessageWithMentions } from "@/utils/mentionHighlight";
 // MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
 // import { hasUserConfirmed, toggleMockConfirm } from "./_mockMessageConfirm";
 // import { MessageConfirmPill } from "./MessageConfirmPill";
+// MOCKUP "Thu hồi tin nhắn" — local-only, không gọi backend.
+import {
+  canRecall,
+  isRecalled as isMockRecalled,
+  recallMessage,
+  subscribeMockRecall,
+} from "./_mockMessageRecall";
 
 /**
  * Format file size from bytes to human-readable format
@@ -211,6 +224,31 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
         !isLastInGroup && "rounded-bl-md",
       );
 
+  // MOCKUP "Thu hồi tin nhắn" — tạm ẩn cho tới khi có logic chính thức.
+  // Đổi cờ này thành `true` để bật lại toàn bộ UI thu hồi (button + placeholder).
+  const RECALL_FEATURE_ENABLED = false;
+  // Subscribe để re-render khi state mock thay đổi (no-op khi flag tắt).
+  useSyncExternalStore(
+    subscribeMockRecall,
+    () => RECALL_FEATURE_ENABLED && isMockRecalled(message.id),
+    () => false,
+  );
+  const isMessageRecalled =
+    RECALL_FEATURE_ENABLED && isMockRecalled(message.id);
+  // Leader/admin vẫn thấy nội dung gốc (tô xám); người khác chỉ thấy placeholder.
+  const canViewRecalledContent = isLeaderOfGroup;
+  // Icon thu hồi chỉ hiện cho tin của tôi, trong vòng 1 ngày, chưa thu hồi và
+  // không phải tin hệ thống / tin đang gửi / tin lỗi.
+  const canShowRecallAction =
+    RECALL_FEATURE_ENABLED &&
+    isOwn &&
+    !isMessageRecalled &&
+    message.contentType !== "SYS" &&
+    message.sendStatus !== "sending" &&
+    message.sendStatus !== "retrying" &&
+    message.sendStatus !== "failed" &&
+    canRecall(message.sentAt);
+
   // Hover state management with delay timer for action menu
   const [isHovered, setIsHovered] = useState(false);
   // MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
@@ -295,13 +333,13 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                 >
                   {formatTime(message.sentAt)}
                 </span>
-                {message.isPinned && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
-                    <Pin size={10} className="fill-amber-600" />
+                {message.isPinned && !isMessageRecalled && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-brand-600 font-medium">
+                    <Pin size={10} className="fill-brand-600" />
                     Đã ghim
                   </span>
                 )}
-                {message.isStarred && (
+                {message.isStarred && !isMessageRecalled && (
                   <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 font-medium">
                     <Star size={10} className="fill-blue-600" />
                     Đã đánh dấu
@@ -311,14 +349,17 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             )}
 
             {/* Pin indicator for received messages (not first in group) */}
-            {!isOwn && !isFirstInGroup && message.isPinned && (
-              <div className="flex items-center gap-2 mb-1">
-                <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
-                  <Pin size={10} className="fill-amber-600" />
-                  Đã ghim
-                </span>
-              </div>
-            )}
+            {!isOwn &&
+              !isFirstInGroup &&
+              message.isPinned &&
+              !isMessageRecalled && (
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-brand-600 font-medium">
+                    <Pin size={10} className="fill-brand-600" />
+                    Đã ghim
+                  </span>
+                </div>
+              )}
 
             {/* Timestamp for own messages (only first in group) */}
             {isOwn && isFirstInGroup && (
@@ -333,17 +374,17 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             )}
 
             {/* Pin indicator for own messages */}
-            {isOwn && message.isPinned && (
+            {isOwn && message.isPinned && !isMessageRecalled && (
               <div className="flex justify-end mb-1">
-                <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
-                  <Pin size={10} className="fill-amber-600" />
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-brand-600 font-medium">
+                  <Pin size={10} className="fill-brand-600" />
                   Đã ghim
                 </span>
               </div>
             )}
 
             {/* Star indicator for own messages */}
-            {isOwn && message.isStarred && (
+            {isOwn && message.isStarred && !isMessageRecalled && (
               <div className="flex justify-end mb-1">
                 <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 font-medium">
                   <Star size={10} className="fill-blue-600" />
@@ -353,8 +394,8 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             )}
           </div>
           <div className="relative w-fit max-w-full">
-            {/* Hover action buttons */}
-            {isHovered && (
+            {/* Hover action buttons — ẩn toàn bộ với tin đã thu hồi */}
+            {isHovered && !isMessageRecalled && (
               <div
                 className={cn(
                   "absolute flex items-center gap-1 z-20",
@@ -377,6 +418,17 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       data-testid={`message-reply-button-${message.id}`}
                     >
                       <Reply size={14} />
+                    </button>
+                  )}
+                  {/* MOCKUP: Thu hồi tin nhắn — chỉ tin của tôi, trong 1 ngày */}
+                  {canShowRecallAction && (
+                    <button
+                      className="p-1.5 rounded transition text-gray-500 hover:text-red-600"
+                      onClick={() => recallMessage(message.id)}
+                      title="Thu hồi tin nhắn"
+                      data-testid={`message-recall-button-${message.id}`}
+                    >
+                      <RotateCcw size={14} />
                     </button>
                   )}
                   {onTogglePin && (
@@ -510,160 +562,268 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                   // Failed state styling
                   message.sendStatus === "failed"
                     ? "bg-red-50/50 border-2 border-red-400"
-                    : isOwn
-                      ? "bg-brand-100 group-hover:bg-brand-200 text-gray-900 border-brand-100 group-hover:border-brand-200"
-                      : "bg-gray-200 group-hover:bg-gray-300 text-gray-900 border-gray-200 group-hover:border-gray-300",
-                  // Pin/Star borders (override failed state)
-                  message.isPinned && message.sendStatus !== "failed"
-                    ? "border-2 border-amber-400"
-                    : message.isStarred && message.sendStatus !== "failed"
-                      ? "border-2 border-blue-400"
-                      : message.sendStatus !== "failed" && "border",
+                    : isMessageRecalled
+                      ? // Recalled: nền xám trung tính, chữ mờ, không hover màu
+                        "bg-gray-100 text-gray-500 border border-gray-200 italic"
+                      : isOwn
+                        ? "bg-brand-100 group-hover:bg-brand-200 text-gray-900 border-brand-100 group-hover:border-brand-200"
+                        : "bg-gray-200 group-hover:bg-gray-300 text-gray-900 border-gray-200 group-hover:border-gray-300",
+                  // Pin/Star borders (override failed state) — bỏ qua khi recalled
+                  !isMessageRecalled &&
+                    (message.isPinned && message.sendStatus !== "failed"
+                      ? "border-2 border-brand-400"
+                      : message.isStarred && message.sendStatus !== "failed"
+                        ? "border-2 border-blue-400"
+                        : message.sendStatus !== "failed" && "border"),
                   // Opacity for sending/retrying
                   (message.sendStatus === "sending" ||
                     message.sendStatus === "retrying") &&
                     "opacity-90",
                 )}
                 data-testid={`message-bubble-${message.id}`}
+                data-recalled={isMessageRecalled || undefined}
               >
-                {/* Helper: Check if message has text, image, or file */}
-                {(() => {
-                  const hasText =
-                    message.content && message.content.trim().length > 0;
+                {/* MOCKUP: Tin đã thu hồi
+                    - Leader/admin: vẫn thấy nội dung gốc, bubble được tô xám
+                    - Người khác: chỉ thấy placeholder, KHÔNG thấy ảnh/file */}
+                {isMessageRecalled && !canViewRecalledContent ? (
+                  <div
+                    className="px-4 py-2"
+                    data-testid={`message-recalled-placeholder-${message.id}`}
+                  >
+                    <p className="text-sm italic text-gray-500">
+                      Tin nhắn đã bị thu hồi
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Helper: Check if message has text, image, or file */}
+                    {(() => {
+                      const hasText =
+                        message.content && message.content.trim().length > 0;
 
-                  // Phase 2: Separate images from files
-                  const images: AttachmentDto[] = [];
-                  const videos: AttachmentDto[] = [];
-                  const files: AttachmentDto[] = [];
+                      // Phase 2: Separate images from files
+                      const images: AttachmentDto[] = [];
+                      const videos: AttachmentDto[] = [];
+                      const files: AttachmentDto[] = [];
 
-                  message.attachments?.forEach((attachment) => {
-                    if (attachment.contentType?.startsWith("image/")) {
-                      images.push(attachment);
-                    } else if (attachment.contentType?.startsWith("video/")) {
-                      videos.push(attachment);
-                    } else {
-                      files.push(attachment);
-                    }
-                  });
+                      message.attachments?.forEach((attachment) => {
+                        if (attachment.contentType?.startsWith("image/")) {
+                          images.push(attachment);
+                        } else if (
+                          attachment.contentType?.startsWith("video/")
+                        ) {
+                          videos.push(attachment);
+                        } else {
+                          files.push(attachment);
+                        }
+                      });
 
-                  const hasImages = images.length > 0;
-                  const hasVideos = videos.length > 0;
-                  const hasFiles = files.length > 0;
+                      const hasImages = images.length > 0;
+                      const hasVideos = videos.length > 0;
+                      const hasFiles = files.length > 0;
 
-                  return (
-                    <>
-                      {/* Quoted Message Preview - if this is a quote reply */}
-                      {message.quotedMessage && (
-                        <div className="px-0.5 pt-0.5">
-                          <QuotedMessagePreview
-                            quotedMessage={message.quotedMessage}
-                            variant="message"
-                            isOwn={isOwn}
-                            isFirstInGroup={isFirstInGroup}
-                            onClick={
-                              onScrollToQuoted
-                                ? () =>
-                                    onScrollToQuoted(message.quotedMessage!.id)
-                                : undefined
-                            }
-                          />
-                        </div>
-                      )}
+                      return (
+                        <>
+                          {/* Quoted Message Preview - if this is a quote reply */}
+                          {message.quotedMessage && (
+                            <div className="px-0.5 pt-0.5">
+                              <QuotedMessagePreview
+                                quotedMessage={message.quotedMessage}
+                                variant="message"
+                                isOwn={isOwn}
+                                isFirstInGroup={isFirstInGroup}
+                                onClick={
+                                  onScrollToQuoted
+                                    ? () =>
+                                        onScrollToQuoted(
+                                          message.quotedMessage!.id,
+                                        )
+                                    : undefined
+                                }
+                              />
+                            </div>
+                          )}
 
-                      {/* Text content with mention highlighting */}
-                      {hasText && (
-                        <div
-                          className={
-                            hasImages || hasVideos || hasFiles
-                              ? "px-4 pt-2 pb-2"
-                              : "px-4 py-2"
-                          }
-                          data-testid={`message-content-${message.id}`}
-                        >
-                          <p
-                            className="text-sm whitespace-pre-wrap leading-relaxed"
-                            style={{ overflowWrap: "anywhere" }}
-                          >
-                            {renderMessageWithMentions(
-                              message.content,
-                              message.mentions,
-                              // Mentions of other users — white pill with
-                              // brand-colored text.
-                              "bg-white text-brand-700 font-semibold px-1.5 py-0.5 rounded",
-                              true, // enableLinks
-                              isOwn
-                                ? "text-brand-700 underline hover:text-brand-900 cursor-pointer"
-                                : "text-brand-600 hover:text-brand-800 underline hover:no-underline cursor-pointer",
-                              currentUserId,
-                              // Self-mention — green pill with white text to
-                              // stand out from the white pill used for other
-                              // users.
-                              "bg-brand-500 text-white font-semibold px-1.5 py-0.5 rounded",
-                            )}
-                          </p>
-                        </div>
-                      )}
+                          {/* Text content with mention highlighting */}
+                          {hasText && (
+                            <div
+                              className={
+                                hasImages || hasVideos || hasFiles
+                                  ? "px-4 pt-2 pb-2"
+                                  : "px-4 py-2"
+                              }
+                              data-testid={`message-content-${message.id}`}
+                            >
+                              <p
+                                className={cn(
+                                  "text-sm whitespace-pre-wrap leading-relaxed",
+                                  isMessageRecalled && "text-gray-500 italic",
+                                )}
+                                style={{ overflowWrap: "anywhere" }}
+                              >
+                                {renderMessageWithMentions(
+                                  message.content,
+                                  message.mentions,
+                                  // Mention người khác: bình thường là pill nổi bật;
+                                  // khi recalled → đồng hoá xám với phần text còn lại
+                                  // để không gây chú ý.
+                                  isMessageRecalled
+                                    ? "text-gray-500"
+                                    : "bg-white text-brand-700 font-semibold px-1.5 py-0.5 rounded",
+                                  true, // enableLinks
+                                  isMessageRecalled
+                                    ? "text-gray-500 no-underline cursor-default pointer-events-none"
+                                    : isOwn
+                                      ? "text-brand-700 underline hover:text-brand-900 cursor-pointer"
+                                      : "text-brand-600 hover:text-brand-800 underline hover:no-underline cursor-pointer",
+                                  currentUserId,
+                                  // Self-mention: bình thường là pill xanh nổi bật;
+                                  // khi recalled → cũng đồng hoá xám.
+                                  isMessageRecalled
+                                    ? "text-gray-500"
+                                    : "bg-brand-500 text-white font-semibold px-1.5 py-0.5 rounded",
+                                )}
+                              </p>
+                            </div>
+                          )}
 
-                      {/* Gap between text and attachments */}
-                      {/* {hasText && (hasImages || hasFiles) && (
+                          {/* Gap between text and attachments */}
+                          {/* {hasText && (hasImages || hasFiles) && (
                       <div className="h-1" />
                     )} */}
 
-                      {/* Phase 2.1: Dynamic Image Grid based on count */}
-                      {hasImages && (
-                        <div
-                          className={cn("px-4", hasText ? "pb-4" : "py-4")}
-                          data-testid="message-attachments-container"
-                        >
-                          {/* Decision 1A: Dynamic grid layout */}
-                          {/* Special case: If has both images and files, use compact 3-col grid */}
-                          {hasFiles ? (
-                            // Mixed attachments: Use flex wrap for compact display
+                          {/* Phase 2.1: Dynamic Image Grid based on count */}
+                          {hasImages && (
                             <div
-                              className={cn(
-                                "flex flex-wrap gap-2",
-                                isOwn ? "justify-end" : "justify-start",
-                              )}
-                              data-testid="image-grid-mixed-3cols"
+                              className={cn("px-4", hasText ? "pb-4" : "py-4")}
+                              data-testid="message-attachments-container"
                             >
-                              {images.slice(0, 6).map((image, index) => {
-                                const isLast = index === 5;
-                                const remainingCount = images.length - 6;
+                              {/* Decision 1A: Dynamic grid layout */}
+                              {/* Special case: If has both images and files, use compact 3-col grid */}
+                              {hasFiles ? (
+                                // Mixed attachments: Use flex wrap for compact display
+                                <div
+                                  className={cn(
+                                    "flex flex-wrap gap-2",
+                                    isOwn ? "justify-end" : "justify-start",
+                                  )}
+                                  data-testid="image-grid-mixed-3cols"
+                                >
+                                  {images.slice(0, 6).map((image, index) => {
+                                    const isLast = index === 5;
+                                    const remainingCount = images.length - 6;
 
-                                return (
-                                  <div
-                                    key={image.fileId}
-                                    className="relative w-[100px] max-w-full aspect-square overflow-hidden rounded"
-                                  >
-                                    <MessageImage
+                                    return (
+                                      <div
+                                        key={image.fileId}
+                                        className="relative w-[100px] max-w-full aspect-square overflow-hidden rounded"
+                                      >
+                                        <MessageImage
+                                          key={image.fileId}
+                                          fileId={image.fileId}
+                                          fileName={image.fileName || "Image"}
+                                          isInGrid={true}
+                                          forceLoad={forceImageLoad}
+                                          onPreviewClick={(fileId) => {
+                                            if (onImageClick) {
+                                              onImageClick(
+                                                images.map((img) => ({
+                                                  fileId: img.fileId,
+                                                  fileName:
+                                                    img.fileName || "Image",
+                                                })),
+                                                index,
+                                              );
+                                            } else {
+                                              onFilePreviewClick?.(
+                                                fileId,
+                                                image.fileName || "Image",
+                                              );
+                                            }
+                                          }}
+                                        />
+                                        {isLast && remainingCount > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              // Open preview at first hidden image (index 6)
+                                              if (onImageClick) {
+                                                onImageClick(
+                                                  images.map((img) => ({
+                                                    fileId: img.fileId,
+                                                    fileName:
+                                                      img.fileName || "Image",
+                                                  })),
+                                                  6,
+                                                );
+                                              } else {
+                                                onFilePreviewClick?.(
+                                                  images[6].fileId,
+                                                  images[6].fileName || "Image",
+                                                );
+                                              }
+                                            }}
+                                            className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
+                                            data-testid="show-more-overlay"
+                                          >
+                                            <span className="text-white text-lg font-semibold">
+                                              +{remainingCount} more
+                                            </span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : images.length === 1 ? (
+                                <div>
+                                  <MessageImage
+                                    key={images[0].fileId}
+                                    fileId={images[0].fileId}
+                                    fileName={images[0].fileName || "Image"}
+                                    isInGrid={false}
+                                    forceLoad={forceImageLoad}
+                                    onPreviewClick={(fileId) => {
+                                      // Use new gallery mode if available, fallback to old callback
+                                      if (onImageClick) {
+                                        onImageClick(
+                                          images.map((img) => ({
+                                            fileId: img.fileId,
+                                            fileName: img.fileName || "Image",
+                                          })),
+                                          0,
+                                        );
+                                      } else {
+                                        onFilePreviewClick?.(
+                                          fileId,
+                                          images[0].fileName || "Image",
+                                        );
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              ) : images.length === 2 ? (
+                                <div
+                                  className={cn(
+                                    "flex flex-wrap gap-2",
+                                    isOwn ? "justify-end" : "justify-start",
+                                  )}
+                                  data-testid="image-grid-2cols"
+                                >
+                                  {images.map((image, index) => (
+                                    <div
                                       key={image.fileId}
-                                      fileId={image.fileId}
-                                      fileName={image.fileName || "Image"}
-                                      isInGrid={true}
-                                      forceLoad={forceImageLoad}
-                                      onPreviewClick={(fileId) => {
-                                        if (onImageClick) {
-                                          onImageClick(
-                                            images.map((img) => ({
-                                              fileId: img.fileId,
-                                              fileName: img.fileName || "Image",
-                                            })),
-                                            index,
-                                          );
-                                        } else {
-                                          onFilePreviewClick?.(
-                                            fileId,
-                                            image.fileName || "Image",
-                                          );
-                                        }
-                                      }}
-                                    />
-                                    {isLast && remainingCount > 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          // Open preview at first hidden image (index 6)
+                                      className="w-[100px] max-w-full aspect-square overflow-hidden rounded"
+                                    >
+                                      <MessageImage
+                                        key={image.fileId}
+                                        fileId={image.fileId}
+                                        fileName={image.fileName || "Image"}
+                                        isInGrid={true}
+                                        forceLoad={forceImageLoad}
+                                        onPreviewClick={(fileId) => {
                                           if (onImageClick) {
                                             onImageClick(
                                               images.map((img) => ({
@@ -671,180 +831,40 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                                                 fileName:
                                                   img.fileName || "Image",
                                               })),
-                                              6,
+                                              index,
                                             );
                                           } else {
                                             onFilePreviewClick?.(
-                                              images[6].fileId,
-                                              images[6].fileName || "Image",
+                                              fileId,
+                                              image.fileName || "Image",
                                             );
                                           }
                                         }}
-                                        className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
-                                        data-testid="show-more-overlay"
-                                      >
-                                        <span className="text-white text-lg font-semibold">
-                                          +{remainingCount} more
-                                        </span>
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : images.length === 1 ? (
-                            <div>
-                              <MessageImage
-                                key={images[0].fileId}
-                                fileId={images[0].fileId}
-                                fileName={images[0].fileName || "Image"}
-                                isInGrid={false}
-                                forceLoad={forceImageLoad}
-                                onPreviewClick={(fileId) => {
-                                  // Use new gallery mode if available, fallback to old callback
-                                  if (onImageClick) {
-                                    onImageClick(
-                                      images.map((img) => ({
-                                        fileId: img.fileId,
-                                        fileName: img.fileName || "Image",
-                                      })),
-                                      0,
-                                    );
-                                  } else {
-                                    onFilePreviewClick?.(
-                                      fileId,
-                                      images[0].fileName || "Image",
-                                    );
-                                  }
-                                }}
-                              />
-                            </div>
-                          ) : images.length === 2 ? (
-                            <div
-                              className={cn(
-                                "flex flex-wrap gap-2",
-                                isOwn ? "justify-end" : "justify-start",
-                              )}
-                              data-testid="image-grid-2cols"
-                            >
-                              {images.map((image, index) => (
-                                <div
-                                  key={image.fileId}
-                                  className="w-[100px] max-w-full aspect-square overflow-hidden rounded"
-                                >
-                                  <MessageImage
-                                    key={image.fileId}
-                                    fileId={image.fileId}
-                                    fileName={image.fileName || "Image"}
-                                    isInGrid={true}
-                                    forceLoad={forceImageLoad}
-                                    onPreviewClick={(fileId) => {
-                                      if (onImageClick) {
-                                        onImageClick(
-                                          images.map((img) => ({
-                                            fileId: img.fileId,
-                                            fileName: img.fileName || "Image",
-                                          })),
-                                          index,
-                                        );
-                                      } else {
-                                        onFilePreviewClick?.(
-                                          fileId,
-                                          image.fileName || "Image",
-                                        );
-                                      }
-                                    }}
-                                  />
+                                      />
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                          ) : images.length >= 3 && images.length <= 6 ? (
-                            // 3-6 images: flex wrap layout
-                            <div
-                              className={cn(
-                                "flex flex-wrap gap-2",
-                                isOwn ? "justify-end" : "justify-start",
-                              )}
-                              data-testid="image-grid-3cols"
-                            >
-                              {images.map((image, index) => (
+                              ) : images.length >= 3 && images.length <= 6 ? (
+                                // 3-6 images: flex wrap layout
                                 <div
-                                  key={image.fileId}
-                                  className="w-[100px] max-w-full aspect-square overflow-hidden rounded"
+                                  className={cn(
+                                    "flex flex-wrap gap-2",
+                                    isOwn ? "justify-end" : "justify-start",
+                                  )}
+                                  data-testid="image-grid-3cols"
                                 >
-                                  <MessageImage
-                                    key={image.fileId}
-                                    fileId={image.fileId}
-                                    fileName={image.fileName || "Image"}
-                                    isInGrid={true}
-                                    forceLoad={forceImageLoad}
-                                    onPreviewClick={(fileId) => {
-                                      if (onImageClick) {
-                                        onImageClick(
-                                          images.map((img) => ({
-                                            fileId: img.fileId,
-                                            fileName: img.fileName || "Image",
-                                          })),
-                                          index,
-                                        );
-                                      } else {
-                                        onFilePreviewClick?.(
-                                          fileId,
-                                          image.fileName || "Image",
-                                        );
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            // 7+ images: flex wrap with first 6 + "+N more" overlay
-                            <div
-                              className={cn(
-                                "flex flex-wrap gap-2",
-                                isOwn ? "justify-end" : "justify-start",
-                              )}
-                              data-testid="image-grid-with-overlay"
-                            >
-                              {images.slice(0, 6).map((image, index) => {
-                                const isLast = index === 5;
-                                const remainingCount = images.length - 6;
-
-                                return (
-                                  <div
-                                    key={image.fileId}
-                                    className="relative w-[100px] max-w-full aspect-square overflow-hidden rounded"
-                                  >
-                                    <MessageImage
+                                  {images.map((image, index) => (
+                                    <div
                                       key={image.fileId}
-                                      fileId={image.fileId}
-                                      fileName={image.fileName || "Image"}
-                                      isInGrid={true}
-                                      forceLoad={forceImageLoad}
-                                      onPreviewClick={(fileId) => {
-                                        if (onImageClick) {
-                                          onImageClick(
-                                            images.map((img) => ({
-                                              fileId: img.fileId,
-                                              fileName: img.fileName || "Image",
-                                            })),
-                                            index,
-                                          );
-                                        } else {
-                                          onFilePreviewClick?.(
-                                            fileId,
-                                            image.fileName || "Image",
-                                          );
-                                        }
-                                      }}
-                                    />
-                                    {isLast && remainingCount > 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          // Open preview at first hidden image (index 6)
+                                      className="w-[100px] max-w-full aspect-square overflow-hidden rounded"
+                                    >
+                                      <MessageImage
+                                        key={image.fileId}
+                                        fileId={image.fileId}
+                                        fileName={image.fileName || "Image"}
+                                        isInGrid={true}
+                                        forceLoad={forceImageLoad}
+                                        onPreviewClick={(fileId) => {
                                           if (onImageClick) {
                                             onImageClick(
                                               images.map((img) => ({
@@ -852,140 +872,212 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                                                 fileName:
                                                   img.fileName || "Image",
                                               })),
-                                              6,
+                                              index,
                                             );
                                           } else {
                                             onFilePreviewClick?.(
-                                              images[6].fileId,
-                                              images[6].fileName || "Image",
+                                              fileId,
+                                              image.fileName || "Image",
                                             );
                                           }
                                         }}
-                                        className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
-                                        data-testid="show-more-overlay"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                // 7+ images: flex wrap with first 6 + "+N more" overlay
+                                <div
+                                  className={cn(
+                                    "flex flex-wrap gap-2",
+                                    isOwn ? "justify-end" : "justify-start",
+                                  )}
+                                  data-testid="image-grid-with-overlay"
+                                >
+                                  {images.slice(0, 6).map((image, index) => {
+                                    const isLast = index === 5;
+                                    const remainingCount = images.length - 6;
+
+                                    return (
+                                      <div
+                                        key={image.fileId}
+                                        className="relative w-[100px] max-w-full aspect-square overflow-hidden rounded"
                                       >
-                                        <span className="text-white text-lg font-semibold">
-                                          +{remainingCount} more
-                                        </span>
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                                        <MessageImage
+                                          key={image.fileId}
+                                          fileId={image.fileId}
+                                          fileName={image.fileName || "Image"}
+                                          isInGrid={true}
+                                          forceLoad={forceImageLoad}
+                                          onPreviewClick={(fileId) => {
+                                            if (onImageClick) {
+                                              onImageClick(
+                                                images.map((img) => ({
+                                                  fileId: img.fileId,
+                                                  fileName:
+                                                    img.fileName || "Image",
+                                                })),
+                                                index,
+                                              );
+                                            } else {
+                                              onFilePreviewClick?.(
+                                                fileId,
+                                                image.fileName || "Image",
+                                              );
+                                            }
+                                          }}
+                                        />
+                                        {isLast && remainingCount > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              // Open preview at first hidden image (index 6)
+                                              if (onImageClick) {
+                                                onImageClick(
+                                                  images.map((img) => ({
+                                                    fileId: img.fileId,
+                                                    fileName:
+                                                      img.fileName || "Image",
+                                                  })),
+                                                  6,
+                                                );
+                                              } else {
+                                                onFilePreviewClick?.(
+                                                  images[6].fileId,
+                                                  images[6].fileName || "Image",
+                                                );
+                                              }
+                                            }}
+                                            className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-black/70 transition-colors"
+                                            data-testid="show-more-overlay"
+                                          >
+                                            <span className="text-white text-lg font-semibold">
+                                              +{remainingCount} more
+                                            </span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           )}
-                        </div>
-                      )}
 
-                      {/* Video attachments - show with thumbnail + play icon */}
-                      {hasVideos && (
-                        <div
-                          className={cn(
-                            "px-4",
-                            hasText || hasImages ? "pb-4" : "py-4",
-                          )}
-                          data-testid="message-videos-container"
-                        >
-                          <div className="flex flex-col gap-2">
-                            {videos.map((video) => (
-                              <div
-                                key={video.fileId}
-                                className="relative rounded-lg overflow-hidden cursor-pointer max-w-[280px] bg-black"
-                                data-testid={`message-video-attachment-${video.fileId}`}
-                                onClick={() => {
-                                  onFilePreviewClick?.(
-                                    video.fileId,
-                                    video.fileName || "video.mp4",
-                                  );
-                                }}
-                              >
-                                <MessageVideo
-                                  fileId={video.fileId}
-                                  fileName={video.fileName || "Video"}
-                                  fileSize={video.fileSize}
-                                />
+                          {/* Video attachments - show with thumbnail + play icon */}
+                          {hasVideos && (
+                            <div
+                              className={cn(
+                                "px-4",
+                                hasText || hasImages ? "pb-4" : "py-4",
+                              )}
+                              data-testid="message-videos-container"
+                            >
+                              <div className="flex flex-col gap-2">
+                                {videos.map((video) => (
+                                  <div
+                                    key={video.fileId}
+                                    className="relative rounded-lg overflow-hidden cursor-pointer max-w-[280px] bg-black"
+                                    data-testid={`message-video-attachment-${video.fileId}`}
+                                    onClick={() => {
+                                      onFilePreviewClick?.(
+                                        video.fileId,
+                                        video.fileName || "video.mp4",
+                                      );
+                                    }}
+                                  >
+                                    <MessageVideo
+                                      fileId={video.fileId}
+                                      fileName={video.fileName || "Video"}
+                                      fileSize={video.fileSize}
+                                    />
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* File attachments - Keep original logic */}
-                      {hasFiles && (
-                        <div
-                          className={cn(
-                            "px-1",
-                            hasText || hasImages || hasVideos ? "pb-1" : "py-1",
+                            </div>
                           )}
-                        >
-                          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden min-w-[200px]">
-                            {files.map((file, index) => (
-                              <div
-                                key={file.fileId}
-                                className={cn(
-                                  "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors px-2 py-2",
-                                  index > 0 && "border-t border-gray-100",
-                                )}
-                                data-testid={`message-file-attachment-${file.fileId}`}
-                                onClick={() => {
-                                  onFilePreviewClick?.(
-                                    file.fileId,
-                                    file.fileName || "document",
-                                  );
-                                }}
-                              >
-                                {/* Icon container */}
-                                <div className="bg-gray-100 rounded-lg p-2 flex-shrink-0">
-                                  <FileIcon
-                                    contentType={
-                                      file.contentType ||
-                                      "application/octet-stream"
-                                    }
-                                    size="md"
-                                  />
-                                </div>
-                                <div className="min-w-0 overflow-hidden">
-                                  <p
-                                    className="text-sm font-medium text-gray-900 truncate"
-                                    title={file.fileName || "File"}
-                                  >
-                                    {file.fileName || "File"}
-                                  </p>
+
+                          {/* File attachments - Keep original logic */}
+                          {hasFiles && (
+                            <div
+                              className={cn(
+                                "px-1",
+                                hasText || hasImages || hasVideos
+                                  ? "pb-1"
+                                  : "py-1",
+                              )}
+                            >
+                              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden min-w-[200px]">
+                                {files.map((file, index) => (
                                   <div
+                                    key={file.fileId}
                                     className={cn(
-                                      "flex items-center gap-2 text-xs flex-wrap",
-                                      "text-gray-600",
+                                      "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors px-2 py-2",
+                                      index > 0 && "border-t border-gray-100",
                                     )}
+                                    data-testid={`message-file-attachment-${file.fileId}`}
+                                    onClick={() => {
+                                      onFilePreviewClick?.(
+                                        file.fileId,
+                                        file.fileName || "document",
+                                      );
+                                    }}
                                   >
-                                    {file.fileSize && (
-                                      <span>
-                                        {formatFileSize(file.fileSize)}
-                                      </span>
-                                    )}
-                                    {getFileExtension(
-                                      file.fileName ?? undefined,
-                                      file.contentType ?? undefined,
-                                    ) && (
-                                      <>
-                                        {file.fileSize && <span>•</span>}
-                                        <span className="font-medium uppercase">
-                                          {getFileExtension(
-                                            file.fileName ?? undefined,
-                                            file.contentType ?? undefined,
-                                          )}
-                                        </span>
-                                      </>
-                                    )}
+                                    {/* Icon container */}
+                                    <div className="bg-gray-100 rounded-lg p-2 flex-shrink-0">
+                                      <FileIcon
+                                        contentType={
+                                          file.contentType ||
+                                          "application/octet-stream"
+                                        }
+                                        size="md"
+                                      />
+                                    </div>
+                                    <div className="min-w-0 overflow-hidden">
+                                      <p
+                                        className="text-sm font-medium text-gray-900 truncate"
+                                        title={file.fileName || "File"}
+                                      >
+                                        {file.fileName || "File"}
+                                      </p>
+                                      <div
+                                        className={cn(
+                                          "flex items-center gap-2 text-xs flex-wrap",
+                                          "text-gray-600",
+                                        )}
+                                      >
+                                        {file.fileSize && (
+                                          <span>
+                                            {formatFileSize(file.fileSize)}
+                                          </span>
+                                        )}
+                                        {getFileExtension(
+                                          file.fileName ?? undefined,
+                                          file.contentType ?? undefined,
+                                        ) && (
+                                          <>
+                                            {file.fileSize && <span>•</span>}
+                                            <span className="font-medium uppercase">
+                                              {getFileExtension(
+                                                file.fileName ?? undefined,
+                                                file.contentType ?? undefined,
+                                              )}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </>
+                )}
               </div>
               {/* MOCKUP "Xác nhận tin nhắn" pill — tạm ẩn cho tới khi có logic chính thức
               {message.contentType !== "SYS" && (
@@ -1002,7 +1094,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
 
           {/* Confirmed info indicator - directly below bubble, no connector */}
           {/* Only show if confirmed AND no linkedTaskId (hide when task is created) */}
-          {hasConfirmedInfo && !message.linkedTaskId && (
+          {hasConfirmedInfo && !message.linkedTaskId && !isMessageRecalled && (
             <div
               className={cn(
                 "mt-1.5",
@@ -1019,7 +1111,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           )}
 
           {/* Indicator for linked task - below bubble with connector */}
-          {message.linkedTaskId && (
+          {message.linkedTaskId && !isMessageRecalled && (
             <div className="flex items-center gap-1.5 mt-2 mb-1.5">
               {/* Text first for own messages, SVG first for received */}
               {isOwn && (

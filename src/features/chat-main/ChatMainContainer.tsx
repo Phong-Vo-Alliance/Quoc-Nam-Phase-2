@@ -208,6 +208,13 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     inputRef,
   });
 
+  // ── Banner expansion (mutually exclusive) ──
+  // Only one of TaskBanner / PinBar can be expanded at a time; opening one
+  // collapses the other.
+  const [expandedBanner, setExpandedBanner] = React.useState<
+    "task" | "pin" | null
+  >(null);
+
   // ── Pin / Unpin ──
   // Guards pinning against the per-conversation limit: when full, surfaces a
   // replace dialog that drops the oldest pin instead of pinning directly.
@@ -467,11 +474,17 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                 handleConversationChange(convId);
                 onViewTaskDetail?.();
               }}
+              isExpanded={expandedBanner === "task"}
+              onExpandedChange={(next) =>
+                setExpandedBanner(next ? "task" : null)
+              }
             />
           )}
           <PinBar
             conversationId={conversationId}
             onJumpToMessage={handlePinJump}
+            isExpanded={expandedBanner === "pin"}
+            onExpandedChange={(next) => setExpandedBanner(next ? "pin" : null)}
           />
         </div>
       )}

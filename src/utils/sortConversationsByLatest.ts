@@ -23,6 +23,39 @@ type Conversation = GroupConversation | DirectConversation;
  * // [{ lastMessage: { sentAt: '2026-01-07T12:00:00Z' }}, ...]
  * ```
  */
+/**
+ * Comparator for pinned items so their order is driven by pin metadata, never
+ * by latest-message recency.
+ *
+ * Order priority:
+ * 1. `pinOrder` ascending (0 = first) when both sides provide it
+ * 2. `pinnedAt` ascending (earliest pinned first) as a stable fallback
+ * 3. 0 (preserve current order) when neither field is available
+ *
+ * This guarantees a new message arriving in a pinned conversation does NOT
+ * bump it within the pinned group.
+ */
+export function comparePinned(
+  a: { pinOrder?: number; pinnedAt?: string | null },
+  b: { pinOrder?: number; pinnedAt?: string | null }
+): number {
+  const aOrder = a.pinOrder;
+  const bOrder = b.pinOrder;
+  if (aOrder != null && bOrder != null && aOrder !== bOrder) {
+    return aOrder - bOrder;
+  }
+
+  const aPinned = a.pinnedAt ? new Date(a.pinnedAt).getTime() : null;
+  const bPinned = b.pinnedAt ? new Date(b.pinnedAt).getTime() : null;
+  if (aPinned != null && bPinned != null && aPinned !== bPinned) {
+    return aPinned - bPinned;
+  }
+  if (aPinned != null && bPinned == null) return -1;
+  if (aPinned == null && bPinned != null) return 1;
+
+  return 0;
+}
+
 export function sortConversationsByLatest(
   conversations: Conversation[]
 ): Conversation[] {

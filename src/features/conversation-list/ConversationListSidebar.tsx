@@ -42,7 +42,10 @@ import type {
   GroupConversation,
   DirectConversation,
 } from "@/types/conversations";
-import { sortConversationsByLatest } from "@/utils/sortConversationsByLatest";
+import {
+  sortConversationsByLatest,
+  comparePinned,
+} from "@/utils/sortConversationsByLatest";
 import {
   saveSelectedConversation,
   getSelectedConversation,
@@ -537,12 +540,13 @@ export const ConversationListSidebar: React.FC<
     (c) => match(c.name) || match(c.lastMessage),
   );
 
-  // Promote pinned items to the top, ordered by pinOrder (ascending).
+  // Promote pinned items to the top, ordered by pin metadata (pinOrder, then
+  // pinnedAt) — NOT by latest message, so a new message never reorders a pin.
   // Non-pinned items keep their existing (latest-message) order.
   const orderedApiCategories = React.useMemo(() => {
     const pinned = filteredApiCategories
       .filter((c) => c.isPinned)
-      .sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0));
+      .sort(comparePinned);
     const others = filteredApiCategories.filter((c) => !c.isPinned);
     return [...pinned, ...others];
   }, [filteredApiCategories]);
@@ -550,10 +554,7 @@ export const ConversationListSidebar: React.FC<
   const orderedApiDirects = React.useMemo(() => {
     const pinned = filteredApiDirects
       .filter((c) => c.conversation?.isPinned)
-      .sort(
-        (a, b) =>
-          (a.conversation?.pinOrder ?? 0) - (b.conversation?.pinOrder ?? 0),
-      );
+      .sort((a, b) => comparePinned(a.conversation!, b.conversation!));
     const others = filteredApiDirects.filter((c) => !c.conversation?.isPinned);
     return [...pinned, ...others];
   }, [filteredApiDirects]);
@@ -564,7 +565,7 @@ export const ConversationListSidebar: React.FC<
     () =>
       apiCategories
         .filter((c) => c.isPinned)
-        .sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0))
+        .sort(comparePinned)
         .map((c) => ({ id: c.id, name: c.name })),
     [apiCategories],
   );
@@ -573,10 +574,7 @@ export const ConversationListSidebar: React.FC<
     () =>
       mergedContacts
         .filter((c) => c.hasConversation && c.conversation?.isPinned)
-        .sort(
-          (a, b) =>
-            (a.conversation?.pinOrder ?? 0) - (b.conversation?.pinOrder ?? 0),
-        )
+        .sort((a, b) => comparePinned(a.conversation!, b.conversation!))
         .map((c) => ({ id: c.id, name: c.name, avatarUrl: c.avatarUrl })),
     [mergedContacts],
   );
