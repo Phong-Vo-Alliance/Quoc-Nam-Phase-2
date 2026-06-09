@@ -25,6 +25,7 @@ import { LinearTabs } from "../LinearTabs";
 import { MessageSearchBar } from "./MessageSearchBar"; // 🆕 NEW: Message search
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers"; // 🆕 NEW: Self-fetch members
 import { useAuthStore } from "@/stores/authStore"; // 🆕 NEW: Get current user ID for DM filtering
+import { FEATURE_FLAGS } from "@/config/env.config"; // 🆕 NEW: VITE_SHOW_MEMBER_AVATAR gating
 import type { ConversationInfoDto } from "@/types/categories";
 
 interface ChatHeaderProps {
@@ -132,6 +133,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       ? prevMemberCountRef.current
       : members.length;
 
+  // 🆕 NEW: Avatar người đối thoại cho chat cá nhân (DM) — chỉ khi bật config
+  // VITE_SHOW_MEMBER_AVATAR và member kia thực sự có avatarUrl. Nếu không có
+  // avatar thì giữ nguyên Avatar chữ cái viết tắt như hiện tại.
+  const dmMemberAvatarUrl = React.useMemo(() => {
+    if (!FEATURE_FLAGS.showMemberAvatar || !isDirect) return null;
+    const otherMember = members.find((m) => m.userId !== currentUser?.id);
+    return otherMember?.userInfo?.avatarUrl ?? null;
+  }, [isDirect, members, currentUser?.id]);
+
   // Display name for both title and avatar
   // API returns correct name directly, just use category override if needed
   const headerDisplayName = React.useMemo(() => {
@@ -153,6 +163,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         {conversationCategory === undefined ? (
           // 🐛 FIX (ui-improvements-20260205): Loading skeleton for avatar
           <div className="h-10 w-10 rounded-full bg-gray-200 animate-pulse shrink-0" />
+        ) : dmMemberAvatarUrl ? (
+          // 🆕 DM avatar ảnh (VITE_SHOW_MEMBER_AVATAR) — kích thước khớp Avatar chữ
+          <div className="h-7 w-7 overflow-hidden rounded-full shadow-sm shrink-0">
+            <img
+              src={dmMemberAvatarUrl}
+              alt={headerDisplayName}
+              className="h-full w-full object-cover"
+            />
+          </div>
         ) : (
           <Avatar
             name={headerDisplayName}
