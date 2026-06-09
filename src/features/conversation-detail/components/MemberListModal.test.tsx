@@ -53,7 +53,7 @@ describe("MemberListModal", () => {
     expect(memberItems[0]).toHaveAttribute("data-testid", "member-item-1");
   });
 
-  it("displays 2-letter initials correctly", () => {
+  it("displays 2-letter initials from last two words", () => {
     render(<MemberListModal {...defaultProps} />);
 
     // "Nguyễn Văn An" → "VA"
@@ -62,8 +62,8 @@ describe("MemberListModal", () => {
     expect(screen.getByText("TB")).toBeInTheDocument();
     // "Lê Minh" → "LM"
     expect(screen.getByText("LM")).toBeInTheDocument();
-    // "Phạm Thị Ngọc-Hà" → "NH" (hyphen removed)
-    expect(screen.getByText("NH")).toBeInTheDocument();
+    // "Phạm Thị Ngọc-Hà" → "TN" (chữ đầu của 2 từ cuối)
+    expect(screen.getByText("TN")).toBeInTheDocument();
   });
 
   it("shows Leader badge for leaders only", () => {
@@ -106,8 +106,8 @@ describe("getInitials helper function", () => {
     const testCases: MinimalMember[] = [
       { id: "1", name: "Nguyễn Văn An", role: "Member" }, // → VA
       { id: "2", name: "Lê Minh", role: "Member" }, // → LM
-      { id: "3", name: "An", role: "Member" }, // → AN
-      { id: "4", name: "Trần Thị Bích-Ngọc", role: "Member" }, // → BN
+      { id: "3", name: "An", role: "Member" }, // → AN (1 từ)
+      { id: "4", name: "Trần Thị Bích-Ngọc", role: "Member" }, // → TB
     ];
 
     render(
@@ -122,6 +122,6 @@ describe("getInitials helper function", () => {
     expect(screen.getByText("VA")).toBeInTheDocument();
     expect(screen.getByText("LM")).toBeInTheDocument();
     expect(screen.getByText("AN")).toBeInTheDocument();
-    expect(screen.getByText("BN")).toBeInTheDocument();
+    expect(screen.getByText("TB")).toBeInTheDocument();
   });
 });

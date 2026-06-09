@@ -12,6 +12,7 @@ import { Crown, MoreHorizontal, Pin, PinOff } from "lucide-react";
 import RelativeTime from "@/features/portal/components/RelativeTime";
 import { useAuthStore } from "@/stores/authStore";
 import { formatMessagePreview } from "@/utils/formatMessagePreview";
+import { getInitials } from "@/utils/getInitials";
 import type { CategoryItemProps } from "../types";
 import { useMemo, useState } from "react";
 import {
@@ -21,15 +22,6 @@ import {
 } from "@/components/ui/popover";
 import { useUnpinCategory } from "@/hooks/mutations/usePinConversationMutations";
 import { usePinLimitGuard } from "../PinLimitGuardContext";
-
-// Get initials from name (max 2 chars)
-const getInitials = (name: string) =>
-  name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 export function CategoryItem({
   category,

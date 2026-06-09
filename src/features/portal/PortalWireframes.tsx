@@ -1425,6 +1425,7 @@ export default function PortalWireframes({
           showPinnedToast={showPinnedToast}
           currentUserName={currentUser}
           currentUserDepartment={currentUserDepartment}
+          currentUserAvatarUrl={authUser?.avatarUrl}
           onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
         />
       )}

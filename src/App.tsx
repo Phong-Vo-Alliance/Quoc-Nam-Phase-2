@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { useAuthStore } from "./stores/authStore";
 import { useAppConfigStore } from "./stores/appConfigStore";
 import { initializeViewMode } from "./stores/uiStore";
-import { getCurrentUser } from "./utils/getCurrentUser";
+import { getCurrentUserFromAPI } from "./utils/getCurrentUser";
 import { SessionExpiredDialog } from "./components/ui/session-expired-dialog";
 import { getAccessToken } from "./lib/auth/tokenStorage";
 import { ConnectionStatusBanner } from "./components/ConnectionStatusBanner";
@@ -49,32 +49,33 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
-  // Check and update user info on app initialization/refresh
+  // Refresh user info from /api/auth/me on every app load/reload.
+  // Always hits the API (not the localStorage cache) so avatar/profile data
+  // stays fresh; the in-flight guard in getCurrentUserFromAPI collapses the
+  // StrictMode double-mount into a single request.
   useEffect(() => {
     if (isAuthenticated && user) {
-      // Check if fullName or departments are missing or need refreshing
-      const needsRefresh =
-        !user.fullName || !user.departments || user.departments.length === 0;
-      if (needsRefresh) {
-        getCurrentUser()
-          .then((userWithFullInfo) => {
-            // Only update if we got new info
-            if (
-              userWithFullInfo.fullName ||
+      getCurrentUserFromAPI()
+        .then((userWithFullInfo) => {
+          // Only update if we got new info
+          if (
+            userWithFullInfo &&
+            (userWithFullInfo.fullName ||
+              userWithFullInfo.avatarUrl ||
               (userWithFullInfo.departments &&
-                userWithFullInfo.departments.length > 0)
-            ) {
-              setUser({
-                ...user,
-                fullName: userWithFullInfo.fullName || user.fullName,
-                departments: userWithFullInfo.departments || user.departments,
-              });
-            }
-          })
-          .catch((error) => {
-            console.warn("Failed to refresh user info on app load:", error);
-          });
-      }
+                userWithFullInfo.departments.length > 0))
+          ) {
+            setUser({
+              ...user,
+              fullName: userWithFullInfo.fullName || user.fullName,
+              avatarUrl: userWithFullInfo.avatarUrl ?? user.avatarUrl,
+              departments: userWithFullInfo.departments || user.departments,
+            });
+          }
+        })
+        .catch((error) => {
+          console.warn("Failed to refresh user info on app load:", error);
+        });
     }
   }, [isAuthenticated, user?.id]); // Only run when auth status or user changes
 

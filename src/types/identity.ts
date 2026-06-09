@@ -111,6 +111,8 @@ export interface AuthMeResponse {
   id: string;
   identifier?: string;
   email?: string;
+  fullName?: string;
+  avatarUrl?: string | null;
   roles?: string[];
   departments?: UserDepartmentDto[];
 }

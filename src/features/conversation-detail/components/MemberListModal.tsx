@@ -9,39 +9,9 @@ import {
 } from "@/components/ui/dialog";
 import { Users, Crown, User } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
+import { FEATURE_FLAGS } from "@/config/env.config";
+import { getInitials } from "@/utils/getInitials";
 import type { MinimalMember } from "../types";
-
-/**
- * Get 2-letter initials from Vietnamese name
- * Format: "Họ Tên Lót Tên" → lấy chữ cái đầu của 2 từ cuối
- * - "Nguyễn Văn An" → "VA"
- * - "Trần Thị Bích-Ngọc" → "BN" (bỏ qua gạch nối)
- * - "Lê Minh" → "LM"
- * - "An" → "AN"
- */
-const getInitials = (name: string): string => {
-  if (!name) return "??";
-
-  // Remove special characters like hyphens, keep only letters and spaces
-  const cleanName = name.replace(/[-]/g, " ").trim();
-
-  // Split by whitespace
-  const words = cleanName.split(/\s+/).filter(Boolean);
-
-  if (words.length >= 2) {
-    // Get last 2 words and take first character of each
-    const lastTwoWords = words.slice(-2);
-    return lastTwoWords.map((w) => w.charAt(0).toUpperCase()).join("");
-  } else if (words.length === 1) {
-    // Single word: take first 2 characters
-    const word = words[0];
-    return word.length >= 2
-      ? word.substring(0, 2).toUpperCase()
-      : word.toUpperCase().padEnd(2, word.charAt(0).toUpperCase());
-  }
-
-  return "??";
-};
 
 interface MemberListModalProps {
   /** Whether modal is open */
@@ -149,9 +119,17 @@ export const MemberListModal: React.FC<MemberListModalProps> = ({
                 data-testid={`member-item-${member.id}`}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                {/* Avatar with 2-letter initials */}
-                <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-brand-500 to-brand-600 shadow-sm grid place-items-center text-xs font-semibold text-white ring-2 ring-white">
-                  {getInitials(member.name)}
+                {/* Avatar: ảnh khi bật config + có avatarUrl, ngược lại chữ cái đầu */}
+                <div className="h-8 w-8 overflow-hidden rounded-full bg-gradient-to-tr from-brand-500 to-brand-600 shadow-sm grid place-items-center text-xs font-semibold text-white ring-2 ring-white">
+                  {FEATURE_FLAGS.showMemberAvatar && member.avatarUrl ? (
+                    <img
+                      src={member.avatarUrl}
+                      alt={member.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    getInitials(member.name, { type: "DM", fallback: "?" })
+                  )}
                 </div>
 
                 {/* Name and departments */}

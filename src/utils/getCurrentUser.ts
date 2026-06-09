@@ -19,9 +19,23 @@ let cachedCurrentUser: {
   id: string;
   identifier: string;
   fullName?: string; // ✅ NEW: Full name for display
+  avatarUrl?: string | null; // ✅ NEW: Avatar URL from API
   roles: string[];
   departments?: UserDepartmentDto[];
 } | null = null;
+
+// In-flight request guard: dedupe concurrent /api/auth/me calls so that
+// React StrictMode's double-mount (or any parallel callers) share a single
+// network request instead of firing it twice on every reload.
+type CurrentUserApiResult = {
+  id: string;
+  identifier: string;
+  fullName?: string;
+  avatarUrl?: string | null;
+  roles: string[];
+  departments?: UserDepartmentDto[];
+} | null;
+let inFlightApiRequest: Promise<CurrentUserApiResult> | null = null;
 
 /**
  * Get current user from storage or API with proper fallback handling
@@ -41,6 +55,7 @@ export async function getCurrentUser(): Promise<{
   id: string;
   identifier: string;
   fullName?: string; // ✅ NEW: Full name from API
+  avatarUrl?: string | null; // ✅ NEW: Avatar URL from API
   roles: string[];
   departments?: UserDepartmentDto[];
 }> {
@@ -64,6 +79,7 @@ export async function getCurrentUser(): Promise<{
             id: user.id,
             identifier: user.identifier || user.email || "",
             fullName: user?.fullName, // ✅ Include fullName
+            avatarUrl: user?.avatarUrl ?? null, // ✅ Include avatarUrl
             departments: user?.departments || [],
             roles: user?.roles || [],
           };
@@ -103,6 +119,7 @@ export async function getCurrentUser(): Promise<{
           return {
             id: parsed.state.user.id,
             fullName: parsed.state.user?.fullName, // ✅ Include fullName
+            avatarUrl: parsed.state.user?.avatarUrl ?? null, // ✅ Include avatarUrl
             identifier: parsed.state.user?.identifier || "",
             departments: parsed.state.user?.departments || [],
             roles: parsed.state.user?.roles || [],
@@ -158,13 +175,22 @@ export async function getCurrentUser(): Promise<{
  * @returns Promise<CurrentUser> or null if unauthenticated/failed
  * Updated: 2026-02-11 - Added fullName support
  */
-export async function getCurrentUserFromAPI(): Promise<{
-  id: string;
-  identifier: string;
-  fullName?: string; // ✅ NEW: Full name from API
-  roles: string[];
-  departments?: UserDepartmentDto[];
-} | null> {
+export function getCurrentUserFromAPI(): Promise<CurrentUserApiResult> {
+  // Reuse the in-flight request if one is already running. This collapses the
+  // StrictMode double-mount (and any other concurrent callers) into a single
+  // /api/auth/me round-trip per reload instead of two.
+  if (inFlightApiRequest) {
+    return inFlightApiRequest;
+  }
+
+  inFlightApiRequest = fetchCurrentUserFromAPI().finally(() => {
+    inFlightApiRequest = null;
+  });
+
+  return inFlightApiRequest;
+}
+
+async function fetchCurrentUserFromAPI(): Promise<CurrentUserApiResult> {
   try {
     const response = await identityApiClient.get<{
       id?: string; // ⚠️ Make optional to detect if missing
@@ -172,6 +198,7 @@ export async function getCurrentUserFromAPI(): Promise<{
       identifier?: string;
       email?: string;
       fullName?: string; // ✅ NEW: Full name from API
+      avatarUrl?: string | null; // ✅ NEW: Avatar URL from API
       roles?: string[];
       departments?: UserDepartmentDto[];
     }>("/api/auth/me");
@@ -183,6 +210,7 @@ export async function getCurrentUserFromAPI(): Promise<{
       id: userData.id || userData.userId || "", // ⚠️ Try both field names
       identifier: userData.identifier || userData.email || "",
       fullName: userData.fullName, // ✅ Save fullName
+      avatarUrl: userData.avatarUrl ?? null, // ✅ Save avatarUrl
       roles: userData.roles || [],
       departments: userData.departments || [],
     };

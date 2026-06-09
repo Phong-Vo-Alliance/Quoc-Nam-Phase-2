@@ -31,6 +31,10 @@ interface ImportMetaEnv {
   readonly VITE_PROD_ENABLE_DEBUG_LOGS: string;
   readonly VITE_PROD_ENABLE_REACT_QUERY_DEVTOOLS: string;
 
+  // Feature Flags - Shared (UI)
+  /** Hiển thị avatar thành viên trong nhóm, "true" để bật (mặc định false) */
+  readonly VITE_SHOW_MEMBER_AVATAR: string;
+
   // Security - Development
   /** Master flag - Tắt toàn bộ protections khi = "false" */
   readonly VITE_DEV_ENABLE_ALL_PROTECTIONS: string;

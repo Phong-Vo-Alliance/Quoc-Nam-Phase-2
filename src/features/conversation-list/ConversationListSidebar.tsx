@@ -43,6 +43,7 @@ import type {
   DirectConversation,
 } from "@/types/conversations";
 import { sortConversationsByLatest } from "@/utils/sortConversationsByLatest";
+import { getInitials } from "@/utils/getInitials";
 import {
   saveSelectedConversation,
   getSelectedConversation,
@@ -171,13 +172,6 @@ const dotOnline = (on: boolean) => (
   />
 );
 
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 /* ===================== Helper: Get initial tab ===================== */
 const getInitialTab = (): "group" | "dm" => {
@@ -1271,7 +1265,7 @@ export const ConversationListSidebar: React.FC<
                 >
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600/10 text-brand-700 border border-brand-100">
                     <span className="text-[11px] font-semibold">
-                      {initials(g.name)}
+                      {getInitials(g.name)}
                     </span>
                   </div>
 

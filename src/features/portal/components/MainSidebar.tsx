@@ -22,6 +22,7 @@ import { ROUTES } from "@/routes/routes";
 import { cn } from "@/lib/utils";
 import { openGuideWithToken } from "@/lib/auth/guideToken";
 import { BRAND } from "@/config/brand.config";
+import { FEATURE_FLAGS } from "@/config/env.config";
 import {
   Popover,
   PopoverTrigger,
@@ -48,6 +49,7 @@ interface MainSidebarProps {
   viewMode?: "lead" | "staff";
   currentUserName?: string;
   currentUserDepartment?: string;
+  currentUserAvatarUrl?: string | null;
 
   pendingTasks?: {
     id: string;
@@ -69,6 +71,7 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
   showPinnedToast,
   currentUserName = "",
   currentUserDepartment = "",
+  currentUserAvatarUrl = null,
   onOpenWorkTypeManager,
 }) => {
   const [openTools, setOpenTools] = React.useState(false);
@@ -332,9 +335,17 @@ export const MainSidebar: React.FC<MainSidebarProps> = ({
               title={currentUserName ? currentUserName : "Tài khoản"}
               onClick={() => setOpenProfile(!openProfile)}
               data-testid="sidebar-profile-button"
-              className="group relative h-10 w-10 rounded-full bg-white/10 ring-1 ring-white/20 flex items-center justify-center text-white font-semibold select-none transition hover:bg-white/20"
+              className="group relative h-10 w-10 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/20 flex items-center justify-center text-white font-semibold select-none transition hover:bg-white/20"
             >
-              <span className="text-sm tracking-wide">{initials}</span>
+              {FEATURE_FLAGS.showMemberAvatar && currentUserAvatarUrl ? (
+                <img
+                  src={currentUserAvatarUrl}
+                  alt={currentUserName || "Avatar"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-sm tracking-wide">{initials}</span>
+              )}
             </button>
           </PopoverTrigger>
           <PopoverContent

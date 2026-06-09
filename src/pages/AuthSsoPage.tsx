@@ -48,11 +48,13 @@ export function AuthSsoPage() {
           if (
             currentUser &&
             (userWithFullInfo?.fullName ||
+              userWithFullInfo?.avatarUrl ||
               userWithFullInfo?.departments?.length)
           ) {
             setUser({
               ...currentUser,
               fullName: userWithFullInfo.fullName || currentUser.fullName,
+              avatarUrl: userWithFullInfo.avatarUrl ?? currentUser.avatarUrl,
               departments:
                 userWithFullInfo.departments || currentUser.departments,
             });

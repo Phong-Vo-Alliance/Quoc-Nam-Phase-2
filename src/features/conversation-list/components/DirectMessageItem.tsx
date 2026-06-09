@@ -2,7 +2,7 @@
  * DirectMessageItem - Component for rendering a DM contact in sidebar
  *
  * Features:
- * - No avatar (per UI requirements)
+ * - Avatar (chỉ hiển thị khi FEATURE_FLAGS.showMemberAvatar = true)
  * - Role badge (Trưởng nhóm/Thành viên)
  * - Online/Offline indicator (hidden, ready for future)
  * - Unread count badge
@@ -13,6 +13,8 @@
 import { Ban, MoreHorizontal, Pin, PinOff } from "lucide-react";
 import { useState } from "react";
 import RelativeTime from "@/features/portal/components/RelativeTime";
+import { FEATURE_FLAGS } from "@/config/env.config";
+import { getInitials } from "@/utils/getInitials";
 import type { DirectMessageItemProps } from "../types";
 import {
   Popover,
@@ -67,7 +69,7 @@ export function DirectMessageItem({
       role="button"
       tabIndex={disabledFlag ? -1 : 0}
       aria-disabled={disabledFlag}
-      className={`group relative w-full flex items-center gap-2 text-left px-3 py-2 transition-colors ${
+      className={`group relative w-full flex items-start gap-2 text-left px-3 py-2 transition-colors ${
         disabledFlag ? "cursor-not-allowed" : "cursor-pointer"
       } ${
         isDisabled && !hasConversation
@@ -100,6 +102,21 @@ export function DirectMessageItem({
           : `contact-member-${contact.id}`
       }
     >
+      {/* Avatar: chỉ hiển thị khi bật config; ảnh khi có avatarUrl, ngược lại chữ cái đầu */}
+      {FEATURE_FLAGS.showMemberAvatar && (
+        <div className="mt-1 h-9 w-9 flex-shrink-0 overflow-hidden rounded-full bg-gradient-to-tr from-brand-500 to-brand-600 shadow-sm grid place-items-center text-[11px] font-semibold text-white">
+          {contact.avatarUrl ? (
+            <img
+              src={contact.avatarUrl}
+              alt={contact.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            getInitials(contact.name, { type: "DM", fallback: "?" })
+          )}
+        </div>
+      )}
+
       <div className="min-w-0 flex-1">
         {/* Row 1: [Name] [Role Badge] + Time / 3-dot (hover) */}
         <div className="flex items-center justify-between mb-0.5">
@@ -153,51 +170,51 @@ export function DirectMessageItem({
               )}
               {/* 3-dot action menu — appears on hover at timestamp position */}
               <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Thao tác"
-                      className={`absolute right-0 inline-flex h-6 w-6 items-center justify-center rounded-full text-gray-500 transition-opacity hover:bg-gray-100 hover:text-gray-700 ${
-                        menuOpen
-                          ? "opacity-100"
-                          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                      }`}
-                      data-testid={`dm-actions-${contact.id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMenuOpen((v) => !v);
-                      }}
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    side="bottom"
-                    className="w-44 rounded-lg border border-gray-200 shadow-lg p-1"
-                    onClick={(e) => e.stopPropagation()}
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Thao tác"
+                    className={`absolute right-0 inline-flex h-6 w-6 items-center justify-center rounded-full text-gray-500 transition-opacity hover:bg-gray-100 hover:text-gray-700 ${
+                      menuOpen
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                    }`}
+                    data-testid={`dm-actions-${contact.id}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen((v) => !v);
+                    }}
                   >
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTogglePin();
-                      }}
-                    >
-                      {pinned ? (
-                        <>
-                          <PinOff className="h-4 w-4 text-gray-500" />
-                          <span>Bỏ ghim</span>
-                        </>
-                      ) : (
-                        <>
-                          <Pin className="h-4 w-4 text-amber-500" />
-                          <span>Ghim hội thoại</span>
-                        </>
-                      )}
-                    </button>
-                  </PopoverContent>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="bottom"
+                  className="w-44 rounded-lg border border-gray-200 shadow-lg p-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md hover:bg-brand-50 text-sm text-gray-700"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTogglePin();
+                    }}
+                  >
+                    {pinned ? (
+                      <>
+                        <PinOff className="h-4 w-4 text-gray-500" />
+                        <span>Bỏ ghim</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pin className="h-4 w-4 text-amber-500" />
+                        <span>Ghim hội thoại</span>
+                      </>
+                    )}
+                  </button>
+                </PopoverContent>
               </Popover>
             </div>
           )}
@@ -241,9 +258,7 @@ export function DirectMessageItem({
                 {idx > 0 && " · "}
                 <span
                   className={
-                    d.isLeader
-                      ? "font-semibold text-brand-600"
-                      : undefined
+                    d.isLeader ? "font-semibold text-brand-600" : undefined
                   }
                 >
                   {d.departmentName}

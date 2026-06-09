@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { getInitials } from "@/utils/getInitials";
 
 export interface PinnedListItem {
   id: string;
@@ -32,15 +33,6 @@ interface PinLimitDialogProps {
   canConfirm: boolean;
   isProcessing?: boolean;
 }
-
-// Get initials from name (max 2 chars) — mirrors the sidebar avatar style.
-const getInitials = (name: string) =>
-  name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 /**
  * Warning shown when the user pins a conversation while already at the pin

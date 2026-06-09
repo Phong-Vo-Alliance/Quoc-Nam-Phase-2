@@ -76,6 +76,8 @@ interface FeatureFlags {
   enableSignalR: boolean;
   enableDebugLogs: boolean;
   enableReactQueryDevTools: boolean;
+  /** Hiển thị avatar thành viên trong nhóm (mặc định false) */
+  showMemberAvatar: boolean;
 }
 
 const DEV_FEATURE_FLAGS: FeatureFlags = {
@@ -83,6 +85,7 @@ const DEV_FEATURE_FLAGS: FeatureFlags = {
   enableDebugLogs: import.meta.env.VITE_DEV_ENABLE_DEBUG_LOGS === "true",
   enableReactQueryDevTools:
     import.meta.env.VITE_DEV_ENABLE_REACT_QUERY_DEVTOOLS === "true",
+  showMemberAvatar: import.meta.env.VITE_SHOW_MEMBER_AVATAR === "true",
 };
 
 const PROD_FEATURE_FLAGS: FeatureFlags = {
@@ -90,6 +93,7 @@ const PROD_FEATURE_FLAGS: FeatureFlags = {
   enableDebugLogs: import.meta.env.VITE_PROD_ENABLE_DEBUG_LOGS === "false",
   enableReactQueryDevTools:
     import.meta.env.VITE_PROD_ENABLE_REACT_QUERY_DEVTOOLS === "false",
+  showMemberAvatar: import.meta.env.VITE_SHOW_MEMBER_AVATAR === "true",
 };
 
 export const FEATURE_FLAGS: FeatureFlags = isProduction

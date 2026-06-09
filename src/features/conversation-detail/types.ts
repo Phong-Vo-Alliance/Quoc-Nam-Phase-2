@@ -9,6 +9,7 @@ export type MinimalMember = {
   name: string;
   role?: "Leader" | "Member";
   departments?: string[]; // Danh sách phòng ban
+  avatarUrl?: string | null; // Avatar người dùng (chỉ dùng khi bật config hiển thị)
 };
 
 export type FolderAttribute = {

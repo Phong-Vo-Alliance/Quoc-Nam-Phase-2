@@ -13,6 +13,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useConversationStore } from "./conversationStore";
 import { useImageCacheStore } from "./imageCacheStore";
+import { useAppConfigStore } from "./appConfigStore";
 import { chatHub, identityHub, taskHub } from "@/lib/signalr";
 import { resetDispatcherState } from "@/lib/signalr-event-dispatcher";
 
@@ -22,6 +23,7 @@ export interface AuthUser {
   id: string;
   identifier: string;
   fullName?: string; // ✅ NEW: Full name for display (2026-02-11)
+  avatarUrl?: string | null; // ✅ NEW: Avatar URL from /api/auth/me
   roles: string[];
   departments?: UserDepartmentDto[];
 }
@@ -144,6 +146,9 @@ export const useAuthStore = create<AuthState>()(
         // ✅ Clear image cache to prevent showing cached images of previous user
         useImageCacheStore.getState().clearCache();
 
+        // ✅ Reset app config so config/me is re-fetched on next login
+        useAppConfigStore.getState().reset();
+
         // Then update Zustand state
         set({
           user: null,
@@ -193,6 +198,9 @@ export const useAuthStore = create<AuthState>()(
 
         // ✅ Clear image cache to prevent showing cached images of previous user
         useImageCacheStore.getState().clearCache();
+
+        // ✅ Reset app config so config/me is re-fetched on next login
+        useAppConfigStore.getState().reset();
 
         set({
           user: null,

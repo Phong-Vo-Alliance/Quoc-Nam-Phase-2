@@ -38,6 +38,9 @@ import { useAuthStore } from "@/stores/authStore";
 import { useConversationStore } from "@/stores";
 import { useContentProtection } from "@/hooks/useContentProtection";
 import { renderMessageWithMentions } from "@/utils/mentionHighlight";
+import { FEATURE_FLAGS } from "@/config/env.config";
+import { getInitials } from "@/utils/getInitials";
+import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 // MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
 // import { hasUserConfirmed, toggleMockConfirm } from "./_mockMessageConfirm";
 // import { MessageConfirmPill } from "./MessageConfirmPill";
@@ -172,6 +175,17 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
     (s) => s.selectedConversation?.id ?? null,
   );
   const isLeaderOfGroup = useIsLeaderInConversation(selectedConversationId);
+  // Avatar người gửi — chỉ khi bật config VITE_SHOW_MEMBER_AVATAR, và chỉ cho
+  // tin nhắn nhận (received). Resolve avatarUrl từ members cache theo senderId.
+  const showSenderAvatar = FEATURE_FLAGS.showMemberAvatar && !isOwn;
+  const { data: avatarMembers } = useConversationMembers({
+    conversationId: selectedConversationId ?? "",
+    enabled: showSenderAvatar && !!selectedConversationId,
+  });
+  const senderAvatarUrl = showSenderAvatar
+    ? (avatarMembers?.find((m) => m.userId === message.senderId)?.userInfo
+        ?.avatarUrl ?? null)
+    : null;
   // Receiving info: any leader of the group (admin included) may receive.
   // Assigning a task from a message:
   //  - before it's been received: any leader (admin included) may assign
@@ -299,12 +313,31 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
       `}</style>
       <div
         className={cn(
-          "flex gap-2",
+          "flex gap-2 items-start",
           isOwn ? "justify-end" : "justify-start",
           isLastInGroup && "!mb-3", // Spacing between groups (0.75rem = 12px) - important to override parent space-y
         )}
       >
-        {/* Avatar removed per UI requirement */}
+        {/* Avatar người gửi — kiểu Google Chat: top-align, hiện 1 lần/nhóm ở
+            tin nhắn đầu tiên; các tin gộp phía dưới giữ spacer để thẳng hàng.
+            Chỉ hiển thị khi bật config (received message). */}
+        {showSenderAvatar && (
+          <div className="flex-shrink-0 w-8" data-testid="message-avatar-slot">
+            {isFirstInGroup && (
+              <div className="h-8 w-8 overflow-hidden rounded-full bg-gradient-to-tr from-brand-500 to-brand-600 shadow-sm grid place-items-center text-[11px] font-semibold text-white">
+                {senderAvatarUrl ? (
+                  <img
+                    src={senderAvatarUrl}
+                    alt={message.senderName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  getInitials(message.senderName, { type: "DM", fallback: "?" })
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div
           className={cn(
@@ -319,7 +352,13 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
           <div>
             {/* Sender name and pin indicator (only for received and first in group) */}
             {!isOwn && isFirstInGroup && (
-              <div className="flex items-center gap-2 mb-1">
+              <div
+                className={cn(
+                  "flex items-center gap-2 mb-1",
+                  // Khi có avatar: canh giữa tên+giờ theo chiều dọc avatar (h-8)
+                  showSenderAvatar && "min-h-8",
+                )}
+              >
                 <span
                   className="text-[13px] font-medium text-gray-800"
                   data-testid="message-sender"
