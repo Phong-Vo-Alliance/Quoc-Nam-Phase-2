@@ -184,6 +184,20 @@ class ChatHubConnection {
     if (this.isConnecting) {
       return;
     }
+
+    // Tear down any stale connection (Reconnecting / Disconnected / Connecting)
+    // before building a new one. Otherwise the old object keeps running its
+    // withAutomaticReconnect timer in the background → server sees duplicate
+    // connections once it reconnects.
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore — we're discarding this connection anyway
+      }
+      this.connection = null;
+    }
+
     this.isConnecting = true;
 
     try {
@@ -241,7 +255,13 @@ class ChatHubConnection {
       try {
         await this.connection.start();
       } catch (wsError) {
-        // WebSocket failed — fallback to negotiate + all transports
+        // WebSocket failed — fallback to negotiate + all transports.
+        // Stop the failed attempt first so it can't linger.
+        try {
+          await this.connection.stop();
+        } catch {
+          // Ignore — discarding this connection
+        }
         console.warn(
           "[SignalR] WebSocket-only failed, falling back to negotiate",
           wsError,
@@ -470,6 +490,17 @@ class TaskHubConnection {
       return;
     }
 
+    // Tear down any stale connection before building a new one, otherwise its
+    // background auto-reconnect timer produces a duplicate connection on the server.
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore — discarding this connection
+      }
+      this.connection = null;
+    }
+
     this.isConnecting = true;
 
     try {
@@ -544,7 +575,13 @@ class TaskHubConnection {
       try {
         await this.connection.start();
       } catch (wsError) {
-        // WebSocket failed — fallback to negotiate + all transports
+        // WebSocket failed — fallback to negotiate + all transports.
+        // Stop the failed attempt first so it can't linger.
+        try {
+          await this.connection.stop();
+        } catch {
+          // Ignore — discarding this connection
+        }
         console.warn(
           "[TaskHub] WebSocket-only failed, falling back to negotiate",
           wsError,
@@ -758,6 +795,17 @@ class IdentityHubConnection {
       return;
     }
 
+    // Tear down any stale connection before building a new one, otherwise its
+    // background auto-reconnect timer produces a duplicate connection on the server.
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore — discarding this connection
+      }
+      this.connection = null;
+    }
+
     this.isConnecting = true;
 
     try {
@@ -842,7 +890,13 @@ class IdentityHubConnection {
       try {
         await this.connection.start();
       } catch (wsError) {
-        // WebSocket failed — fallback to negotiate + all transports
+        // WebSocket failed — fallback to negotiate + all transports.
+        // Stop the failed attempt first so it can't linger.
+        try {
+          await this.connection.stop();
+        } catch {
+          // Ignore — discarding this connection
+        }
         console.warn(
           "[IdentityHub] WebSocket-only failed, falling back to negotiate",
           wsError,
