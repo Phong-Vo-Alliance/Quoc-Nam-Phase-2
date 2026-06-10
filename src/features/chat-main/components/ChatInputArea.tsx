@@ -16,6 +16,7 @@ import {
 } from "@/features/portal/components/chat/MentionInputInline";
 import { FILE_CATEGORIES } from "@/types/files";
 import { FILE_ALLOWED_EXTENSIONS } from "@/config/env.config";
+import { BRAND } from "@/config/brand.config";
 import type { SelectedFile, FileUploadProgressState } from "@/types/files";
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 
@@ -236,6 +237,7 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             className="flex-1"
             placeholder="Nhập tin nhắn"
             canSendWithoutText={selectedFiles.length > 0}
+            enableEmoji={BRAND.id === "alliance"}
           />
 
           {/* Send button */}
