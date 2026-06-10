@@ -1,7 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Play, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MentionDto, MentionParentMessageDto } from "@/types/mentions";
+import type {
+  MentionDto,
+  MentionParentMessageDto,
+  MentionDepartmentDto,
+} from "@/types/mentions";
 import { parseMentions } from "@/utils/mentionHighlight";
 import type { AttachmentDto, MentionInputDto } from "@/types/messages";
 import { useAuthStore } from "@/stores/authStore";
@@ -467,6 +471,27 @@ function MentionAttachments({ attachments }: { attachments: AttachmentDto[] }) {
   );
 }
 
+// ─── MentionDepartments ──────────────────────────────────────────────────────
+// API /mentions/history (2026-06-10) trả thêm `departments`. Hiển thị danh sách
+// phòng ban liên quan tới mention bên dưới content, mỗi phòng ban ngăn cách bằng •.
+
+function MentionDepartments({
+  departments,
+}: {
+  departments: MentionDepartmentDto[];
+}) {
+  return (
+    <div className="mt-1 text-[11px] text-gray-500 break-words [overflow-wrap:anywhere]">
+      {departments.map((dept, idx) => (
+        <React.Fragment key={idx}>
+          {idx > 0 && <span className="mx-1 text-gray-300">•</span>}
+          {dept.name}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 // ─── ThreadCurve ─────────────────────────────────────────────────────────────
 
 function ThreadCurve() {
@@ -525,6 +550,9 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
 
   const attachments = item.message?.attachments;
   const hasAttachments = !!attachments && attachments.length > 0;
+
+  const departments = item.departments;
+  const hasDepartments = !!departments && departments.length > 0;
 
   // Toggle: when true, append a trailing `@<currentUser>` pill to the clamped
   // preview; when false, just clamp to 2 lines with the default CSS ellipsis.
@@ -641,6 +669,9 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
                 {hasAttachments && (
                   <MentionAttachments attachments={attachments!} />
                 )}
+                {hasDepartments && (
+                  <MentionDepartments departments={departments!} />
+                )}
               </div>
             </div>
           </>
@@ -659,6 +690,9 @@ export function MentionItem({ item, searchQuery, onClick }: MentionItemProps) {
             </div>
             {hasAttachments && (
               <MentionAttachments attachments={attachments!} />
+            )}
+            {hasDepartments && (
+              <MentionDepartments departments={departments!} />
             )}
           </>
         )}

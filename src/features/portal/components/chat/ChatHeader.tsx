@@ -23,9 +23,14 @@ import {
 } from "@/components/ui/popover";
 import { LinearTabs } from "../LinearTabs";
 import { MessageSearchBar } from "./MessageSearchBar"; // 🆕 NEW: Message search
+import {
+  ThreadUnreadButton,
+  type UnreadThreadSummary,
+} from "./ThreadUnreadButton"; // 🆕 NEW: Unread threads dropdown
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers"; // 🆕 NEW: Self-fetch members
 import { useAuthStore } from "@/stores/authStore"; // 🆕 NEW: Get current user ID for DM filtering
 import { FEATURE_FLAGS } from "@/config/env.config"; // 🆕 NEW: VITE_SHOW_MEMBER_AVATAR gating
+import { BRAND } from "@/config/brand.config"; // 🆕 NEW: VITE_BRAND gating (alliance-only features)
 import type { ConversationInfoDto } from "@/types/categories";
 
 interface ChatHeaderProps {
@@ -54,6 +59,10 @@ interface ChatHeaderProps {
 
   // 🆕 NEW: Message search
   onSearchSelectMessage?: (messageId: string) => void;
+
+  // 🆕 NEW: Unread threads (group-only) — list of root messages with unread replies
+  unreadThreads?: UnreadThreadSummary[];
+  onJumpToThread?: (rootMessageId: string, linkedTaskId: string | null) => void;
 
   /** When true, show disabled badge instead of status */
   isConversationDisabled?: boolean;
@@ -99,6 +108,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
   // 🆕 NEW: Message search
   onSearchSelectMessage,
+
+  // 🆕 NEW: Unread threads
+  unreadThreads,
+  onJumpToThread,
 
   isConversationDisabled = false,
 }) => {
@@ -268,6 +281,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <MessageSearchBar
             conversationId={conversationId}
             onSelectMessage={onSearchSelectMessage}
+          />
+        )}
+
+        {/* Unread threads dropdown (group-only, Alliance brand only) */}
+        {BRAND.id === "alliance" && !isDirect && onJumpToThread && (
+          <ThreadUnreadButton
+            unreadThreads={unreadThreads ?? []}
+            onJumpToThread={onJumpToThread}
           />
         )}
 

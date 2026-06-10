@@ -129,6 +129,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     lastMessageId,
   } = useChatMessages({ conversationId });
 
+  // ── Unread threads (for the header dropdown) ──
+
+  const unreadThreads = React.useMemo(
+    () =>
+      messages
+        .filter((m) => (m.unreadReplyCount ?? 0) > 0)
+        .map((m) => ({
+          rootMessageId: m.id,
+          linkedTaskId: m.linkedTaskId ?? null,
+          senderName: m.senderName,
+          content: m.content ?? null,
+          unreadReplyCount: m.unreadReplyCount,
+          sentAt: m.sentAt,
+        }))
+        .sort(
+          (a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(),
+        ),
+    [messages],
+  );
+
   // ── Jump to Message ──
   const {
     hasUnloadedNewerMessages,
@@ -259,14 +279,31 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         handleSearchJumpToMessage(messageId);
         return;
       }
-      Promise.resolve(handleSearchJumpToMessage(parentMessageId)).finally(() => {
-        setTimeout(() => {
-          const taskId = findLinkedTaskId(parentMessageId);
-          if (taskId) onTaskLogClick?.(taskId, messageId);
-        }, 300);
-      });
+      Promise.resolve(handleSearchJumpToMessage(parentMessageId)).finally(
+        () => {
+          setTimeout(() => {
+            const taskId = findLinkedTaskId(parentMessageId);
+            if (taskId) onTaskLogClick?.(taskId, messageId);
+          }, 300);
+        },
+      );
     },
     [handleSearchJumpToMessage, findLinkedTaskId, onTaskLogClick],
+  );
+
+  // Jump to a thread from the header dropdown
+
+  const handleThreadJump = useCallback(
+    (rootMessageId: string, linkedTaskId: string | null) => {
+      Promise.resolve(handleSearchJumpToMessage(rootMessageId)).finally(() => {
+        if (linkedTaskId) {
+          setTimeout(() => {
+            onTaskLogClick?.(linkedTaskId);
+          }, 300);
+        }
+      });
+    },
+    [handleSearchJumpToMessage, onTaskLogClick],
   );
 
   // ── Confirmed Info ──
@@ -461,6 +498,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           selectedCategoryId ? handleConversationChange : undefined
         }
         onSearchSelectMessage={handleSearchJumpToMessage}
+        unreadThreads={unreadThreads}
+        onJumpToThread={isDirect ? undefined : handleThreadJump}
         isConversationDisabled={isConversationDisabled}
       />
 

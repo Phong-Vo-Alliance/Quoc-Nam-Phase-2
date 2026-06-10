@@ -102,7 +102,7 @@ export function EmojiPicker({ onSelect, disabled }: EmojiPickerProps) {
         align="end"
         side="top"
         sideOffset={8}
-        className="w-72 p-0 overflow-hidden"
+        className="z-[1000] w-72 p-0 overflow-hidden"
         // Keep the composer's caret selection intact when the popover opens.
         onOpenAutoFocus={(e) => e.preventDefault()}
         data-testid="emoji-picker-content"

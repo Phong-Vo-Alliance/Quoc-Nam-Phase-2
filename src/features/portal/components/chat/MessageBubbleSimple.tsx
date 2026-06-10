@@ -48,6 +48,8 @@ import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import {
   canRecall,
   isRecalled as isMockRecalled,
+  getRecalledAt,
+  formatRecalledAt,
   recallMessage,
   subscribeMockRecall,
 } from "./_mockMessageRecall";
@@ -251,6 +253,10 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
     RECALL_FEATURE_ENABLED && isMockRecalled(message.id);
   // Leader/admin vẫn thấy nội dung gốc (tô xám); người khác chỉ thấy placeholder.
   const canViewRecalledContent = isLeaderOfGroup;
+  // Thời điểm thu hồi để hiển thị ở footer "Đã thu hồi · …".
+  const recalledAtLabel = isMessageRecalled
+    ? formatRecalledAt(getRecalledAt(message.id) ?? message.sentAt)
+    : "";
   // Icon thu hồi chỉ hiện cho tin của tôi, trong vòng 1 ngày, chưa thu hồi và
   // không phải tin hệ thống / tin đang gửi / tin lỗi.
   const canShowRecallAction =
@@ -602,7 +608,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                   message.sendStatus === "failed"
                     ? "bg-red-50/50 border-2 border-red-400"
                     : isMessageRecalled
-                      ? // Recalled: nền xám trung tính, chữ mờ, không hover màu
+                      ? // Recalled: nền xám có sọc chéo, chữ mờ in nghiêng, không hover màu
                         "bg-gray-100 text-gray-500 border border-gray-200 italic"
                       : isOwn
                         ? "bg-brand-100 group-hover:bg-brand-200 text-gray-900 border-brand-100 group-hover:border-brand-200"
@@ -621,6 +627,15 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                 )}
                 data-testid={`message-bubble-${message.id}`}
                 data-recalled={isMessageRecalled || undefined}
+                style={
+                  isMessageRecalled
+                    ? {
+                        // Sọc chéo mờ phủ lên nền xám của tin đã thu hồi
+                        backgroundImage:
+                          "repeating-linear-gradient(45deg, rgba(0,0,0,0.045) 0, rgba(0,0,0,0.045) 1px, transparent 1px, transparent 8px)",
+                      }
+                    : undefined
+                }
               >
                 {/* MOCKUP: Tin đã thu hồi
                     - Leader/admin: vẫn thấy nội dung gốc, bubble được tô xám
@@ -1116,6 +1131,22 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       );
                     })()}
                   </>
+                )}
+                {/* MOCKUP: dòng "đã thu hồi" nằm chung khối, ngăn cách bằng border */}
+                {isMessageRecalled && (
+                  <div
+                    className="flex items-center gap-1 border-t border-gray-300/70 bg-amber-50 px-4 py-1.5 text-[11px] not-italic text-amber-600"
+                    data-testid={`message-recalled-footer-${message.id}`}
+                  >
+                    <RotateCcw size={11} className="flex-shrink-0" />
+                    <span>Đã thu hồi</span>
+                    {recalledAtLabel && (
+                      <>
+                        <span>·</span>
+                        <span>{recalledAtLabel}</span>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
               {/* MOCKUP "Xác nhận tin nhắn" pill — tạm ẩn cho tới khi có logic chính thức

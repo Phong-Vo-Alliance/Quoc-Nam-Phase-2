@@ -18,6 +18,27 @@ export function getRecalledAt(messageId: string): string | undefined {
   return recalledAt.get(messageId);
 }
 
+// Định dạng thời điểm thu hồi: "Thứ Ba, 09/06/2026 lúc 17:57".
+export function formatRecalledAt(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const days = [
+    "Chủ Nhật",
+    "Thứ Hai",
+    "Thứ Ba",
+    "Thứ Tư",
+    "Thứ Năm",
+    "Thứ Sáu",
+    "Thứ Bảy",
+  ];
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const day = pad(date.getDate());
+  const month = pad(date.getMonth() + 1);
+  const year = date.getFullYear();
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${days[date.getDay()]}, ${day}/${month}/${year} lúc ${time}`;
+}
+
 export function recallMessage(messageId: string): void {
   if (recalledAt.has(messageId)) return;
   recalledAt.set(messageId, new Date().toISOString());
