@@ -58,7 +58,10 @@ interface ChatHeaderProps {
   onChangeConversation?: (conversationId: string) => void;
 
   // 🆕 NEW: Message search
-  onSearchSelectMessage?: (messageId: string) => void;
+  onSearchSelectMessage?: (
+    messageId: string,
+    parentMessageId?: string | null,
+  ) => void;
 
   // 🆕 NEW: Unread threads (group-only) — list of root messages with unread replies
   unreadThreads?: UnreadThreadSummary[];

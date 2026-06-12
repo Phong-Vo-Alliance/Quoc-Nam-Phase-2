@@ -270,11 +270,12 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     [queryClient, conversationId],
   );
 
-  // Jump to a pinned message. A pin with parentMessageId is a thread reply
-  // (Nhật ký công việc), so scroll to its root message in chat first, then open
-  // the thread scrolled to the reply — same flow as FileManagerPhase1A.handleOpenSource.
-  const handlePinJump = useCallback(
-    (messageId: string, parentMessageId?: string) => {
+  // Jump to a message from a pin or a search result. When parentMessageId is set
+  // the target is a thread reply (Nhật ký công việc), so scroll to its root
+  // message in chat first, then open the thread scrolled to the reply — same flow
+  // as FileManagerPhase1A.handleOpenSource.
+  const handleThreadAwareJump = useCallback(
+    (messageId: string, parentMessageId?: string | null) => {
       if (!parentMessageId) {
         handleSearchJumpToMessage(messageId);
         return;
@@ -497,7 +498,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         onChangeConversation={
           selectedCategoryId ? handleConversationChange : undefined
         }
-        onSearchSelectMessage={handleSearchJumpToMessage}
+        onSearchSelectMessage={handleThreadAwareJump}
         unreadThreads={unreadThreads}
         onJumpToThread={isDirect ? undefined : handleThreadJump}
         isConversationDisabled={isConversationDisabled}
@@ -521,7 +522,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           )}
           <PinBar
             conversationId={conversationId}
-            onJumpToMessage={handlePinJump}
+            onJumpToMessage={handleThreadAwareJump}
             isExpanded={expandedBanner === "pin"}
             onExpandedChange={(next) => setExpandedBanner(next ? "pin" : null)}
           />
