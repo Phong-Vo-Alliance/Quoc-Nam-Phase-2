@@ -179,8 +179,13 @@ export const PinnedMessagesPanel: React.FC<Props> = ({
   const messages = React.useMemo(() => {
     if (!starredData) return [];
 
+    // Ẩn tin đã bị thu hồi khỏi danh sách đánh dấu (recallInfo.isRecalled = true)
+    const visibleData = starredData.filter(
+      (s) => !s.message.recallInfo?.isRecalled,
+    );
+
     // 🆕 Sort by message sentAt (newest first) instead of starred time
-    const sortedData = [...starredData].sort((a, b) => {
+    const sortedData = [...visibleData].sort((a, b) => {
       const timeA = new Date(a.message.sentAt).getTime();
       const timeB = new Date(b.message.sentAt).getTime();
       return timeB - timeA; // Newest first

@@ -28,6 +28,7 @@ import type {
   UserMentionedEvent,
 } from "@/types/signalr-events";
 import type { ChatMessage, ChatMessageContentType } from "@/types/messages";
+import type { StarredMessageDto } from "@/types/pinned_and_starred";
 
 const CONTENT_TYPE_MAP: Record<number, ChatMessageContentType> = {
   1: "TXT",
@@ -166,6 +167,25 @@ export function registerAllEventHandlers(
       ) {
         queryClient.invalidateQueries({
           queryKey: ["conversation-attachments", event.conversationId],
+        });
+      }
+
+      // Tin bị thu hồi đang nằm trong danh sách "Tin Đánh Dấu (Tất cả)"
+      // (PinnedMessagesPanel) đang mở → refetch để cập nhật/loại bỏ nó.
+      // refetchType:"active" chỉ gọi lại API khi panel đang mount (query active);
+      // check messageId tránh refetch thừa khi tin thu hồi không được đánh dấu.
+      const starredCaches = queryClient.getQueriesData<StarredMessageDto[]>({
+        queryKey: pinnedStarredKeys.starred,
+      });
+      const affectsStarred = starredCaches.some(
+        ([, data]) =>
+          Array.isArray(data) &&
+          data.some((s) => s.messageId === event.messageId),
+      );
+      if (affectsStarred) {
+        queryClient.invalidateQueries({
+          queryKey: pinnedStarredKeys.starred,
+          refetchType: "active",
         });
       }
     },
