@@ -3,6 +3,8 @@ export { useLogin, getLoginErrorMessage } from './useLogin';
 
 // Message mutations
 export { useSendMessage } from './useSendMessage';
+export { useRecallMessage } from './useRecallMessage';
+export { useRecalledOriginalMessage } from './useRecalledOriginalMessage';
 
 // Pinned & Starred mutations
 export { usePinMessage, useUnpinMessage } from './usePinMessage';

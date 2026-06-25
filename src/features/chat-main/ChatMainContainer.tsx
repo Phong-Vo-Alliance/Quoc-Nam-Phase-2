@@ -23,6 +23,9 @@ import {
   useUnpinConfirm,
   usePinReplaceGuard,
 } from "@/features/portal/components/chat/PinBar";
+import { useRecallMessage } from "@/hooks/mutations";
+import { useRecallConfirm } from "@/features/portal/components/chat/useRecallConfirm";
+import { RecallConfirmDialog } from "@/features/portal/components/chat/RecallConfirmDialog";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
 
 // Extracted hooks
@@ -255,6 +258,16 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     [pinGuard, unpinConfirm],
   );
 
+  // Thu hồi tin nhắn — quyền do server quyết định (recallInfo.canRecall).
+  // Bấm nút thu hồi sẽ mở dialog xác nhận; thu hồi không thể hoàn tác.
+  const recallMutation = useRecallMessage({ conversationId });
+  const recallConfirm = useRecallConfirm(
+    useCallback(
+      (messageId: string) => recallMutation.mutate({ messageId }),
+      [recallMutation],
+    ),
+  );
+
   // Resolve the task linked to a root message from the message cache.
   const findLinkedTaskId = useCallback(
     (rootMessageId: string): string | null => {
@@ -330,10 +343,12 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     previewImages,
     previewInitialIndex,
     previewFileName,
+    previewDisableDownload,
     openImagePreview,
     closeImagePreview,
     filePreviewId,
     filePreviewName,
+    filePreviewDisableDownload,
     openFilePreview,
     closeFilePreview,
   } = useChatModals();
@@ -571,6 +586,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           onLoadMore={handleLoadMore}
           onTogglePin={handleTogglePin}
           onToggleStar={onToggleStar}
+          onRecall={recallConfirm.requestRecall}
           onCreateTask={
             isDirect
               ? undefined
@@ -631,6 +647,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         fileName={previewFileName}
         images={previewImages.length > 0 ? previewImages : undefined}
         initialIndex={previewInitialIndex}
+        disableDownload={previewDisableDownload}
       />
 
       {/* Conversation Starred Messages Modal */}
@@ -661,6 +678,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           fileId={filePreviewId}
           fileName={filePreviewName}
           onClose={closeFilePreview}
+          disableDownload={filePreviewDisableDownload}
         />
       )}
 
@@ -681,6 +699,15 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           if (!o) unpinConfirm.cancel();
         }}
         onConfirm={unpinConfirm.confirm}
+      />
+
+      <RecallConfirmDialog
+        open={recallConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) recallConfirm.cancel();
+        }}
+        onConfirm={recallConfirm.confirm}
+        isProcessing={recallMutation.isPending}
       />
     </div>
   );

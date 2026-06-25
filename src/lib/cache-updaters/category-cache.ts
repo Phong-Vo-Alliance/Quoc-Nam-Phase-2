@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useClientSystemMessagesStore } from "@/stores/clientSystemMessagesStore";
 import { getConversationMembers } from "@/api/conversations.api";
 import { getCurrentUser } from "@/utils/getCurrentUser";
+import { RECALLED_MESSAGE_TEXT } from "@/constants/messages";
 import { toast } from "sonner";
 import { useConversationStore } from "@/stores/conversationStore";
 import type { ChatTarget } from "@/stores/conversationStore";
@@ -141,6 +142,66 @@ export function handleMessageSent(
           };
         }),
       }));
+    },
+  );
+}
+
+/**
+ * Đồng bộ preview ở sidebar khi một tin nhắn bị thu hồi (realtime).
+ *
+ * CHỈ cập nhật khi tin bị thu hồi đúng là `lastMessage` đang hiển thị của loại
+ * việc (so khớp `messageId`). Thu hồi một tin cũ hơn → no-op, không đụng tới
+ * sidebar (vốn không hiển thị tin đó) nên không ảnh hưởng logic khác.
+ *
+ * Giữ nguyên `sentAt`/`senderName`/`messageId` để thứ tự sort sidebar không đổi;
+ * chỉ thay nội dung preview sang placeholder và gỡ attachments/parent.
+ */
+export function handleMessageRecalled(
+  ctx: CategoryCacheContext,
+  data: {
+    conversationId: string;
+    messageId: string;
+    recalledContentText?: string | null;
+  },
+): void {
+  const { queryClient } = ctx;
+
+  if (!data?.conversationId || !data?.messageId) return;
+
+  queryClient.setQueryData<CategoryWithUnread[]>(
+    categoriesKeys.list(),
+    (oldData) => {
+      if (!oldData) return oldData;
+
+      let changed = false;
+
+      const next = oldData.map((category) => ({
+        ...category,
+        conversations: category.conversations.map((conv) => {
+          if (
+            conv.conversationId !== data.conversationId ||
+            conv.lastMessage?.messageId !== data.messageId
+          ) {
+            return conv;
+          }
+
+          changed = true;
+          return {
+            ...conv,
+            lastMessage: {
+              ...conv.lastMessage,
+              content: data.recalledContentText ?? RECALLED_MESSAGE_TEXT,
+              // Reset về TXT để không bị format như SYS/IMG/FILE ở preview.
+              contentType: "TXT",
+              attachments: [],
+              parentMessage: null,
+            },
+          };
+        }),
+      }));
+
+      // Không tạo reference mới nếu không có gì thay đổi (tránh re-render thừa).
+      return changed ? next : oldData;
     },
   );
 }

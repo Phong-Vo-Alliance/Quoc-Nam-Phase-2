@@ -1,6 +1,10 @@
 import React from "react";
 import { Loader2, AlertCircle } from "lucide-react";
-import type { ChatMessage, ThreadDto } from "@/types/messages";
+import type {
+  ChatMessage,
+  ThreadDto,
+  PreviewOpenOptions,
+} from "@/types/messages";
 import type { QuotedMessageData } from "@/stores/replyStore";
 import { MessageBubbleSimple } from "@/features/portal/components/chat/MessageBubbleSimple";
 import { SystemMessageBubble } from "@/features/portal/components/chat/SystemMessageBubble";
@@ -38,11 +42,17 @@ interface ThreadMessageListProps {
   handleLoadMoreDownward: () => void;
   handleScrollToQuoted: (quotedMessageId: string) => void;
   onTogglePin?: (messageId: string, isPinned: boolean) => void;
+  onRecall?: (messageId: string) => void;
   onReply: (replyData: QuotedMessageData) => void;
-  onFilePreviewClick: (fileId: string, fileName: string) => void;
+  onFilePreviewClick: (
+    fileId: string,
+    fileName: string,
+    options?: PreviewOpenOptions,
+  ) => void;
   onImageClick: (
     images: Array<{ fileId: string; fileName: string }>,
     initialIndex: number,
+    options?: PreviewOpenOptions,
   ) => void;
 }
 
@@ -63,6 +73,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   handleLoadMoreDownward,
   handleScrollToQuoted,
   onTogglePin,
+  onRecall,
   onReply,
   onFilePreviewClick,
   onImageClick,
@@ -178,6 +189,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
                   onImageClick={onImageClick}
                   onScrollToQuoted={handleScrollToQuoted}
                   onTogglePin={onTogglePin}
+                  onRecall={onRecall}
                   onReply={onReply}
                 />
                 {/* Gap-fill trigger */}

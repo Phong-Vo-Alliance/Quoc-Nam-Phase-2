@@ -75,6 +75,8 @@ export const SIGNALR_EVENTS = {
   MESSAGE_EDITED: "MessageEdited",
   MESSAGE_DELETED: "MessageDeleted",
   MESSAGE_READ: "MessageRead",
+  MESSAGE_RECALLED: "MessageRecalled",
+  MESSAGE_RECALL_CAPABILITY_CHANGED: "MessageRecallCapabilityChanged",
 
   // ============= Conversation Events =============
   CONVERSATION_CREATED: "ConversationCreated",
@@ -116,6 +118,7 @@ export const SIGNALR_EVENTS = {
   USER_MENTIONED: "UserMentioned",
   MENTION_READ: "MentionRead",
   MENTIONS_BULK_READ: "MentionsBulkRead",
+  MENTIONS_BULK_UNREAD: "MentionsBulkUnread",
 
   // ============= Task Events =============
   TASKS_UPDATED: "TasksUpdated",

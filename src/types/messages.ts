@@ -177,6 +177,16 @@ export interface QuotedMessageDto {
   attachments?: AttachmentDto[]; // 🆕 v1.2.0 - Attachment preview in quote
 }
 
+// Recall info for "Thu hồi tin nhắn" feature (from API)
+export interface RecallInfo {
+  isRecalled: boolean; // Tin đã bị thu hồi hay chưa — cờ duy nhất quyết định hiển thị trạng thái thu hồi
+  recalledAt: string | null; // ISO datetime thời điểm thu hồi
+  recalledBy: string | null; // userId người thu hồi
+  canRecall: boolean; // Người dùng hiện tại có quyền thu hồi tin này không
+  recallExpiresAt: string | null; // ISO datetime hết hạn quyền thu hồi
+  canViewOriginal: boolean; // Người dùng hiện tại có được xem nội dung gốc không
+}
+
 // Chat Message from API (matches API contract from Swagger)
 export interface ChatMessage {
   id: string;
@@ -203,11 +213,37 @@ export interface ChatMessage {
   isPinned: boolean;
   threadPreview: unknown | null;
   mentions: MentionDto[]; // Array of mention metadata (updated from string[])
+  recallInfo?: RecallInfo | null; // 🆕 Thông tin thu hồi tin nhắn (from API)
 
   // Client-side fields for send status tracking (optional)
   sendStatus?: "sending" | "retrying" | "failed" | "sent";
   retryCount?: number;
   failReason?: string;
+}
+
+// Response for GET /api/admin/messages/{id}/recalled-original
+// Nội dung gốc của tin đã thu hồi (cho người có canViewOriginal). Trả về text gốc,
+// số lượng đính kèm và CHI TIẾT đính kèm (`attachments`) để xem lại ảnh/file đã xóa.
+// API vẫn KHÔNG trả về mentions/quotedMessage.
+export interface RecalledOriginalMessageDto {
+  messageId: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  recalledOriginalContent: string | null; // Nội dung text gốc để hiển thị
+  sentAt: string; // ISO datetime
+  recalledAt: string; // ISO datetime
+  recalledBy: string; // userId người thu hồi
+  recalledByName: string;
+  attachmentCount: number; // Số đính kèm gốc (kiểm chứng với attachments.length)
+  attachments: AttachmentDto[]; // Chi tiết đính kèm gốc để xem lại (ảnh/file)
+  viewerRole: string; // Vai trò người xem (vd: "SystemAdmin")
+}
+
+// Tùy chọn khi mở preview ảnh/file từ bubble. Dùng để chặn tải về với đính kèm
+// của tin đã thu hồi (xem lại được nhưng KHÔNG cho download dù canDownload = true).
+export interface PreviewOpenOptions {
+  disableDownload?: boolean;
 }
 
 // API Response for GET messages

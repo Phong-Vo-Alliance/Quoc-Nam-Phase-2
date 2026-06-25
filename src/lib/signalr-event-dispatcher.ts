@@ -19,7 +19,10 @@ import type {
 import type {
   MentionReadEvent,
   MentionsBulkReadEvent,
+  MentionsBulkUnreadEvent,
   MessagePinnedEvent,
+  MessageRecallCapabilityChangedEvent,
+  MessageRecalledEvent,
   MessageUnpinnedEvent,
   PinnedMessagesReorderedEvent,
   UserMentionedEvent,
@@ -119,6 +122,73 @@ export function registerAllEventHandlers(
       directCache.handleMessageRead(directCacheCtx, unwrapped);
     },
   );
+
+  // Thu hồi tin nhắn (realtime): đồng bộ cache để bubble chuyển trạng thái "đã
+  // thu hồi" ngay. Payload kèm `recallInfo.canViewOriginal` (server tính riêng
+  // cho từng user) → quyết định có nút "Xem tin nhắn gốc"/thời gian thu hồi hay
+  // không. Thiếu cờ → giữ giá trị API đã set cho user này (mặc định false).
+  // Guard `!isRecalled` trong cache updater chống xử lý lặp khi server echo lại
+  // chính lần thu hồi của user (đã set bởi useRecallMessage.onSuccess).
+  const cleanupMessageRecalled = chatHub.onWithCleanup<MessageRecalledEvent>(
+    SIGNALR_EVENTS.MESSAGE_RECALLED,
+    (event) => {
+      if (!event?.conversationId || !event?.messageId) return;
+      messageCache.setMessageRecalledFlag(
+        queryClient,
+        event.conversationId,
+        event.messageId,
+        event.recalledAt,
+        event.recalledBy,
+        event.recalledContentText,
+        event.recallInfo?.canViewOriginal,
+      );
+
+      // Đồng bộ preview ở sidebar: nếu tin bị thu hồi đang là lastMessage của
+      // loại việc / chat cá nhân thì đổi sang placeholder ngay (không phải chờ
+      // F5). Hai hàm tự no-op khi tin thu hồi không phải lastMessage.
+      categoryCache.handleMessageRecalled(categoryCacheCtx, {
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        recalledContentText: event.recalledContentText,
+      });
+      directCache.handleMessageRecalled(directCacheCtx, {
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        recalledContentText: event.recalledContentText,
+      });
+
+      // Tin thu hồi có đính kèm → file đã bị gỡ, load lại danh sách
+      // attachments để ConversationDetailsPanel không còn hiển thị ảnh/file đó.
+      // Chỉ refetch khi user đang mở đúng hội thoại (query mới active ở đó).
+      if (
+        event.needReloadFile &&
+        event.conversationId === getActiveConversationId()
+      ) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation-attachments", event.conversationId],
+        });
+      }
+    },
+  );
+
+  // Quyền thu hồi của tin nhắn thay đổi (realtime): server tính lại recallInfo
+  // cho user hiện tại (vd hết hạn cửa sổ thu hồi → canRecall=false) và đẩy
+  // nguyên trạng thái mới. Chỉ cập nhật recallInfo trong cache để bubble đổi
+  // nút "Thu hồi"/"Xem tin nhắn gốc" ngay; không đụng tới preview sidebar.
+  const cleanupMessageRecallCapabilityChanged =
+    chatHub.onWithCleanup<MessageRecallCapabilityChangedEvent>(
+      SIGNALR_EVENTS.MESSAGE_RECALL_CAPABILITY_CHANGED,
+      (event) => {
+        if (!event?.conversationId || !event?.messageId || !event?.recallInfo)
+          return;
+        messageCache.updateMessageRecallInfo(
+          queryClient,
+          event.conversationId,
+          event.messageId,
+          event.recallInfo,
+        );
+      },
+    );
 
   const cleanupConversationCreated = chatHub.onWithCleanup(
     SIGNALR_EVENTS.CONVERSATION_CREATED,
@@ -324,6 +394,16 @@ export function registerAllEventHandlers(
     },
   );
 
+  const cleanupMentionsBulkUnread =
+    chatHub.onWithCleanup<MentionsBulkUnreadEvent>(
+      SIGNALR_EVENTS.MENTIONS_BULK_UNREAD,
+      () => {
+        // Bulk unread can affect arbitrary items — refetch everything so the
+        // currently selected filter (all / unread / read) reloads in place.
+        queryClient.invalidateQueries({ queryKey: mentionKeys.root });
+      },
+    );
+
   // ───────── Pinned messages ─────────
   // When another member pins/unpins/reorders we refetch the pinned list and,
   // for pin/unpin, flip the message's isPinned flag in the message cache so its
@@ -383,6 +463,8 @@ export function registerAllEventHandlers(
   return [
     cleanupMessageSent,
     cleanupMessageRead,
+    cleanupMessageRecalled,
+    cleanupMessageRecallCapabilityChanged,
     cleanupConversationCreated,
     cleanupConversationUpdated,
     cleanupMemberAdded,
@@ -396,6 +478,7 @@ export function registerAllEventHandlers(
     cleanupUserMentioned,
     cleanupMentionRead,
     cleanupMentionsBulkRead,
+    cleanupMentionsBulkUnread,
     cleanupMessagePinned,
     cleanupMessageUnpinned,
     cleanupPinnedMessagesReordered,

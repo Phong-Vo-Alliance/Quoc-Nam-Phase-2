@@ -3,12 +3,7 @@
  * Supports message grouping with dynamic border-radius
  */
 
-import React, {
-  useRef,
-  useState,
-  useCallback,
-  useSyncExternalStore,
-} from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   Pin,
   PinOff,
@@ -24,6 +19,8 @@ import {
   MessageSquarePlus,
   Play,
   RotateCcw,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FileIcon from "@/components/files/FileIcon";
@@ -31,7 +28,11 @@ import MessageImage from "@/features/portal/workspace/MessageImage";
 import MessageVideo from "@/features/portal/workspace/MessageVideo";
 import { MessageStatusIndicator } from "@/components/chat/MessageStatusIndicator";
 import QuotedMessagePreview from "./QuotedMessagePreview";
-import type { ChatMessage, AttachmentDto } from "@/types/messages";
+import type {
+  ChatMessage,
+  AttachmentDto,
+  PreviewOpenOptions,
+} from "@/types/messages";
 import { useIsLeaderInConversation } from "@/hooks/useCategoryLeader";
 import { useReplyStore } from "@/stores/replyStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -40,19 +41,36 @@ import { useContentProtection } from "@/hooks/useContentProtection";
 import { renderMessageWithMentions } from "@/utils/mentionHighlight";
 import { FEATURE_FLAGS } from "@/config/env.config";
 import { getInitials } from "@/utils/getInitials";
+import { RECALLED_MESSAGE_TEXT } from "@/constants/messages";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
+import { useRecalledOriginalMessage } from "@/hooks/mutations";
+import { useAppConfigStore } from "@/stores/appConfigStore";
 // MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
 // import { hasUserConfirmed, toggleMockConfirm } from "./_mockMessageConfirm";
 // import { MessageConfirmPill } from "./MessageConfirmPill";
-// MOCKUP "Thu hồi tin nhắn" — local-only, không gọi backend.
-import {
-  canRecall,
-  isRecalled as isMockRecalled,
-  getRecalledAt,
-  formatRecalledAt,
-  recallMessage,
-  subscribeMockRecall,
-} from "./_mockMessageRecall";
+
+/**
+ * Định dạng thời điểm thu hồi: "Thứ Ba, 09/06/2026 lúc 17:57".
+ */
+function formatRecalledAt(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const days = [
+    "Chủ Nhật",
+    "Thứ Hai",
+    "Thứ Ba",
+    "Thứ Tư",
+    "Thứ Năm",
+    "Thứ Sáu",
+    "Thứ Bảy",
+  ];
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const day = pad(date.getDate());
+  const month = pad(date.getMonth() + 1);
+  const year = date.getFullYear();
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${days[date.getDay()]}, ${day}/${month}/${year} lúc ${time}`;
+}
 
 /**
  * Format file size from bytes to human-readable format
@@ -97,14 +115,20 @@ export interface MessageBubbleSimpleProps {
   message: ChatMessage;
   isOwn: boolean;
   formatTime: (dateStr: string) => string;
-  onFilePreviewClick?: (fileId: string, fileName: string) => void;
+  onFilePreviewClick?: (
+    fileId: string,
+    fileName: string,
+    options?: PreviewOpenOptions,
+  ) => void;
   onImageClick?: (
     images: { fileId: string; fileName: string }[],
     initialIndex: number,
+    options?: PreviewOpenOptions,
   ) => void; // Phase 2.1: Gallery mode navigation
   onTogglePin?: (messageId: string, isPinned: boolean) => void;
   onToggleStar?: (messageId: string, isStarred: boolean) => void;
   onRetry?: (messageId: string) => void; // NEW: Retry failed message
+  onRecall?: (messageId: string) => void; // NEW: Thu hồi tin nhắn (gọi API ở parent)
   onScrollToQuoted?: (messageId: string) => void; // NEW: Scroll to quoted message
   onReply?: (replyData: {
     id: string;
@@ -136,9 +160,10 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   formatTime,
   onTogglePin,
   onToggleStar,
-  onFilePreviewClick,
-  onImageClick,
+  onFilePreviewClick: onFilePreviewClickProp,
+  onImageClick: onImageClickProp,
   onRetry,
+  onRecall,
   onScrollToQuoted,
   onReply,
   isFirstInGroup = true,
@@ -158,7 +183,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   // ✅ Use replyCount directly from cache (updated in real-time by SignalR)
   // currentSessionCount is kept for backwards compatibility but not used
   const mergedReplyCount = message.replyCount ?? 0;
-  const debugTimestamp = Date.now();
+
   // Quote Reply: Get setReplyTarget from store
   const setReplyTarget = useReplyStore((state) => state.setReplyTarget);
   // Current viewer id — used to detect mentions targeting the current user so
@@ -240,34 +265,88 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
         !isLastInGroup && "rounded-bl-md",
       );
 
-  // MOCKUP "Thu hồi tin nhắn" — tạm ẩn cho tới khi có logic chính thức.
-  // Đổi cờ này thành `true` để bật lại toàn bộ UI thu hồi (button + placeholder).
-  const RECALL_FEATURE_ENABLED = false;
-  // Subscribe để re-render khi state mock thay đổi (no-op khi flag tắt).
-  useSyncExternalStore(
-    subscribeMockRecall,
-    () => RECALL_FEATURE_ENABLED && isMockRecalled(message.id),
-    () => false,
+  // "Thu hồi tin nhắn" — trạng thái thu hồi lấy trực tiếp từ API (recallInfo).
+  // UI chỉ check theo cờ isRecalled; không còn mock local.
+  const isMessageRecalled = message.recallInfo?.isRecalled === true;
+  // Lấy nội dung gốc theo yêu cầu (chỉ khi canViewOriginal === true) qua nút
+  // "Xem tin nhắn gốc". Khi có data, render nội dung gốc thay cho placeholder.
+  const recalledOriginal = useRecalledOriginalMessage();
+  // Toggle xem/ẩn nội dung gốc. Lần đầu bấm sẽ gọi API; các lần sau chỉ bật/tắt
+  // hiển thị từ cache (recalledOriginal.data) — KHÔNG gọi lại API.
+  const [showOriginal, setShowOriginal] = useState(false);
+  // Người dùng có quyền xem nội dung gốc (nút toggle hiển thị khi cờ này true).
+  const canViewOriginal =
+    isMessageRecalled && message.recallInfo?.canViewOriginal === true;
+  // Chỉ render nội dung gốc khi đang bật xem VÀ đã fetch được data.
+  const fetchedOriginal =
+    showOriginal && recalledOriginal.data ? recalledOriginal.data : null;
+  const isShowingOriginal = !!fetchedOriginal;
+  // Mặc định: tin đã thu hồi luôn ẩn nội dung, chỉ hiện placeholder "Tin nhắn đã
+  // bị thu hồi". Người có quyền (canViewOriginal === true) mới có nút "Xem tin
+  // nhắn gốc" để hé lộ nội dung — khi đó mới thoát placeholder để render.
+  const showRecalledPlaceholder = isMessageRecalled && !fetchedOriginal;
+  // Toggle nội dung gốc: lần đầu fetch rồi bật; sau đó chỉ ẩn/hiện từ cache.
+  const handleToggleOriginal = () => {
+    if (recalledOriginal.data) {
+      setShowOriginal((prev) => !prev);
+    } else {
+      recalledOriginal.mutate(message.id, {
+        onSuccess: () => setShowOriginal(true),
+      });
+    }
+  };
+  // Nguồn nội dung để render: ưu tiên tin gốc đã fetch (người có quyền bấm xem),
+  // ngược lại dùng chính message (chỉ áp dụng cho tin chưa thu hồi — tin đã thu
+  // hồi mà chưa fetch luôn rơi vào nhánh placeholder).
+  // DTO recalled-original trả về text (`recalledOriginalContent`) + chi tiết
+  // `attachments` (xem lại ảnh/file đã xóa), KHÔNG kèm mentions/quote → 2 trường
+  // còn lại fallback rỗng.
+  const displayContent = fetchedOriginal
+    ? fetchedOriginal.recalledOriginalContent
+    : message.content;
+  const displayAttachments = fetchedOriginal
+    ? fetchedOriginal.attachments
+    : message.attachments;
+  const displayMentions = fetchedOriginal ? undefined : message.mentions;
+  const displayQuoted = fetchedOriginal ? null : message.quotedMessage;
+  // Số đính kèm gốc — dùng làm fallback hiển thị khi API chưa kèm chi tiết file.
+  const fetchedAttachmentCount = fetchedOriginal?.attachmentCount ?? 0;
+
+  // Đính kèm đang render là của tin gốc đã thu hồi → cho xem lại. Việc có cho tải
+  // về hay không do API quyết định qua cờ `chat.canDownloadRecalledFile` (config/me)
+  // thay vì chặn cứng. Chưa load cờ → coi như không cho tải. Bọc callback preview để
+  // đính kèm cờ `disableDownload` vào đúng các đính kèm gốc.
+  const canDownloadRecalledFile = useAppConfigStore(
+    (s) => s.data?.chat?.canDownloadRecalledFile === true,
   );
-  const isMessageRecalled =
-    RECALL_FEATURE_ENABLED && isMockRecalled(message.id);
-  // Leader/admin vẫn thấy nội dung gốc (tô xám); người khác chỉ thấy placeholder.
-  const canViewRecalledContent = isLeaderOfGroup;
-  // Thời điểm thu hồi để hiển thị ở footer "Đã thu hồi · …".
-  const recalledAtLabel = isMessageRecalled
-    ? formatRecalledAt(getRecalledAt(message.id) ?? message.sentAt)
-    : "";
-  // Icon thu hồi chỉ hiện cho tin của tôi, trong vòng 1 ngày, chưa thu hồi và
-  // không phải tin hệ thống / tin đang gửi / tin lỗi.
+  const previewOptions: PreviewOpenOptions | undefined = isShowingOriginal
+    ? { disableDownload: !canDownloadRecalledFile }
+    : undefined;
+  const onImageClick = onImageClickProp
+    ? (
+        images: { fileId: string; fileName: string }[],
+        initialIndex: number,
+      ) => onImageClickProp(images, initialIndex, previewOptions)
+    : undefined;
+  const onFilePreviewClick = onFilePreviewClickProp
+    ? (fileId: string, fileName: string) =>
+        onFilePreviewClickProp(fileId, fileName, previewOptions)
+    : undefined;
+  // Thời điểm thu hồi chỉ hiển thị cho người có quyền xem gốc
+  // (canViewOriginal === true). Khi false/không có cờ → không hiện thời gian.
+  const recalledAtLabel =
+    isMessageRecalled && canViewOriginal && message.recallInfo?.recalledAt
+      ? formatRecalledAt(message.recallInfo.recalledAt)
+      : "";
+  // Nút thu hồi hiển thị theo cờ canRecall từ API (kèm guard tin chưa thu hồi /
+  // không phải tin hệ thống, đang gửi, lỗi).
   const canShowRecallAction =
-    RECALL_FEATURE_ENABLED &&
-    isOwn &&
+    message.recallInfo?.canRecall === true &&
     !isMessageRecalled &&
     message.contentType !== "SYS" &&
     message.sendStatus !== "sending" &&
     message.sendStatus !== "retrying" &&
-    message.sendStatus !== "failed" &&
-    canRecall(message.sentAt);
+    message.sendStatus !== "failed";
 
   // Hover state management with delay timer for action menu
   const [isHovered, setIsHovered] = useState(false);
@@ -321,7 +400,11 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
         className={cn(
           "flex gap-2 items-start",
           isOwn ? "justify-end" : "justify-start",
-          isLastInGroup && "!mb-3", // Spacing between groups (0.75rem = 12px) - important to override parent space-y
+          // Tin đã thu hồi có nút "Xem tin nhắn gốc": cách tin kế tiếp 8px
+          // (kể cả khi nằm giữa nhóm). Các nhóm thường: 12px.
+          canViewOriginal
+            ? "!mb-2" // 8px
+            : isLastInGroup && "!mb-3", // 12px - spacing between groups
         )}
       >
         {/* Avatar người gửi — kiểu Google Chat: top-align, hiện 1 lần/nhóm ở
@@ -465,11 +548,11 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       <Reply size={14} />
                     </button>
                   )}
-                  {/* MOCKUP: Thu hồi tin nhắn — chỉ tin của tôi, trong 1 ngày */}
-                  {canShowRecallAction && (
+                  {/* Thu hồi tin nhắn — hiển thị theo cờ recallInfo.canRecall */}
+                  {canShowRecallAction && onRecall && (
                     <button
                       className="p-1.5 rounded transition text-gray-500 hover:text-red-600"
-                      onClick={() => recallMessage(message.id)}
+                      onClick={() => onRecall(message.id)}
                       title="Thu hồi tin nhắn"
                       data-testid={`message-recall-button-${message.id}`}
                     >
@@ -637,16 +720,16 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     : undefined
                 }
               >
-                {/* MOCKUP: Tin đã thu hồi
-                    - Leader/admin: vẫn thấy nội dung gốc, bubble được tô xám
-                    - Người khác: chỉ thấy placeholder, KHÔNG thấy ảnh/file */}
-                {isMessageRecalled && !canViewRecalledContent ? (
+                {/* Tin đã thu hồi: mặc định ẩn toàn bộ nội dung (text/ảnh/file),
+                    chỉ hiện placeholder. Chỉ người có canViewOriginal === true
+                    bấm "Xem tin nhắn gốc" mới thoát placeholder để render nội dung. */}
+                {showRecalledPlaceholder ? (
                   <div
                     className="px-4 py-2"
                     data-testid={`message-recalled-placeholder-${message.id}`}
                   >
                     <p className="text-sm italic text-gray-500">
-                      Tin nhắn đã bị thu hồi
+                      {message.content || RECALLED_MESSAGE_TEXT}
                     </p>
                   </div>
                 ) : (
@@ -654,14 +737,14 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                     {/* Helper: Check if message has text, image, or file */}
                     {(() => {
                       const hasText =
-                        message.content && message.content.trim().length > 0;
+                        displayContent && displayContent.trim().length > 0;
 
                       // Phase 2: Separate images from files
                       const images: AttachmentDto[] = [];
                       const videos: AttachmentDto[] = [];
                       const files: AttachmentDto[] = [];
 
-                      message.attachments?.forEach((attachment) => {
+                      displayAttachments?.forEach((attachment) => {
                         if (attachment.contentType?.startsWith("image/")) {
                           images.push(attachment);
                         } else if (
@@ -680,19 +763,16 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                       return (
                         <>
                           {/* Quoted Message Preview - if this is a quote reply */}
-                          {message.quotedMessage && (
+                          {displayQuoted && (
                             <div className="px-0.5 pt-0.5">
                               <QuotedMessagePreview
-                                quotedMessage={message.quotedMessage}
+                                quotedMessage={displayQuoted}
                                 variant="message"
                                 isOwn={isOwn}
                                 isFirstInGroup={isFirstInGroup}
                                 onClick={
                                   onScrollToQuoted
-                                    ? () =>
-                                        onScrollToQuoted(
-                                          message.quotedMessage!.id,
-                                        )
+                                    ? () => onScrollToQuoted(displayQuoted.id)
                                     : undefined
                                 }
                               />
@@ -717,8 +797,8 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                                 style={{ overflowWrap: "anywhere" }}
                               >
                                 {renderMessageWithMentions(
-                                  message.content,
-                                  message.mentions,
+                                  displayContent,
+                                  displayMentions,
                                   // Mention người khác: bình thường là pill nổi bật;
                                   // khi recalled → đồng hoá xám với phần text còn lại
                                   // để không gây chú ý.
@@ -1130,15 +1210,29 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         </>
                       );
                     })()}
+                    {/* Fallback: nếu API không kèm chi tiết file (attachments rỗng)
+                        nhưng vẫn báo có đính kèm → hiển thị gợi ý số lượng. Khi đã
+                        có attachments, chúng được render như ảnh/file bình thường. */}
+                    {fetchedOriginal &&
+                      fetchedAttachmentCount > 0 &&
+                      (fetchedOriginal.attachments?.length ?? 0) === 0 && (
+                      <div
+                        className="flex items-center gap-1.5 px-4 py-2 text-xs text-gray-500"
+                        data-testid={`recalled-original-attachment-count-${message.id}`}
+                      >
+                        <Paperclip size={12} className="flex-shrink-0" />
+                        <span>{fetchedAttachmentCount} tệp đính kèm</span>
+                      </div>
+                    )}
                   </>
                 )}
-                {/* MOCKUP: dòng "đã thu hồi" nằm chung khối, ngăn cách bằng border */}
-                {isMessageRecalled && (
+                {/* Footer "Đã thu hồi · <thời điểm>" chỉ cho người có quyền xem
+                    gốc. canViewOriginal === false → không footer, không thời gian. */}
+                {isMessageRecalled && canViewOriginal && (
                   <div
                     className="flex items-center gap-1 border-t border-gray-300/70 bg-amber-50 px-4 py-1.5 text-[11px] not-italic text-amber-600"
                     data-testid={`message-recalled-footer-${message.id}`}
                   >
-                    <RotateCcw size={11} className="flex-shrink-0" />
                     <span>Đã thu hồi</span>
                     {recalledAtLabel && (
                       <>
@@ -1161,6 +1255,38 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
               )} */}
             </div>
           </div>
+
+          {/* Toggle xem/ẩn nội dung gốc — nút text rõ ràng ngay dưới bubble (chỉ
+              khi canViewOriginal). Lần đầu gọi API; các lần sau ẩn/hiện từ cache. */}
+          {canViewOriginal && (
+            <div
+              className={cn(
+                "mt-1", // sát bubble thu hồi phía trên
+                isOwn ? "flex justify-end" : "flex justify-start",
+              )}
+            >
+              <button
+                type="button"
+                onClick={handleToggleOriginal}
+                disabled={recalledOriginal.isPending}
+                className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 shadow-sm transition hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid={`view-recalled-original-${message.id}`}
+              >
+                {recalledOriginal.isPending ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : isShowingOriginal ? (
+                  <EyeOff size={12} />
+                ) : (
+                  <Eye size={12} />
+                )}
+                {recalledOriginal.isPending
+                  ? "Đang tải..."
+                  : isShowingOriginal
+                    ? "Ẩn tin nhắn gốc"
+                    : "Xem tin nhắn gốc"}
+              </button>
+            </div>
+          )}
 
           {/* Confirmed info indicator - directly below bubble, no connector */}
           {/* Only show if confirmed AND no linkedTaskId (hide when task is created) */}

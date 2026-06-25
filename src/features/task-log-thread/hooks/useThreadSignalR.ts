@@ -1,9 +1,41 @@
 import { useEffect } from "react";
 import type { ChatMessage, ThreadDto } from "@/types/messages";
 import { getMessageThread } from "@/api/messages.api";
-import { chatHub } from "@/lib/signalr";
+import { chatHub, SIGNALR_EVENTS } from "@/lib/signalr";
 import type { ThreadUpdatedEvent } from "@/lib/signalr";
+import type { MessageRecalledEvent } from "@/types/signalr-events";
 import type { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
+
+/**
+ * Đánh dấu một reply/parent là đã thu hồi (in place) — mirror logic của
+ * `messageCache.setMessageRecalledFlag` dùng cho tin ngoài. Backend dùng chính
+ * `content` làm text placeholder "Tin nhắn đã bị thu hồi"; realtime gửi kèm thì
+ * ghi đè, thiếu thì giữ content cũ. Guard `isRecalled` chống xử lý lặp khi server
+ * echo lại chính lần thu hồi của user (đã set bởi flipRecalledLocal).
+ */
+function markRecalled(
+  msg: ChatMessage,
+  event: MessageRecalledEvent,
+): ChatMessage {
+  if (msg.recallInfo?.isRecalled) return msg;
+  return {
+    ...msg,
+    content: event.recalledContentText ?? msg.content,
+    recallInfo: {
+      recalledBy: event.recalledBy ?? null,
+      recallExpiresAt: null,
+      canViewOriginal: false,
+      ...(msg.recallInfo ?? {}),
+      isRecalled: true,
+      recalledAt: event.recalledAt,
+      ...(event.recalledBy ? { recalledBy: event.recalledBy } : {}),
+      canRecall: false,
+      ...(event.recallInfo?.canViewOriginal !== undefined
+        ? { canViewOriginal: event.recallInfo.canViewOriginal }
+        : {}),
+    },
+  };
+}
 
 interface UseThreadSignalROptions {
   open: boolean;
@@ -78,14 +110,53 @@ export function useThreadSignalR({
         });
     };
 
-    const cleanup = chatHub.onWithCleanup(
+    // Thu hồi tin nhắn (realtime) trong thread: cập nhật reply/parent thành
+    // trạng thái "đã thu hồi" ngay, y như tin ngoài. Reply nằm trong threadData
+    // local (không phải conversation cache mà dispatcher cập nhật), nên thread
+    // phải tự lắng nghe event. No-op nếu messageId không thuộc thread này.
+    const handleMessageRecalled = (event: MessageRecalledEvent) => {
+      if (!event?.conversationId || !event?.messageId) return;
+
+      setThreadData((prev) => {
+        if (!prev) return prev;
+
+        let changed = false;
+        const replies = (prev.replies ?? []).map((r) => {
+          if (r.id !== event.messageId) return r;
+          const next = markRecalled(r, event);
+          if (next !== r) changed = true;
+          return next;
+        });
+
+        let parentMessage = prev.parentMessage;
+        if (parentMessage?.id === event.messageId) {
+          const next = markRecalled(parentMessage, event);
+          if (next !== parentMessage) {
+            parentMessage = next;
+            changed = true;
+          }
+        }
+
+        if (!changed) return prev;
+        return { ...prev, replies, parentMessage };
+      });
+    };
+
+    const cleanupThreadUpdated = chatHub.onWithCleanup(
       "ThreadUpdated",
       handleThreadUpdated,
       false,
     );
 
+    const cleanupMessageRecalled = chatHub.onWithCleanup<MessageRecalledEvent>(
+      SIGNALR_EVENTS.MESSAGE_RECALLED,
+      handleMessageRecalled,
+      false,
+    );
+
     return () => {
-      cleanup();
+      cleanupThreadUpdated();
+      cleanupMessageRecalled();
     };
-  }, [open, parentMessageId, markAsRead]);
+  }, [open, parentMessageId, markAsRead, setThreadData]);
 }

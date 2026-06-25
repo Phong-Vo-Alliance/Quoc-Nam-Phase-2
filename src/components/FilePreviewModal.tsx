@@ -21,6 +21,7 @@ import {
   getVideoThumbnailInfo,
 } from "@/api/files.api";
 import { toast } from "sonner";
+import { getApiErrorMessage } from "@/utils/errorHandling";
 import { usePdfPreview } from "@/hooks/usePdfPreview";
 import { FILE_TYPE_ICONS, FILE_TYPE_LABELS } from "@/types/files";
 import type { SupportedPreviewFileType } from "@/types/files";
@@ -58,6 +59,12 @@ export interface FilePreviewModalProps {
   onClose: () => void;
   fileId: string;
   fileName?: string;
+  /**
+   * Chặn tải về dù API trả canDownload = true (vd: xem lại file của tin đã thu
+   * hồi — cho phép xem nhưng không cho download). Áp dụng cho PDF/ảnh/video và
+   * Word/Excel.
+   */
+  disableDownload?: boolean;
 }
 
 export default function FilePreviewModal({
@@ -65,6 +72,7 @@ export default function FilePreviewModal({
   onClose,
   fileId,
   fileName = "document.pdf",
+  disableDownload = false,
 }: FilePreviewModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -100,6 +108,7 @@ export default function FilePreviewModal({
               fileId={fileId}
               fileName={fileName}
               onClose={onClose}
+              disableDownload={disableDownload}
             />
           )}
           {isExcelFile && (
@@ -107,6 +116,7 @@ export default function FilePreviewModal({
               fileId={fileId}
               fileName={fileName}
               onClose={onClose}
+              disableDownload={disableDownload}
             />
           )}
         </div>
@@ -197,7 +207,8 @@ export default function FilePreviewModal({
     if (isPanning) setIsPanning(false);
   };
 
-  const canDownload = isVideoFile ? videoCanDownload : canPreviewDownload;
+  const canDownload =
+    !disableDownload && (isVideoFile ? videoCanDownload : canPreviewDownload);
   const currentPage = isVideoFile ? 1 : previewCurrentPage;
   const totalPages = isVideoFile ? 1 : previewTotalPages;
   const isLoading = isVideoFile ? isVideoLoading : isPreviewLoading;
@@ -299,11 +310,16 @@ export default function FilePreviewModal({
       URL.revokeObjectURL(url);
       toast.success("Tải file thành công");
     } catch (error: any) {
-      const status = error?.response?.status;
-      if (status === 404) toast.error("File không tồn tại");
-      else if (status === 403) toast.error("Không có quyền tải file này");
-      else if (status === 401) toast.error("Chưa đăng nhập");
-      else toast.error("Không thể tải file");
+      const apiMessage = await getApiErrorMessage(error);
+      if (apiMessage) {
+        toast.error(apiMessage);
+      } else {
+        const status = error?.response?.status;
+        if (status === 404) toast.error("File không tồn tại");
+        else if (status === 403) toast.error("Không có quyền tải file này");
+        else if (status === 401) toast.error("Chưa đăng nhập");
+        else toast.error("Không thể tải file");
+      }
     } finally {
       setIsDownloading(false);
     }

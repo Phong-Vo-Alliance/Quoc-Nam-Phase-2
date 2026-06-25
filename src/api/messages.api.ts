@@ -9,6 +9,7 @@ import type {
   LinkTaskToMessageRequest,
   LinkTaskToMessageResponse,
   ThreadDto,
+  RecalledOriginalMessageDto,
 } from "@/types/messages";
 
 interface GetMessagesParams {
@@ -124,6 +125,31 @@ export const linkTaskToMessage = async (
   const response = await apiClient.patch<LinkTaskToMessageResponse>(
     `/api/messages/${messageId}/link-task`,
     payload,
+  );
+  return response.data;
+};
+
+/**
+ * POST /api/messages/{id}/recall
+ * Thu hồi một tin nhắn (recall). Quyền thu hồi do server quyết định
+ * (recallInfo.canRecall trên từng message).
+ */
+export const recallMessage = async (messageId: string): Promise<void> => {
+  await apiClient.post(`/api/messages/${messageId}/recall`);
+};
+
+/**
+ * GET /api/admin/messages/{id}/recalled-original
+ * Lấy nội dung gốc của một tin nhắn đã thu hồi (cho người có quyền xem gốc —
+ * recallInfo.canViewOriginal === true). Trả về DTO gồm `recalledOriginalContent`
+ * (text gốc) + metadata + `attachments` (chi tiết đính kèm gốc để xem lại ảnh/file);
+ * KHÔNG kèm mentions/quote.
+ */
+export const getRecalledOriginalMessage = async (
+  messageId: string,
+): Promise<RecalledOriginalMessageDto> => {
+  const response = await apiClient.get<RecalledOriginalMessageDto>(
+    `/api/admin/messages/${messageId}/recalled-original`,
   );
   return response.data;
 };

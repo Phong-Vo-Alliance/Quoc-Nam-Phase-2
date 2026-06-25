@@ -120,14 +120,14 @@ describe("signalr-event-dispatcher", () => {
   // ────────────────────────────────────────────────────────
 
   describe("registerAllEventHandlers", () => {
-    it("registers 18 event handlers", () => {
+    it("registers 19 event handlers", () => {
       registerAllEventHandlers(queryClient);
-      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(18);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(19);
     });
 
-    it("returns 18 cleanup functions", () => {
+    it("returns 19 cleanup functions", () => {
       const cleanups = registerAllEventHandlers(queryClient);
-      expect(cleanups).toHaveLength(18);
+      expect(cleanups).toHaveLength(19);
       cleanups.forEach((fn) => expect(typeof fn).toBe("function"));
     });
 
@@ -143,6 +143,14 @@ describe("signalr-event-dispatcher", () => {
       registerAllEventHandlers(queryClient);
       expect(chatHub.onWithCleanup).toHaveBeenCalledWith(
         SIGNALR_EVENTS.MESSAGE_READ,
+        expect.any(Function),
+      );
+    });
+
+    it("registers handler for MESSAGE_RECALLED", () => {
+      registerAllEventHandlers(queryClient);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledWith(
+        SIGNALR_EVENTS.MESSAGE_RECALLED,
         expect.any(Function),
       );
     });

@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import type { QuotedMessageData } from "@/stores/replyStore";
+import type { ChatMessage } from "@/types/messages";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 import { useFileUpload } from "@/features/chat-main/hooks/useFileUpload";
@@ -25,6 +26,9 @@ import {
   usePinMessage,
   useUnpinMessage,
 } from "@/hooks/mutations/usePinMessage";
+import { useRecallMessage } from "@/hooks/mutations";
+import { useRecallConfirm } from "@/features/portal/components/chat/useRecallConfirm";
+import { RecallConfirmDialog } from "@/features/portal/components/chat/RecallConfirmDialog";
 import {
   ThreadHeader,
   ThreadMessageList,
@@ -51,8 +55,12 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     Array<{ fileId: string; fileName: string }>
   >([]);
   const [previewInitialIndex, setPreviewInitialIndex] = useState(0);
+  // Chặn tải về cho đính kèm đang xem (vd: xem lại file/ảnh của tin đã thu hồi).
+  const [previewDisableDownload, setPreviewDisableDownload] = useState(false);
   const [filePreviewId, setFilePreviewId] = useState<string | null>(null);
   const [filePreviewName, setFilePreviewName] = useState<string>("");
+  const [filePreviewDisableDownload, setFilePreviewDisableDownload] =
+    useState(false);
 
   // Reply state
   const [threadReplyTarget, setThreadReplyTarget] =
@@ -220,6 +228,63 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     [conversationId, pinMessageMutation, unpinMessageMutation, setThreadData],
   );
 
+  // ── Thu hồi tin nhắn trong thread ──
+  // Quyền do server quyết định qua cờ recallInfo.canRecall (giống tin ngoài).
+  // recallInfo của reply nằm trong threadData local (không phải conversation
+  // cache mà setMessageRecalledFlag cập nhật), nên ta flip tại chỗ ở đây sau khi
+  // mutation thành công để bubble chuyển sang trạng thái "đã thu hồi" ngay.
+  const recallMessageMutation = useRecallMessage({
+    conversationId: conversationId ?? "",
+  });
+
+  const flipRecalledLocal = useCallback(
+    (messageId: string) => {
+      const markRecalled = (msg: ChatMessage): ChatMessage =>
+        msg.recallInfo?.isRecalled
+          ? msg
+          : {
+              ...msg,
+              recallInfo: {
+                recalledBy: user?.id ?? null,
+                canViewOriginal: false,
+                ...(msg.recallInfo ?? {}),
+                isRecalled: true,
+                recalledAt: new Date().toISOString(),
+                recallExpiresAt: null,
+                canRecall: false,
+              },
+            };
+
+      setThreadData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          replies: (prev.replies ?? []).map((r) =>
+            r.id === messageId ? markRecalled(r) : r,
+          ),
+          parentMessage:
+            prev.parentMessage?.id === messageId
+              ? markRecalled(prev.parentMessage)
+              : prev.parentMessage,
+        };
+      });
+    },
+    [user?.id, setThreadData],
+  );
+
+  const recallConfirm = useRecallConfirm(
+    useCallback(
+      (messageId: string) => {
+        if (!conversationId) return;
+        recallMessageMutation.mutate(
+          { messageId },
+          { onSuccess: () => flipRecalledLocal(messageId) },
+        );
+      },
+      [conversationId, recallMessageMutation, flipRecalledLocal],
+    ),
+  );
+
   // Focus input when sheet opens and loading completes
   useEffect(() => {
     if (open && !loading) {
@@ -316,20 +381,23 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
             handleLoadMoreDownward={handleLoadMoreDownward}
             handleScrollToQuoted={handleScrollToQuoted}
             onTogglePin={handleTogglePin}
+            onRecall={recallConfirm.requestRecall}
             onReply={(replyData) => {
               setThreadReplyTarget(replyData);
               setTimeout(() => {
                 mentionInputRef.current?.focus();
               }, 100);
             }}
-            onFilePreviewClick={(fileId, fileName) => {
+            onFilePreviewClick={(fileId, fileName, options) => {
               setFilePreviewId(fileId);
               setFilePreviewName(fileName);
+              setFilePreviewDisableDownload(!!options?.disableDownload);
             }}
-            onImageClick={(images, initialIndex) => {
+            onImageClick={(images, initialIndex, options) => {
               setPreviewImages(images);
               setPreviewInitialIndex(initialIndex);
               setPreviewFileId(images[initialIndex]?.fileId || null);
+              setPreviewDisableDownload(!!options?.disableDownload);
             }}
           />
           <div ref={bottomRef} />
@@ -375,17 +443,31 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
         previewFileName={previewFileName}
         previewImages={previewImages}
         previewInitialIndex={previewInitialIndex}
+        previewDisableDownload={previewDisableDownload}
         onCloseImagePreview={() => {
           setPreviewFileId(null);
           setPreviewImages([]);
           setPreviewInitialIndex(0);
+          setPreviewDisableDownload(false);
         }}
         filePreviewId={filePreviewId}
         filePreviewName={filePreviewName}
+        filePreviewDisableDownload={filePreviewDisableDownload}
         onCloseFilePreview={() => {
           setFilePreviewId(null);
           setFilePreviewName("");
+          setFilePreviewDisableDownload(false);
         }}
+      />
+
+      {/* Recall confirm dialog */}
+      <RecallConfirmDialog
+        open={recallConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) recallConfirm.cancel();
+        }}
+        onConfirm={recallConfirm.confirm}
+        isProcessing={recallMessageMutation.isPending}
       />
     </div>
   );

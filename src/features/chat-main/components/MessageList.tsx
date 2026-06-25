@@ -33,6 +33,7 @@ interface MessageListProps {
   onLoadMore: () => void;
   onTogglePin?: (messageId: string, isPinned: boolean) => void;
   onToggleStar?: (messageId: string, isStarred: boolean) => void;
+  onRecall?: (messageId: string) => void;
   onCreateTask?: (messageId: string) => void;
   onConfirmInfo?: (messageId: string) => void;
   onRetry: (messageId: string) => void;
@@ -63,6 +64,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   onLoadMore,
   onTogglePin,
   onToggleStar,
+  onRecall,
   onCreateTask,
   onConfirmInfo,
   onRetry,
@@ -134,6 +136,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     onImageClick={onImageClick}
                     onTogglePin={onTogglePin}
                     onToggleStar={onToggleStar}
+                    onRecall={onRecall}
                     onCreateTask={isDirect ? undefined : onCreateTask}
                     onConfirmInfo={isDirect ? undefined : onConfirmInfo}
                     hasConfirmedInfo={confirmedMessageMap.has(message.id)}
