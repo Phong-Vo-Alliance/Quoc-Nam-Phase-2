@@ -301,6 +301,13 @@ export interface MentionReadEvent {
   readAt: string;
 }
 
+export interface MentionUnreadEvent {
+  mentionId: string;
+  messageId: string;
+  userId: string;
+  unreadAt: string;
+}
+
 export interface MentionsBulkReadEvent {
   conversationId?: string;
   markedCount: number;

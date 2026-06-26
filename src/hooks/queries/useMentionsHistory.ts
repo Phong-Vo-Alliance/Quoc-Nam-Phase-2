@@ -30,8 +30,7 @@ export function useMentionsHistory({
       lastPage.pageNumber < lastPage.totalPages
         ? lastPage.pageNumber + 1
         : undefined,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 60 * 1000,
     enabled,
   });
 }

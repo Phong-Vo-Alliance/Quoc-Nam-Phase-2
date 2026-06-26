@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { AtSign, Search, X, Loader2, CheckCheck, MailOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -73,6 +73,7 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
     data,
     isLoading,
     isError,
+    isFetching,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -80,6 +81,23 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
     isRead: readFilterToIsRead(readFilter),
     pageSize: 20,
   });
+
+  // When the user switches filter we want the skeleton to show while the new
+  // filter's data is (re)fetching, instead of briefly showing the stale cached
+  // list and then popping an item in/out once the refetch lands.
+  const [switchingFilter, setSwitchingFilter] = useState(false);
+
+  const changeFilter = (next: ReadFilter) => {
+    if (next === readFilter) return;
+    setReadFilter(next);
+    setSwitchingFilter(true);
+  };
+
+  useEffect(() => {
+    if (switchingFilter && !isFetching) setSwitchingFilter(false);
+  }, [switchingFilter, isFetching]);
+
+  const showSkeleton = isLoading || (switchingFilter && isFetching);
 
   const mentions = useMemo(
     () => flattenMentionPages(data?.pages),
@@ -143,7 +161,7 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
 
           <Select
             value={readFilter}
-            onValueChange={(v) => setReadFilter(v as ReadFilter)}
+            onValueChange={(v) => changeFilter(v as ReadFilter)}
           >
             <SelectTrigger
               className="h-9 w-[120px] text-sm bg-gray-50 border-gray-200"
@@ -163,7 +181,7 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
               variant="ghost"
               size="icon"
               className="h-9 w-9 shrink-0 text-gray-500 hover:text-gray-700"
-              onClick={() => setReadFilter("all")}
+              onClick={() => changeFilter("all")}
               title="Xoá bộ lọc"
               data-testid="mentions-filter-clear"
             >
@@ -172,7 +190,7 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
           )}
         </div>
 
-        {!isLoading && !isError && (
+        {!showSkeleton && !isError && (
           <div className="mt-2 flex items-center justify-between">
             <p
               className="text-xs text-gray-500"
@@ -226,16 +244,16 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
 
       {/* ─── Body ───────────────────────────────────────────── */}
       <ScrollArea className="flex-1">
-        {isLoading && <MentionsSkeleton />}
+        {showSkeleton && <MentionsSkeleton />}
 
-        {isError && !isLoading && (
+        {isError && !showSkeleton && (
           <div className="flex flex-col items-center justify-center text-center mt-20 px-4">
             <p className="text-sm text-red-500 mb-1">Không thể tải dữ liệu</p>
             <p className="text-xs text-gray-400">Vui lòng thử lại sau</p>
           </div>
         )}
 
-        {!isLoading && !isError && mentions.length === 0 && (
+        {!showSkeleton && !isError && mentions.length === 0 && (
           <div className="flex flex-col items-center justify-center text-center mt-20 px-6">
             <div className="h-16 w-16 rounded-full bg-brand-50 flex items-center justify-center mb-4">
               <AtSign className="h-8 w-8 text-brand-400" />
@@ -257,7 +275,7 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
           </div>
         )}
 
-        {!isLoading &&
+        {!showSkeleton &&
           !isError &&
           mentions.length > 0 &&
           filtered.length === 0 && (
@@ -268,7 +286,7 @@ export function MentionsView({ onOpenMention }: MentionsViewProps) {
             </div>
           )}
 
-        {!isLoading && !isError && filtered.length > 0 && (
+        {!showSkeleton && !isError && filtered.length > 0 && (
           <div>
             {filtered.map((item) => (
               <MentionItem

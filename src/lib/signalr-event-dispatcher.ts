@@ -11,13 +11,10 @@ import * as conversationCache from "@/lib/cache-updaters/conversation-cache";
 import * as notificationService from "@/lib/notification-service";
 import { mentionKeys } from "@/hooks/queries/keys/mentionKeys";
 import { pinnedStarredKeys } from "@/hooks/queries/keys/pinnedStarredKeys";
-import type {
-  MentionDto,
-  PagedResult,
-  UnreadMentionCountResponse,
-} from "@/types/mentions";
+import type { UnreadMentionCountResponse } from "@/types/mentions";
 import type {
   MentionReadEvent,
+  MentionUnreadEvent,
   MentionsBulkReadEvent,
   MentionsBulkUnreadEvent,
   MessagePinnedEvent,
@@ -307,11 +304,6 @@ export function registerAllEventHandlers(
   );
 
   // ───────── Mentions ─────────
-  type MentionInfinitePages = {
-    pages: PagedResult<MentionDto>[];
-    pageParams: unknown[];
-  };
-
   const bumpUnreadCount = (delta: number) => {
     queryClient.setQueryData<UnreadMentionCountResponse>(
       mentionKeys.unreadCount(),
@@ -320,62 +312,6 @@ export function registerAllEventHandlers(
           ? { ...prev, count: Math.max(0, prev.count + delta) }
           : prev,
     );
-  };
-
-  // Apply a "mark read" optimistic update to every history cache. For the
-  // `isRead: false` (Unread) tab we drop the item; for `all` and `read` tabs
-  // we keep it but flip its isRead flag so it doesn't visually disappear.
-  const markMentionReadInCaches = (mentionId: string) => {
-    const entries = queryClient.getQueriesData<MentionInfinitePages>({
-      queryKey: mentionKeys.historyAll(),
-    });
-    for (const [key, data] of entries) {
-      if (!data || !("pages" in data)) continue;
-      const filters = key[2] as
-        | { isRead?: boolean; conversationId?: string }
-        | undefined;
-
-      if (filters?.isRead === false) {
-        let removed = 0;
-        const pages = data.pages.map((page) => {
-          const items = page.items.filter((m) => {
-            if (m.id === mentionId) {
-              removed += 1;
-              return false;
-            }
-            return true;
-          });
-          return items.length === page.items.length
-            ? page
-            : { ...page, items };
-        });
-        if (removed === 0) continue;
-        queryClient.setQueryData(key, {
-          ...data,
-          pages: pages.map((p) => ({
-            ...p,
-            totalCount: Math.max(0, p.totalCount - removed),
-          })),
-        });
-      } else {
-        let changed = false;
-        const pages = data.pages.map((page) => {
-          let pageChanged = false;
-          const items = page.items.map((m) => {
-            if (m.id === mentionId && !m.isRead) {
-              pageChanged = true;
-              return { ...m, isRead: true };
-            }
-            return m;
-          });
-          if (!pageChanged) return page;
-          changed = true;
-          return { ...page, items };
-        });
-        if (!changed) continue;
-        queryClient.setQueryData(key, { ...data, pages });
-      }
-    }
   };
 
   const cleanupUserMentioned = chatHub.onWithCleanup<UserMentionedEvent>(
@@ -396,10 +332,26 @@ export function registerAllEventHandlers(
     SIGNALR_EVENTS.MENTION_READ,
     (event) => {
       if (!event?.mentionId) return;
-      // Multi-device sync: another session marked it read.
-      markMentionReadInCaches(event.mentionId);
-      bumpUnreadCount(-1);
-      // Trust server count
+      // Multi-device sync: another session marked it read. Don't patch the
+      // caches by hand — just refetch the list and trust the server count.
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.historyAll(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.unreadCount(),
+      });
+    },
+  );
+
+  const cleanupMentionUnread = chatHub.onWithCleanup<MentionUnreadEvent>(
+    SIGNALR_EVENTS.MENTION_UNREAD,
+    (event) => {
+      if (!event?.mentionId) return;
+      // A mention was marked unread (another session / server). Don't patch the
+      // caches by hand — just refetch the list and trust the server count.
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.historyAll(),
+      });
       queryClient.invalidateQueries({
         queryKey: mentionKeys.unreadCount(),
       });
@@ -497,6 +449,7 @@ export function registerAllEventHandlers(
     cleanupConversationDeleted,
     cleanupUserMentioned,
     cleanupMentionRead,
+    cleanupMentionUnread,
     cleanupMentionsBulkRead,
     cleanupMentionsBulkUnread,
     cleanupMessagePinned,

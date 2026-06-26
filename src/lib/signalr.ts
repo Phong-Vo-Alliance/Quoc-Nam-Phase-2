@@ -117,6 +117,7 @@ export const SIGNALR_EVENTS = {
   // ============= Mention Events =============
   USER_MENTIONED: "UserMentioned",
   MENTION_READ: "MentionRead",
+  MENTION_UNREAD: "MentionUnread",
   MENTIONS_BULK_READ: "MentionsBulkRead",
   MENTIONS_BULK_UNREAD: "MentionsBulkUnread",
 
