@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import type { SignalRConnectionState } from "@/types/signalr-events";
 import { useAuthStore } from "@/stores/authStore";
 import { useAppConfigStore } from "@/stores/appConfigStore";
+import { useConversationStore } from "@/stores/conversationStore";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 
 // Re-export all event types from dedicated file
 export type { SignalRConnectionState };
@@ -783,6 +785,24 @@ class IdentityHubConnection {
     });
   }
 
+  // Khi quyền của CHÍNH viewer đổi (leader ↔ staff), message DTO mang các
+  // field permission-dependent (canRecall, canDownload, canPin...) đã cũ.
+  // Refetch đoạn hội thoại đang mở để các quyền trên từng message cập nhật
+  // ngay mà không cần F5. `refetchType: "active"` → chỉ query đang mount mới
+  // gọi API (đúng 1 conversation đang view).
+  private refreshActiveConversationMessages(): void {
+    if (!this.queryClient) return;
+
+    const activeConversationId =
+      useConversationStore.getState().selectedConversation?.id;
+    if (!activeConversationId) return;
+
+    this.queryClient.invalidateQueries({
+      queryKey: messageKeys.conversation(activeConversationId),
+      refetchType: "active",
+    });
+  }
+
   async start(identityAccessToken?: string): Promise<void> {
     if (!IDENTITY_HUB_URL) {
       console.warn(
@@ -836,6 +856,13 @@ class IdentityHubConnection {
           }) => {
             this.showLeaderStatusChangeToast(payload);
             this.refreshLeaderChangeRelatedQueries();
+
+            // Event về chính viewer → quyền của bản thân thay đổi → refetch
+            // đoạn hội thoại đang mở để message permissions cập nhật ngay.
+            const currentUserId = useAuthStore.getState().user?.id;
+            if (payload?.userId && payload.userId === currentUserId) {
+              this.refreshActiveConversationMessages();
+            }
           },
         );
 
