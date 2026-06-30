@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { recallMessage } from "@/api/messages.api";
 import { setMessageRecalledFlag } from "@/lib/cache-updaters/message-cache";
+import { classifyError } from "@/utils/errorHandling";
 
 interface UseRecallMessageOptions {
   conversationId: string;
@@ -46,7 +47,10 @@ export function useRecallMessage({
     },
 
     onError: (error) => {
-      toast.error("Không thể thu hồi tin nhắn");
+      // Ưu tiên message backend trả về (vd "Đã quá thời gian thu hồi",
+      // "Bạn không có quyền…"); classifyError đọc error.response.data.message
+      // rồi mới fallback theo status code.
+      toast.error(classifyError(error).message);
       onError?.(error as Error);
     },
   });
