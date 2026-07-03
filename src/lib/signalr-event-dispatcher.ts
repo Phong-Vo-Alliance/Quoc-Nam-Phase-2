@@ -9,6 +9,10 @@ import * as categoryCache from "@/lib/cache-updaters/category-cache";
 import * as directCache from "@/lib/cache-updaters/direct-cache";
 import * as conversationCache from "@/lib/cache-updaters/conversation-cache";
 import * as notificationService from "@/lib/notification-service";
+import {
+  normalizeMessageReactions,
+  normalizeReactions,
+} from "@/lib/reactions-normalize";
 import { mentionKeys } from "@/hooks/queries/keys/mentionKeys";
 import { pinnedStarredKeys } from "@/hooks/queries/keys/pinnedStarredKeys";
 import type { UnreadMentionCountResponse } from "@/types/mentions";
@@ -17,11 +21,15 @@ import type {
   MentionUnreadEvent,
   MentionsBulkReadEvent,
   MentionsBulkUnreadEvent,
+  MessageConfirmedEvent,
   MessagePinnedEvent,
   MessageRecallCapabilityChangedEvent,
   MessageRecalledEvent,
+  MessageUnconfirmedEvent,
   MessageUnpinnedEvent,
   PinnedMessagesReorderedEvent,
+  ReactionAddedEvent,
+  ReactionRemovedEvent,
   UserMentionedEvent,
 } from "@/types/signalr-events";
 import type { ChatMessage, ChatMessageContentType } from "@/types/messages";
@@ -91,10 +99,12 @@ export function registerAllEventHandlers(
         raw && "message" in raw && raw.message ? raw.message : raw;
       if (!unwrapped?.id) return;
 
-      const message: ChatMessage = {
+      // Chuẩn hoá reactions (backend gửi map keyed emoji) → mảng phẳng để cache
+      // luôn giữ mảng; delta reaction sau đó áp chồng đúng cách.
+      const message: ChatMessage = normalizeMessageReactions({
         ...unwrapped,
         contentType: normalizeContentType(unwrapped.contentType),
-      };
+      });
 
       messageCache.handleMessageSent(messageCacheCtx, message);
       categoryCache.handleMessageSent(categoryCacheCtx, message);
@@ -206,6 +216,82 @@ export function registerAllEventHandlers(
         );
       },
     );
+
+  // Xác nhận tin nhắn (realtime): người khác xác nhận/bỏ xác nhận. Cả hai event
+  // mang nguyên danh sách `confirmations` mới nhất → ghi đè toàn bộ list trong
+  // cache để pill + số lượng khớp server ngay. Không cần skip-self: event của
+  // chính user chỉ ghi đè lại đúng list (và sửa `confirmedAt` client tự đoán
+  // trong onSuccess về giá trị chuẩn của server). Cache updater tự no-op khi
+  // list không đổi / hội thoại chưa cache / tin chưa load.
+  const handleConfirmationsEvent = (
+    event: MessageConfirmedEvent | MessageUnconfirmedEvent,
+  ) => {
+    if (!event?.conversationId || !event?.messageId || !event?.confirmations)
+      return;
+    messageCache.setMessageConfirmations(
+      queryClient,
+      event.conversationId,
+      event.messageId,
+      event.confirmations,
+    );
+  };
+
+  const cleanupMessageConfirmed = chatHub.onWithCleanup<MessageConfirmedEvent>(
+    SIGNALR_EVENTS.MESSAGE_CONFIRMED,
+    handleConfirmationsEvent,
+  );
+
+  const cleanupMessageUnconfirmed =
+    chatHub.onWithCleanup<MessageUnconfirmedEvent>(
+      SIGNALR_EVENTS.MESSAGE_UNCONFIRMED,
+      handleConfirmationsEvent,
+    );
+
+  // Thả cảm xúc (realtime): người khác thả/gỡ một cảm xúc trên tin.
+  // Ưu tiên SNAPSHOT: nếu payload kèm nguyên `reactions` (map keyed emoji) thì
+  // bung mảng và ghi đè toàn bộ list — luôn khớp server, không lệ thuộc thứ tự
+  // event. Ngược lại xử lý DELTA một cặp (userId, emoji) → add/remove đúng một
+  // cặp. Không skip-self: echo về chính user chỉ ghi lại đúng trạng thái đã có
+  // (updater no-op khi không đổi / hội thoại chưa cache / tin chưa load).
+  const handleReactionEvent = (
+    event: ReactionAddedEvent | ReactionRemovedEvent,
+    added: boolean,
+  ) => {
+    if (!event?.conversationId || !event?.messageId) return;
+
+    if (event.reactions && typeof event.reactions === "object") {
+      messageCache.setMessageReactions(
+        queryClient,
+        event.conversationId,
+        event.messageId,
+        normalizeReactions(event.reactions),
+      );
+      return;
+    }
+
+    if (!event.userId || !event.emoji) return;
+    messageCache.setMessageReaction(
+      queryClient,
+      event.conversationId,
+      event.messageId,
+      {
+        emoji: event.emoji,
+        userId: event.userId,
+        userName: event.fullName ?? "Người dùng",
+      },
+      added,
+    );
+  };
+
+  const cleanupReactionAdded = chatHub.onWithCleanup<ReactionAddedEvent>(
+    SIGNALR_EVENTS.REACTION_ADDED,
+    (event) => handleReactionEvent(event, true),
+  );
+
+  const cleanupReactionRemoved = chatHub.onWithCleanup<ReactionRemovedEvent>(
+    SIGNALR_EVENTS.REACTION_REMOVED,
+    (event) => handleReactionEvent(event, false),
+  );
 
   const cleanupConversationCreated = chatHub.onWithCleanup(
     SIGNALR_EVENTS.CONVERSATION_CREATED,
@@ -437,6 +523,10 @@ export function registerAllEventHandlers(
     cleanupMessageRead,
     cleanupMessageRecalled,
     cleanupMessageRecallCapabilityChanged,
+    cleanupMessageConfirmed,
+    cleanupMessageUnconfirmed,
+    cleanupReactionAdded,
+    cleanupReactionRemoved,
     cleanupConversationCreated,
     cleanupConversationUpdated,
     cleanupMemberAdded,

@@ -12,7 +12,7 @@ import {
   RefreshCw,
   ClipboardPlus,
   Reply,
-  // CheckCircle2, // MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
+  CheckCircle2, // "Xác nhận tin nhắn"
   Inbox,
   Loader2,
   Paperclip,
@@ -45,9 +45,10 @@ import { RECALLED_MESSAGE_TEXT } from "@/constants/messages";
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers";
 import { useRecalledOriginalMessage } from "@/hooks/mutations";
 import { useAppConfigStore } from "@/stores/appConfigStore";
-// MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
-// import { hasUserConfirmed, toggleMockConfirm } from "./_mockMessageConfirm";
-// import { MessageConfirmPill } from "./MessageConfirmPill";
+import { MessageConfirmPill } from "./MessageConfirmPill";
+// "Thả cảm xúc tin nhắn" — đọc trực tiếp message.reactions, POST/DELETE ở parent.
+import { MessageReactionPicker } from "./reactions/MessageReactionPicker";
+import { MessageReactionBar } from "./reactions/MessageReactionBar";
 
 /**
  * Định dạng thời điểm thu hồi: "Thứ Ba, 09/06/2026 lúc 17:57".
@@ -144,6 +145,12 @@ export interface MessageBubbleSimpleProps {
   isLastInGroup?: boolean;
   onCreateTask?: (messageId: string) => void;
   onConfirmInfo?: (messageId: string) => void; // NEW: Confirm information
+  onConfirmMessage?: (messageId: string) => void; // NEW: Xác nhận tin nhắn (multi-user ack) — POST ở parent
+  onUnconfirmMessage?: (messageId: string) => void; // NEW: Bỏ xác nhận tin nhắn — DELETE ở parent
+  onAddReaction?: (messageId: string, emoji: string) => void; // NEW: Thả cảm xúc — POST ở parent
+  onRemoveReaction?: (messageId: string, emoji: string) => void; // NEW: Gỡ cảm xúc — DELETE ở parent
+  reactionEmojis?: string[]; // NEW: Bộ emoji cho picker (theo dm/group) — lấy từ API config
+  isConfirmingMessage?: boolean; // NEW: Đang gọi API xác nhận tin nhắn này (loading nút CheckCircle2)
   hasConfirmedInfo?: boolean; // NEW: Check if message already has confirmed info
   confirmedByName?: string; // NEW: Name of user who confirmed (for display)
   confirmedByUserId?: string; // NEW: User id of confirmer — used to gate "Giao việc" to the confirmer only
@@ -171,6 +178,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   isLastInGroup = true,
   onCreateTask,
   onConfirmInfo,
+  onConfirmMessage,
+  onUnconfirmMessage,
+  onAddReaction,
+  onRemoveReaction,
+  reactionEmojis,
+  isConfirmingMessage = false,
   hasConfirmedInfo = false,
   confirmedByName,
   confirmedByUserId,
@@ -189,12 +202,18 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   // Current viewer id — used to detect mentions targeting the current user so
   // we can render them with a stronger highlight (Google Chat style).
   const currentUserId = useAuthStore((state) => state.user?.id);
-  // MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
-  // const currentUserName = useAuthStore(
-  //   (state) => state.user?.fullName || "Tôi",
-  // );
-  // const meConfirmKey = currentUserId ?? "me";
-  // const meHasConfirmedMessage = hasUserConfirmed(message.id, meConfirmKey);
+  // "Xác nhận tin nhắn" — danh sách người đã xác nhận lấy trực tiếp từ API
+  // (message.confirmations). User có trong danh sách ⇒ đã xác nhận.
+  const messageConfirmations = message.confirmations ?? [];
+  const meHasConfirmedMessage =
+    !!currentUserId &&
+    messageConfirmations.some((c) => c.userId === currentUserId);
+  // Cờ bật/tắt toàn bộ tính năng "Xác nhận tin nhắn" theo brand (env). Mặc định
+  // bật; khi VITE_ENABLE_MESSAGE_CONFIRM=false thì cả nút hover lẫn pill đều ẩn.
+  const isMessageConfirmEnabled = FEATURE_FLAGS.enableMessageConfirm;
+  // Cờ bật/tắt "Thả cảm xúc tin nhắn" theo env (mặc định tắt, opt-in). Khi tắt
+  // thì cả nút thả ở góc bubble lẫn thanh chip cảm xúc đều ẩn.
+  const isMessageReactionEnabled = FEATURE_FLAGS.enableMessageReaction;
   // Per-category leader check for this conversation (Admin bypass inside hook).
   // Falls back to the currently-selected conversation from the store since the
   // bubble component doesn't receive conversationId as a prop.
@@ -350,8 +369,32 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
 
   // Hover state management with delay timer for action menu
   const [isHovered, setIsHovered] = useState(false);
-  // MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
-  // const [isConfirmPillHovered, setIsConfirmPillHovered] = useState(false);
+  // MOCKUP "Xác nhận tin nhắn"
+  const [isConfirmPillHovered, setIsConfirmPillHovered] = useState(false);
+  // "Thả cảm xúc tin nhắn" — danh sách reaction lấy trực tiếp từ API
+  // (message.reactions). Mỗi cặp (user, emoji) độc lập (kiểu Slack).
+  // Khi mở picker (hàng emoji) thì ẩn menu action để 2 lớp không chồng nhau.
+  const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+  // Hover chip react → mở danh sách "ai đã react", đồng thời ẩn menu action.
+  const [isReactionBarHovered, setIsReactionBarHovered] = useState(false);
+  // Guard shape lạ (backend có thể chưa trả mảng) để không crash .filter/.map.
+  const reactions = Array.isArray(message.reactions) ? message.reactions : [];
+  const myReactionEmojis = reactions
+    .filter((r) => r.userId === currentUserId)
+    .map((r) => r.emoji);
+  // Toggle 1 emoji: đã thả (của mình) ⇒ DELETE, chưa thả ⇒ POST. Parent thực
+  // hiện mutation + cập nhật cache, UI đổi trạng thái ngay.
+  const toggleReaction = useCallback(
+    (emoji: string) => {
+      if (!currentUserId) return;
+      if (myReactionEmojis.includes(emoji)) {
+        onRemoveReaction?.(message.id, emoji);
+      } else {
+        onAddReaction?.(message.id, emoji);
+      }
+    },
+    [currentUserId, myReactionEmojis, onAddReaction, onRemoveReaction, message.id],
+  );
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleMouseEnter = useCallback(() => {
@@ -400,9 +443,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
         className={cn(
           "flex gap-2 items-start",
           isOwn ? "justify-end" : "justify-start",
-          // Tin đã thu hồi có nút "Xem tin nhắn gốc": cách tin kế tiếp 8px
-          // (kể cả khi nằm giữa nhóm). Các nhóm thường: 12px.
-          canViewOriginal
+          // Tin đã thu hồi có nút "Xem tin nhắn gốc", hoặc tin có chip cảm xúc:
+          // cách tin kế tiếp 8px (kể cả khi nằm giữa nhóm). Các nhóm thường: 12px.
+          canViewOriginal ||
+            (isMessageReactionEnabled &&
+              !isMessageRecalled &&
+              reactions.length > 0)
             ? "!mb-2" // 8px
             : isLastInGroup && "!mb-3", // 12px - spacing between groups
         )}
@@ -522,8 +568,14 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
             )}
           </div>
           <div className="relative w-fit max-w-full">
-            {/* Hover action buttons — ẩn toàn bộ với tin đã thu hồi */}
-            {isHovered && !isMessageRecalled && (
+            {/* Hover action buttons — ẩn toàn bộ với tin đã thu hồi. Khi đang
+                hover pill "Xác nhận (n)" (mở danh sách) thì ẩn menu action để
+                hai lớp không hiển thị cùng lúc. */}
+            {isHovered &&
+              !isReactionPickerOpen &&
+              !isConfirmPillHovered &&
+              !isReactionBarHovered &&
+              !isMessageRecalled && (
               <div
                 className={cn(
                   "absolute flex items-center gap-1 z-20",
@@ -654,33 +706,46 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                         )}
                       </button>
                     )}
-                  {/* MOCKUP "Xác nhận tin nhắn" — tạm ẩn cho tới khi có logic chính thức
-                  {message.contentType !== "SYS" && !meHasConfirmedMessage && (
-                    <button
-                      className="p-1.5 rounded transition text-gray-500 hover:text-emerald-600"
-                      onClick={() =>
-                        toggleMockConfirm(message.id, {
-                          userId: meConfirmKey,
-                          name: currentUserName,
-                        })
-                      }
-                      title="Xác nhận đã đọc tin nhắn này"
-                      data-testid={`message-confirm-button-${message.id}`}
-                    >
-                      <CheckCircle2 size={14} />
-                    </button>
-                  )} */}
+                  {/* "Xác nhận tin nhắn" — hiển thị cho mọi tin user chưa xác
+                      nhận (ẩn khi đã có trong danh sách confirmations). Tin đã
+                      thu hồi đã bị chặn ở điều kiện wrapper phía trên. */}
+                  {isMessageConfirmEnabled &&
+                    message.contentType !== "SYS" &&
+                    onConfirmMessage &&
+                    !meHasConfirmedMessage && (
+                      <button
+                        className={cn(
+                          "p-1.5 rounded transition",
+                          isConfirmingMessage
+                            ? "text-emerald-500 cursor-not-allowed"
+                            : "text-gray-500 hover:text-emerald-600",
+                        )}
+                        onClick={() =>
+                          !isConfirmingMessage && onConfirmMessage(message.id)
+                        }
+                        title={
+                          isConfirmingMessage
+                            ? "Đang xác nhận..."
+                            : "Xác nhận đã đọc tin nhắn này"
+                        }
+                        data-testid={`message-confirm-button-${message.id}`}
+                        disabled={isConfirmingMessage}
+                      >
+                        {isConfirmingMessage ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={14} />
+                        )}
+                      </button>
+                    )}
                 </div>
               </div>
             )}
 
-            {/* Bubble + Xác nhận pill side-by-side (mockup) */}
-            <div
-              className={cn(
-                "flex items-end gap-2 w-fit max-w-full",
-                isOwn ? "flex-row-reverse" : "flex-row",
-              )}
-            >
+            {/* Wrapper bubble (pill "Xác nhận" đã tách xuống dòng riêng dưới đây). */}
+            <div className="relative w-fit max-w-full">
+              {/* Bubble + nút thả cảm xúc nổi ở góc dưới-trong (kiểu Zalo) */}
+              <div className="relative w-fit max-w-full">
               {/* Message bubble */}
               <div
                 ref={messageContentRef}
@@ -1243,18 +1308,114 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
                   </div>
                 )}
               </div>
-              {/* MOCKUP "Xác nhận tin nhắn" pill — tạm ẩn cho tới khi có logic chính thức
-              {message.contentType !== "SYS" && (
-                <MessageConfirmPill
-                  messageId={message.id}
-                  currentUserId={currentUserId}
-                  currentUserName={currentUserName}
-                  isOwn={isOwn}
-                  onPopoverToggle={setIsConfirmPillHovered}
-                />
-              )} */}
+              {/* MOCKUP: nút thả cảm xúc nổi ở góc dưới-trong bubble (kiểu Zalo):
+                  góc phải cho tin người khác, góc trái cho tin của mình. Chỉ hiện
+                  khi hover bubble (hoặc đang mở picker) và tin chưa thu hồi. Khi
+                  ĐÃ CÓ react thì nút này ẩn đi — nút mở bảng chọn chuyển xuống nằm
+                  cùng hàng với các chip cảm xúc (xem hàng dưới bubble). */}
+              {isMessageReactionEnabled &&
+                reactions.length === 0 &&
+                (isHovered || isReactionPickerOpen) &&
+                !isMessageRecalled &&
+                message.contentType !== "SYS" && (
+                <div
+                  className={cn(
+                    "absolute z-30 -bottom-3",
+                    isOwn ? "left-1" : "right-1",
+                  )}
+                >
+                  <MessageReactionPicker
+                    emojis={reactionEmojis}
+                    myEmojis={myReactionEmojis}
+                    onOpenChange={setIsReactionPickerOpen}
+                    onSelect={toggleReaction}
+                  />
+                </div>
+              )}
+              </div>
             </div>
           </div>
+
+          {/* Hàng dưới bubble: chip cảm xúc đã thả + pill "Xác nhận" nằm CÙNG MỘT
+              DÒNG, sát ngay dưới bubble, canh theo phía tin nhắn (phải cho tin của
+              mình, trái cho tin nhận). Mỗi thành phần tự ẩn khi rỗng. Đặt dưới
+              bubble thay vì cạnh để KHÔNG ép hẹp tin nhắn / gây scroll ngang. */}
+          {!isMessageRecalled &&
+            (isMessageReactionEnabled ||
+              (isMessageConfirmEnabled &&
+                message.contentType !== "SYS")) && (
+            <div
+              className={cn(
+                "mt-0.5 flex flex-wrap items-center gap-1.5",
+                isOwn ? "justify-end" : "justify-start",
+              )}
+            >
+              {/* Khi đã có react: nút mở bảng chọn cảm xúc nằm cùng hàng chip (thay
+                  cho nút nổi ở góc bubble) — kiểu Zalo. Chỉ hiện khi hover (hoặc
+                  đang mở bảng chọn). Tin của mình: nút ở BÊN TRÁI CÙNG (trước các
+                  chip); tin nhận: nút ở cuối hàng (sau các chip). */}
+              {isMessageReactionEnabled &&
+                reactions.length > 0 &&
+                (isHovered || isReactionPickerOpen) &&
+                !isMessageRecalled &&
+                message.contentType !== "SYS" &&
+                isOwn && (
+                  <MessageReactionPicker
+                    compact
+                    emojis={reactionEmojis}
+                    myEmojis={myReactionEmojis}
+                    onOpenChange={setIsReactionPickerOpen}
+                    onSelect={toggleReaction}
+                  />
+                )}
+
+              {/* MOCKUP: Thanh cảm xúc đã thả */}
+              {isMessageReactionEnabled && (
+                <MessageReactionBar
+                  reactions={reactions}
+                  currentUserId={currentUserId}
+                  isOwn={isOwn}
+                  onToggle={toggleReaction}
+                  onPopoverToggle={setIsReactionBarHovered}
+                />
+              )}
+
+              {/* Tin nhận: nút mở bảng chọn nằm cuối hàng chip (sau các chip). */}
+              {isMessageReactionEnabled &&
+                reactions.length > 0 &&
+                (isHovered || isReactionPickerOpen) &&
+                !isMessageRecalled &&
+                message.contentType !== "SYS" &&
+                !isOwn && (
+                  <MessageReactionPicker
+                    compact
+                    emojis={reactionEmojis}
+                    myEmojis={myReactionEmojis}
+                    onOpenChange={setIsReactionPickerOpen}
+                    onSelect={toggleReaction}
+                  />
+                )}
+
+              {/* "Xác nhận tin nhắn" pill — tự ẩn khi danh sách rỗng. */}
+              {isMessageConfirmEnabled &&
+                message.contentType !== "SYS" && (
+                  <MessageConfirmPill
+                    confirmations={messageConfirmations}
+                    currentUserId={currentUserId}
+                    isOwn={isOwn}
+                    onPopoverToggle={setIsConfirmPillHovered}
+                    onToggleConfirm={
+                      onConfirmMessage || onUnconfirmMessage
+                        ? () =>
+                            meHasConfirmedMessage
+                              ? onUnconfirmMessage?.(message.id)
+                              : onConfirmMessage?.(message.id)
+                        : undefined
+                    }
+                  />
+                )}
+            </div>
+          )}
 
           {/* Toggle xem/ẩn nội dung gốc — nút text rõ ràng ngay dưới bubble (chỉ
               khi canViewOriginal). Lần đầu gọi API; các lần sau ẩn/hiện từ cache. */}

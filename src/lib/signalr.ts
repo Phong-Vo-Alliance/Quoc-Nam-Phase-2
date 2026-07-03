@@ -79,6 +79,8 @@ export const SIGNALR_EVENTS = {
   MESSAGE_READ: "MessageRead",
   MESSAGE_RECALLED: "MessageRecalled",
   MESSAGE_RECALL_CAPABILITY_CHANGED: "MessageRecallCapabilityChanged",
+  MESSAGE_CONFIRMED: "MessageConfirmed",
+  MESSAGE_UNCONFIRMED: "MessageUnconfirmed",
 
   // ============= Conversation Events =============
   CONVERSATION_CREATED: "ConversationCreated",

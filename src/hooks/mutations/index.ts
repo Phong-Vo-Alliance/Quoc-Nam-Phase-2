@@ -4,6 +4,8 @@ export { useLogin, getLoginErrorMessage } from './useLogin';
 // Message mutations
 export { useSendMessage } from './useSendMessage';
 export { useRecallMessage } from './useRecallMessage';
+export { useConfirmMessage, useUnconfirmMessage } from './useConfirmMessage';
+export { useAddReaction, useRemoveReaction } from './useMessageReaction';
 export { useRecalledOriginalMessage } from './useRecalledOriginalMessage';
 
 // Pinned & Starred mutations

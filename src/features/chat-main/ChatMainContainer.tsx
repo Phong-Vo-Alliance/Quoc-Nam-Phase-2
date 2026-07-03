@@ -23,7 +23,13 @@ import {
   useUnpinConfirm,
   usePinReplaceGuard,
 } from "@/features/portal/components/chat/PinBar";
-import { useRecallMessage } from "@/hooks/mutations";
+import {
+  useRecallMessage,
+  useConfirmMessage,
+  useUnconfirmMessage,
+  useAddReaction,
+  useRemoveReaction,
+} from "@/hooks/mutations";
 import { useRecallConfirm } from "@/features/portal/components/chat/useRecallConfirm";
 import { RecallConfirmDialog } from "@/features/portal/components/chat/RecallConfirmDialog";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
@@ -266,6 +272,38 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
       (messageId: string) => recallMutation.mutate({ messageId }),
       [recallMutation],
     ),
+  );
+
+  // "Xác nhận tin nhắn" (multi-user acknowledgment) — POST/DELETE confirm.
+  // Cache tự cập nhật `confirmations` nên button/pill đổi trạng thái ngay.
+  const confirmMessageMutation = useConfirmMessage({ conversationId });
+  const unconfirmMessageMutation = useUnconfirmMessage({ conversationId });
+  const handleConfirmMessage = useCallback(
+    (messageId: string) => confirmMessageMutation.mutate({ messageId }),
+    [confirmMessageMutation],
+  );
+  const handleUnconfirmMessage = useCallback(
+    (messageId: string) => unconfirmMessageMutation.mutate({ messageId }),
+    [unconfirmMessageMutation],
+  );
+  // Id tin đang gọi API xác nhận (để nút CheckCircle2 hiện loading).
+  const confirmingMessageActionId = confirmMessageMutation.isPending
+    ? (confirmMessageMutation.variables?.messageId ?? null)
+    : null;
+
+  // "Thả cảm xúc tin nhắn" — POST/DELETE reaction. Cache tự cập nhật
+  // `reactions` nên chip đổi trạng thái ngay.
+  const addReactionMutation = useAddReaction({ conversationId });
+  const removeReactionMutation = useRemoveReaction({ conversationId });
+  const handleAddReaction = useCallback(
+    (messageId: string, emoji: string) =>
+      addReactionMutation.mutate({ messageId, emoji }),
+    [addReactionMutation],
+  );
+  const handleRemoveReaction = useCallback(
+    (messageId: string, emoji: string) =>
+      removeReactionMutation.mutate({ messageId, emoji }),
+    [removeReactionMutation],
   );
 
   // Resolve the task linked to a root message from the message cache.
@@ -594,6 +632,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   handleCreateTask(messageId, onCreateTaskFromMessage)
           }
           onConfirmInfo={isDirect ? undefined : handleConfirmInfo}
+          onConfirmMessage={handleConfirmMessage}
+          onUnconfirmMessage={handleUnconfirmMessage}
+          onAddReaction={handleAddReaction}
+          onRemoveReaction={handleRemoveReaction}
+          confirmingMessageActionId={confirmingMessageActionId}
           onRetry={(messageId: string) => handleRetry(messageId, messages)}
           onScrollToQuoted={handleScrollToQuoted}
           onTaskLogClick={onTaskLogClick}

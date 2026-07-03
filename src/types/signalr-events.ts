@@ -1,4 +1,8 @@
-import type { ChatMessage } from "@/types/messages";
+import type {
+  ChatMessage,
+  MessageConfirmation,
+  ReactionsMap,
+} from "@/types/messages";
 
 export type SignalRConnectionState =
   | "Disconnected"
@@ -191,19 +195,29 @@ export interface UserPresenceChangedEvent {
   timestamp: string;
 }
 
-// Reaction Events
+// Reaction Events (realtime): người khác thả/gỡ một cảm xúc trên tin nhắn.
+// Payload chính là DELTA một cặp (userId, emoji) → cache updater `setMessageReaction`
+// add/remove đúng một cặp (`fullName` ↔ ChatMessageReaction.userName).
+// `reactions` (tuỳ chọn) là SNAPSHOT nguyên map cảm xúc của tin sau thay đổi;
+// nếu backend đính kèm thì client ghi đè toàn bộ list thay vì áp delta.
 export interface ReactionAddedEvent {
   messageId: string;
+  conversationId: string;
   userId: string;
-  reactionType: string;
+  fullName: string | null;
+  emoji: string;
   timestamp: string;
+  reactions?: ReactionsMap;
 }
 
 export interface ReactionRemovedEvent {
   messageId: string;
+  conversationId: string;
   userId: string;
-  reactionType: string;
+  fullName: string | null;
+  emoji: string;
   timestamp: string;
+  reactions?: ReactionsMap;
 }
 
 // Threading Events
@@ -273,6 +287,21 @@ export interface MessageRecallCapabilityChangedEvent {
     recallExpiresAt: string | null;
     canViewOriginal: boolean;
   };
+}
+
+// Xác nhận tin nhắn (realtime): người khác xác nhận/bỏ xác nhận một tin. Cả hai
+// event mang NGUYÊN danh sách `confirmations` mới nhất của tin (không phải delta)
+// → cache updater ghi đè toàn bộ list để pill + số lượng khớp server ngay.
+export interface MessageConfirmedEvent {
+  messageId: string;
+  conversationId: string;
+  confirmations: MessageConfirmation[];
+}
+
+export interface MessageUnconfirmedEvent {
+  messageId: string;
+  conversationId: string;
+  confirmations: MessageConfirmation[];
 }
 
 export interface PinnedMessagesReorderedEvent {

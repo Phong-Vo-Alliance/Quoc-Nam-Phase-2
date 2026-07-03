@@ -151,11 +151,38 @@ export interface ChatMessageAttachment {
   size: number;
 }
 
-// Chat Message Reaction from API
+// Chat Message Reaction — shape PHẲNG dùng nội bộ (UI + cache + optimistic).
+// Mỗi phần tử là một cặp (emoji, người thả). Backend trả về dạng MAP
+// (`ReactionsMap`) → được `normalizeReactions` bung thành mảng này khi nhận.
 export interface ChatMessageReaction {
   emoji: string;
   userId: string;
   userName: string;
+}
+
+// Một người đã thả cảm xúc, theo shape backend gửi trong `ReactionsMap.users`.
+export interface ReactionUserDto {
+  id: string; // userId
+  name: string; // tên hiển thị
+  at: string; // ISO datetime thời điểm thả
+}
+
+// Reactions theo shape BACKEND: map keyed theo emoji →
+//   { "❤️": { count, users: [{ id, name, at }] }, "👍": {...} }
+// Đây là dạng trong response `GET messages` và (có thể) payload realtime.
+// Client chuẩn hoá về `ChatMessageReaction[]` ngay tại boundary (xem
+// `lib/reactions-normalize.ts`).
+export type ReactionsMap = Record<
+  string,
+  { count: number; users: ReactionUserDto[] }
+>;
+
+// Bộ emoji cảm xúc do server cấu hình (GET /api/reactions/emoji-config).
+// Tách theo loại hội thoại: DM và nhóm dùng bộ emoji khác nhau. Client KHÔNG
+// hardcode danh sách icon nữa mà lấy từ đây.
+export interface ReactionEmojiConfig {
+  dm: string[];
+  group: string[];
 }
 
 // Parent Message Preview for Reply Feature (LEGACY - Thread system)
@@ -187,6 +214,15 @@ export interface RecallInfo {
   canViewOriginal: boolean; // Người dùng hiện tại có được xem nội dung gốc không
 }
 
+// Xác nhận tin nhắn (multi-user acknowledgment) — mỗi phần tử là 1 người đã xác
+// nhận, lấy trực tiếp từ field `confirmations` của message trong
+// GET /api/conversations/{id}/messages.
+export interface MessageConfirmation {
+  userId: string; // id người đã xác nhận
+  fullName: string | null; // tên hiển thị
+  confirmedAt: string; // ISO datetime thời điểm xác nhận
+}
+
 // Chat Message from API (matches API contract from Swagger)
 export interface ChatMessage {
   id: string;
@@ -205,6 +241,8 @@ export interface ChatMessage {
   sentAt: string; // ISO datetime
   editedAt: string | null;
   linkedTaskId: string | null;
+  // Đã chuẩn hoá về mảng phẳng khi nhận (backend gửi `ReactionsMap`). Xem
+  // `normalizeReactions`. UI/cache/optimistic chỉ làm việc với mảng này.
   reactions: ChatMessageReaction[];
   attachments: AttachmentDto[]; // Updated to use AttachmentDto from Swagger
   replyCount: number;
@@ -214,6 +252,7 @@ export interface ChatMessage {
   threadPreview: unknown | null;
   mentions: MentionDto[]; // Array of mention metadata (updated from string[])
   recallInfo?: RecallInfo | null; // 🆕 Thông tin thu hồi tin nhắn (from API)
+  confirmations?: MessageConfirmation[]; // 🆕 Danh sách người đã xác nhận tin nhắn (from API)
 
   // Client-side fields for send status tracking (optional)
   sendStatus?: "sending" | "retrying" | "failed" | "sent";

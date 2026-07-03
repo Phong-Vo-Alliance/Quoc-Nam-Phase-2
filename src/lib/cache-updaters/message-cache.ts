@@ -3,7 +3,9 @@ import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 import { tasksKeys } from "@/hooks/queries/useTasks";
 import type {
   ChatMessage,
+  ChatMessageReaction,
   GetMessagesResponse,
+  MessageConfirmation,
   RecallInfo,
 } from "@/types/messages";
 
@@ -164,6 +166,211 @@ export function updateMessageRecallInfo(
         }
         pageChanged = true;
         return { ...msg, recallInfo: { ...recallInfo } };
+      });
+      if (!pageChanged) return page;
+      changed = true;
+      return { ...page, items };
+    });
+
+    return changed ? { ...old, pages } : old;
+  });
+}
+
+/**
+ * Thêm/gỡ một người xác nhận khỏi danh sách `confirmations` của một message
+ * trong conversation cache (in place) — để pill + button "Xác nhận" cập nhật
+ * ngay sau khi POST/DELETE thành công mà không refetch cả danh sách.
+ * No-op nếu conversation chưa cache hoặc message chưa load.
+ */
+export function setMessageConfirmation(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+  confirmer: MessageConfirmation,
+  confirmed: boolean,
+): void {
+  if (!conversationId || !messageId || !confirmer.userId) return;
+
+  queryClient.setQueryData<{
+    pages: GetMessagesResponse[];
+    pageParams: (string | undefined)[];
+  }>(messageKeys.conversation(conversationId), (old) => {
+    if (!old?.pages?.length) return old;
+
+    let changed = false;
+    const pages = old.pages.map((page) => {
+      let pageChanged = false;
+      const items = page.items.map((msg) => {
+        if (msg.id !== messageId) return msg;
+
+        const current = msg.confirmations ?? [];
+        const already = current.some((c) => c.userId === confirmer.userId);
+
+        // Không thay đổi trạng thái → giữ nguyên object, tránh re-render thừa.
+        if (confirmed === already) return msg;
+
+        const next = confirmed
+          ? [...current, confirmer]
+          : current.filter((c) => c.userId !== confirmer.userId);
+
+        pageChanged = true;
+        return { ...msg, confirmations: next };
+      });
+      if (!pageChanged) return page;
+      changed = true;
+      return { ...page, items };
+    });
+
+    return changed ? { ...old, pages } : old;
+  });
+}
+
+/**
+ * Ghi đè TOÀN BỘ danh sách `confirmations` của một message trong conversation
+ * cache (in place) — dùng cho realtime `MessageConfirmed`/`MessageUnconfirmed`,
+ * nơi server đẩy nguyên list mới nhất (không phải delta). Pill + số lượng cập
+ * nhật ngay mà không refetch cả danh sách.
+ * No-op nếu conversation chưa cache, message chưa load, hoặc list không đổi
+ * (so khớp userId + confirmedAt theo thứ tự) để tránh re-render thừa.
+ */
+export function setMessageConfirmations(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+  confirmations: MessageConfirmation[],
+): void {
+  if (!conversationId || !messageId || !confirmations) return;
+
+  queryClient.setQueryData<{
+    pages: GetMessagesResponse[];
+    pageParams: (string | undefined)[];
+  }>(messageKeys.conversation(conversationId), (old) => {
+    if (!old?.pages?.length) return old;
+
+    let changed = false;
+    const pages = old.pages.map((page) => {
+      let pageChanged = false;
+      const items = page.items.map((msg) => {
+        if (msg.id !== messageId) return msg;
+
+        const current = msg.confirmations ?? [];
+        const same =
+          current.length === confirmations.length &&
+          current.every(
+            (c, i) =>
+              c.userId === confirmations[i].userId &&
+              c.confirmedAt === confirmations[i].confirmedAt,
+          );
+        if (same) return msg;
+
+        pageChanged = true;
+        return { ...msg, confirmations: [...confirmations] };
+      });
+      if (!pageChanged) return page;
+      changed = true;
+      return { ...page, items };
+    });
+
+    return changed ? { ...old, pages } : old;
+  });
+}
+
+/**
+ * Thêm/gỡ một cảm xúc (cặp userId + emoji) trong danh sách `reactions` của một
+ * message trong conversation cache (in place) — để chip cảm xúc cập nhật ngay
+ * sau khi POST/DELETE thành công mà không refetch cả danh sách. Mỗi user có thể
+ * thả nhiều emoji khác nhau; mỗi cặp (userId, emoji) là độc lập.
+ * No-op nếu conversation chưa cache, message chưa load, hoặc trạng thái không đổi.
+ */
+export function setMessageReaction(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+  reaction: ChatMessageReaction,
+  added: boolean,
+): void {
+  if (!conversationId || !messageId || !reaction.userId || !reaction.emoji) {
+    return;
+  }
+
+  queryClient.setQueryData<{
+    pages: GetMessagesResponse[];
+    pageParams: (string | undefined)[];
+  }>(messageKeys.conversation(conversationId), (old) => {
+    if (!old?.pages?.length) return old;
+
+    let changed = false;
+    const pages = old.pages.map((page) => {
+      let pageChanged = false;
+      const items = page.items.map((msg) => {
+        if (msg.id !== messageId) return msg;
+
+        const current = Array.isArray(msg.reactions) ? msg.reactions : [];
+        const already = current.some(
+          (r) => r.userId === reaction.userId && r.emoji === reaction.emoji,
+        );
+
+        // Không đổi trạng thái → giữ nguyên object, tránh re-render thừa.
+        if (added === already) return msg;
+
+        const next = added
+          ? [...current, reaction]
+          : current.filter(
+              (r) =>
+                !(r.userId === reaction.userId && r.emoji === reaction.emoji),
+            );
+
+        pageChanged = true;
+        return { ...msg, reactions: next };
+      });
+      if (!pageChanged) return page;
+      changed = true;
+      return { ...page, items };
+    });
+
+    return changed ? { ...old, pages } : old;
+  });
+}
+
+/**
+ * Ghi đè TOÀN BỘ danh sách `reactions` (đã chuẩn hoá mảng phẳng) của một message
+ * trong conversation cache (in place) — dùng cho realtime khi server đẩy nguyên
+ * snapshot cảm xúc của tin (map keyed emoji, đã bung mảng) thay vì delta một cặp.
+ * No-op nếu conversation chưa cache, message chưa load, hoặc list không đổi
+ * (so khớp emoji + userId theo thứ tự) để tránh re-render thừa.
+ */
+export function setMessageReactions(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+  reactions: ChatMessageReaction[],
+): void {
+  if (!conversationId || !messageId || !reactions) return;
+
+  queryClient.setQueryData<{
+    pages: GetMessagesResponse[];
+    pageParams: (string | undefined)[];
+  }>(messageKeys.conversation(conversationId), (old) => {
+    if (!old?.pages?.length) return old;
+
+    let changed = false;
+    const pages = old.pages.map((page) => {
+      let pageChanged = false;
+      const items = page.items.map((msg) => {
+        if (msg.id !== messageId) return msg;
+
+        const current = Array.isArray(msg.reactions) ? msg.reactions : [];
+        const same =
+          current.length === reactions.length &&
+          current.every(
+            (c, i) =>
+              c.emoji === reactions[i].emoji &&
+              c.userId === reactions[i].userId,
+          );
+        if (same) return msg;
+
+        pageChanged = true;
+        return { ...msg, reactions: [...reactions] };
       });
       if (!pageChanged) return page;
       changed = true;

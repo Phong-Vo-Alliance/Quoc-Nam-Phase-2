@@ -120,15 +120,31 @@ describe("signalr-event-dispatcher", () => {
   // ────────────────────────────────────────────────────────
 
   describe("registerAllEventHandlers", () => {
-    it("registers 19 event handlers", () => {
+    it("registers 26 event handlers", () => {
       registerAllEventHandlers(queryClient);
-      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(19);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledTimes(26);
     });
 
-    it("returns 19 cleanup functions", () => {
+    it("returns 26 cleanup functions", () => {
       const cleanups = registerAllEventHandlers(queryClient);
-      expect(cleanups).toHaveLength(19);
+      expect(cleanups).toHaveLength(26);
       cleanups.forEach((fn) => expect(typeof fn).toBe("function"));
+    });
+
+    it("registers handler for REACTION_ADDED", () => {
+      registerAllEventHandlers(queryClient);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledWith(
+        SIGNALR_EVENTS.REACTION_ADDED,
+        expect.any(Function),
+      );
+    });
+
+    it("registers handler for REACTION_REMOVED", () => {
+      registerAllEventHandlers(queryClient);
+      expect(chatHub.onWithCleanup).toHaveBeenCalledWith(
+        SIGNALR_EVENTS.REACTION_REMOVED,
+        expect.any(Function),
+      );
     });
 
     it("registers handler for MESSAGE_SENT", () => {

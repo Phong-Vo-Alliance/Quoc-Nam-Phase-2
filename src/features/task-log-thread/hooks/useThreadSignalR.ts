@@ -3,7 +3,14 @@ import type { ChatMessage, ThreadDto } from "@/types/messages";
 import { getMessageThread } from "@/api/messages.api";
 import { chatHub, SIGNALR_EVENTS } from "@/lib/signalr";
 import type { ThreadUpdatedEvent } from "@/lib/signalr";
-import type { MessageRecalledEvent } from "@/types/signalr-events";
+import { normalizeReactions } from "@/lib/reactions-normalize";
+import type {
+  MessageRecalledEvent,
+  MessageConfirmedEvent,
+  MessageUnconfirmedEvent,
+  ReactionAddedEvent,
+  ReactionRemovedEvent,
+} from "@/types/signalr-events";
 import type { useMarkConversationAsRead } from "@/hooks/mutations/useMarkConversationAsRead";
 
 /**
@@ -142,6 +149,129 @@ export function useThreadSignalR({
       });
     };
 
+    // Xác nhận tin nhắn (realtime) trong thread: người khác xác nhận/bỏ xác nhận.
+    // Cả hai event mang NGUYÊN danh sách confirmations mới nhất → ghi đè list trên
+    // reply/parent tương ứng. Reply nằm trong threadData local (không phải
+    // conversation cache mà dispatcher cập nhật), nên thread phải tự lắng nghe.
+    // No-op nếu messageId không thuộc thread này hoặc list không đổi.
+    const handleConfirmations = (
+      event: MessageConfirmedEvent | MessageUnconfirmedEvent,
+    ) => {
+      if (!event?.messageId || !event?.confirmations) return;
+
+      const overwrite = (msg: ChatMessage): ChatMessage => {
+        const current = msg.confirmations ?? [];
+        const same =
+          current.length === event.confirmations.length &&
+          current.every(
+            (c, i) =>
+              c.userId === event.confirmations[i].userId &&
+              c.confirmedAt === event.confirmations[i].confirmedAt,
+          );
+        if (same) return msg;
+        return { ...msg, confirmations: [...event.confirmations] };
+      };
+
+      setThreadData((prev) => {
+        if (!prev) return prev;
+
+        let changed = false;
+        const replies = (prev.replies ?? []).map((r) => {
+          if (r.id !== event.messageId) return r;
+          const next = overwrite(r);
+          if (next !== r) changed = true;
+          return next;
+        });
+
+        let parentMessage = prev.parentMessage;
+        if (parentMessage?.id === event.messageId) {
+          const next = overwrite(parentMessage);
+          if (next !== parentMessage) {
+            parentMessage = next;
+            changed = true;
+          }
+        }
+
+        if (!changed) return prev;
+        return { ...prev, replies, parentMessage };
+      });
+    };
+
+    // Thả/gỡ cảm xúc (realtime) trong thread: người khác react lên reply/parent.
+    // Mirror logic dispatcher tin ngoài — nếu event kèm SNAPSHOT `reactions` (map)
+    // thì bung mảng và GHI ĐÈ toàn bộ list (luôn khớp server, không lệ thuộc thứ
+    // tự event); ngược lại áp DELTA đúng một cặp (userId, emoji). Reply nằm trong
+    // threadData local nên thread phải tự lắng nghe. No-op nếu messageId không
+    // thuộc thread này hoặc trạng thái không đổi (guard chống re-render + chống
+    // xử lý lặp khi server echo lại chính lần react của user — đã flip local).
+    const handleReaction = (
+      event: ReactionAddedEvent | ReactionRemovedEvent,
+      added: boolean,
+    ) => {
+      if (!event?.messageId) return;
+      const hasSnapshot = !!event.reactions && typeof event.reactions === "object";
+      if (!hasSnapshot && (!event.userId || !event.emoji)) return;
+
+      const apply = (msg: ChatMessage): ChatMessage => {
+        if (hasSnapshot) {
+          const next = normalizeReactions(event.reactions);
+          const current = Array.isArray(msg.reactions) ? msg.reactions : [];
+          const same =
+            current.length === next.length &&
+            current.every(
+              (c, i) =>
+                c.emoji === next[i].emoji && c.userId === next[i].userId,
+            );
+          return same ? msg : { ...msg, reactions: next };
+        }
+
+        const current = Array.isArray(msg.reactions) ? msg.reactions : [];
+        const already = current.some(
+          (r) => r.userId === event.userId && r.emoji === event.emoji,
+        );
+        if (added === already) return msg;
+        return {
+          ...msg,
+          reactions: added
+            ? [
+                ...current,
+                {
+                  emoji: event.emoji,
+                  userId: event.userId,
+                  userName: event.fullName ?? "Người dùng",
+                },
+              ]
+            : current.filter(
+                (r) => !(r.userId === event.userId && r.emoji === event.emoji),
+              ),
+        };
+      };
+
+      setThreadData((prev) => {
+        if (!prev) return prev;
+
+        let changed = false;
+        const replies = (prev.replies ?? []).map((r) => {
+          if (r.id !== event.messageId) return r;
+          const next = apply(r);
+          if (next !== r) changed = true;
+          return next;
+        });
+
+        let parentMessage = prev.parentMessage;
+        if (parentMessage?.id === event.messageId) {
+          const next = apply(parentMessage);
+          if (next !== parentMessage) {
+            parentMessage = next;
+            changed = true;
+          }
+        }
+
+        if (!changed) return prev;
+        return { ...prev, replies, parentMessage };
+      });
+    };
+
     const cleanupThreadUpdated = chatHub.onWithCleanup(
       "ThreadUpdated",
       handleThreadUpdated,
@@ -154,9 +284,39 @@ export function useThreadSignalR({
       false,
     );
 
+    const cleanupMessageConfirmed =
+      chatHub.onWithCleanup<MessageConfirmedEvent>(
+        SIGNALR_EVENTS.MESSAGE_CONFIRMED,
+        handleConfirmations,
+        false,
+      );
+
+    const cleanupMessageUnconfirmed =
+      chatHub.onWithCleanup<MessageUnconfirmedEvent>(
+        SIGNALR_EVENTS.MESSAGE_UNCONFIRMED,
+        handleConfirmations,
+        false,
+      );
+
+    const cleanupReactionAdded = chatHub.onWithCleanup<ReactionAddedEvent>(
+      SIGNALR_EVENTS.REACTION_ADDED,
+      (event) => handleReaction(event, true),
+      false,
+    );
+
+    const cleanupReactionRemoved = chatHub.onWithCleanup<ReactionRemovedEvent>(
+      SIGNALR_EVENTS.REACTION_REMOVED,
+      (event) => handleReaction(event, false),
+      false,
+    );
+
     return () => {
       cleanupThreadUpdated();
       cleanupMessageRecalled();
+      cleanupMessageConfirmed();
+      cleanupMessageUnconfirmed();
+      cleanupReactionAdded();
+      cleanupReactionRemoved();
     };
   }, [open, parentMessageId, markAsRead, setThreadData]);
 }
