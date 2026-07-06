@@ -582,25 +582,29 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         </div>
       )}
 
-      {/* Message list */}
-      <div
-        ref={messagesContainerRef}
-        className={`flex-1 p-4 space-y-0.5 min-h-0 bg-gray-50 ${
-          messages.length > 0
-            ? "overflow-y-auto scrollbar-thin"
-            : "overflow-y-hidden"
-        }`}
-        data-testid="message-list"
-      >
-        {/* Network status banner — floats over the list (sticky, h-0) so it
-            never changes the message list height when it appears/disappears */}
+      {/* Message list (with network banner overlaid at the top) */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        {/* Network status banner — pinned absolutely to the top of the message
+            area so it overlays the messages right under the pin bar without
+            changing the message list height. */}
         {(isOnline === false || wasOffline) && (
-          <OfflineBanner isOnline={isOnline} wasOffline={wasOffline} />
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-4">
+            <OfflineBanner isOnline={isOnline} wasOffline={wasOffline} />
+          </div>
         )}
-        <JumpToUnreadPill
-          firstUnreadMessageId={firstUnreadMessageId}
-          containerRef={messagesContainerRef}
-        />
+        <div
+          ref={messagesContainerRef}
+          className={`flex-1 p-4 space-y-0.5 min-h-0 bg-gray-50 ${
+            messages.length > 0
+              ? "overflow-y-auto scrollbar-thin"
+              : "overflow-y-hidden"
+          }`}
+          data-testid="message-list"
+        >
+          <JumpToUnreadPill
+            firstUnreadMessageId={firstUnreadMessageId}
+            containerRef={messagesContainerRef}
+          />
         <MessageList
           messagesByDate={messagesByDate}
           groupedMessages={groupedMessages}
@@ -642,7 +646,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           onImageClick={openImagePreview}
         />
 
-        <div ref={bottomRef} />
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {/* Go to Bottom Button */}
