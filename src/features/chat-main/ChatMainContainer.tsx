@@ -582,13 +582,6 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         </div>
       )}
 
-      {/* Network status banner */}
-      {(isOnline === false || wasOffline) && (
-        <div className="px-4">
-          <OfflineBanner isOnline={isOnline} wasOffline={wasOffline} />
-        </div>
-      )}
-
       {/* Message list */}
       <div
         ref={messagesContainerRef}
@@ -599,6 +592,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         }`}
         data-testid="message-list"
       >
+        {/* Network status banner — floats over the list (sticky, h-0) so it
+            never changes the message list height when it appears/disappears */}
+        {(isOnline === false || wasOffline) && (
+          <OfflineBanner isOnline={isOnline} wasOffline={wasOffline} />
+        )}
         <JumpToUnreadPill
           firstUnreadMessageId={firstUnreadMessageId}
           containerRef={messagesContainerRef}
