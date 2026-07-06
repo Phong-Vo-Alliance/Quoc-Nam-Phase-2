@@ -91,8 +91,18 @@ export const MessageReactionPicker: React.FC<MessageReactionPickerProps> = ({
       // rowLeft là offset so với mép trái nút (offset parent).
       const scrollParent = getScrollParent(btnRef.current);
       const parentRect = scrollParent?.getBoundingClientRect();
-      const boundLeft = parentRect ? parentRect.left : 0;
-      const boundRight = parentRect ? parentRect.right : window.innerWidth;
+      // Clamp theo CONTENT-BOX của khung cuộn (clientLeft + clientWidth), KHÔNG
+      // dùng rect.right — vì rect.right (border-box) bao gồm cả thanh scrollbar
+      // dọc (~15px trên Windows). Clamp tới rect.right sẽ đẩy mép phải hàng emoji
+      // lọt vào vùng scrollbar, vượt quá clientWidth → sinh scroll ngang vài px.
+      const boundLeft =
+        scrollParent && parentRect
+          ? parentRect.left + scrollParent.clientLeft
+          : 0;
+      const boundRight =
+        scrollParent && parentRect
+          ? parentRect.left + scrollParent.clientLeft + scrollParent.clientWidth
+          : window.innerWidth;
       const buttonCenter = rect.left + rect.width / 2;
       const minLeft = boundLeft + EDGE_MARGIN;
       const maxLeft = boundRight - ROW_WIDTH - EDGE_MARGIN;
