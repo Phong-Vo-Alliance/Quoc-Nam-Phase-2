@@ -43,33 +43,48 @@ function singleAttachmentNoun(message: ChatMessage): string {
 }
 
 /**
- * Build the system message content for a pin/unpin action:
- * - has text (with or without files) → "… ghim tin nhắn [20 ký tự đầu]"
- * - exactly one attachment           → "… ghim một hình ảnh/video/tệp"
- * - multiple attachments             → "… ghim nhiều tệp đính kèm"
+ * The object phrase for a pinned message (everything after the verb):
+ * - has text (with or without files) → "tin nhắn [20 ký tự đầu]"
+ * - exactly one attachment           → "một hình ảnh/video/tệp"
+ * - multiple attachments             → "nhiều tệp đính kèm"
+ */
+function pinObjectPhrase(message: ChatMessage): string {
+  const text = message.content?.trim();
+  if (text) return `tin nhắn ${truncatePreview(text)}`;
+
+  const attachments = message.attachments ?? [];
+  if (attachments.length === 1) return singleAttachmentNoun(message);
+  if (attachments.length > 1) return "nhiều tệp đính kèm";
+
+  // No text and no attachments — practically unreachable, keep a sane default.
+  return "tin nhắn";
+}
+
+/**
+ * Build the system message content for a pin/unpin action, e.g.
+ * "[tên] đã ghim tin nhắn Xin chào…" / "[tên] đã bỏ ghim một hình ảnh".
  */
 export function buildPinSystemContent(
   action: PinAction,
   actorName: string,
   message: ChatMessage,
 ): string {
-  const verb = actionVerb(action);
-  const text = message.content?.trim();
+  return `${actorName} ${actionVerb(action)} ${pinObjectPhrase(message)}`;
+}
 
-  if (text) {
-    return `${actorName} ${verb} tin nhắn ${truncatePreview(text)}`;
-  }
-
-  const attachments = message.attachments ?? [];
-  if (attachments.length === 1) {
-    return `${actorName} ${verb} ${singleAttachmentNoun(message)}`;
-  }
-  if (attachments.length > 1) {
-    return `${actorName} ${verb} nhiều tệp đính kèm`;
-  }
-
-  // No text and no attachments — practically unreachable, keep a sane default.
-  return `${actorName} ${verb} tin nhắn`;
+/**
+ * Combined content for a pin-that-replaces-others action (over-limit cleanup),
+ * so the conversation gets ONE notice instead of N "đã bỏ ghim" + 1 "đã ghim":
+ * "[tên] đã ghim tin nhắn … và bỏ ghim N tin đã ghim trước đó".
+ */
+export function buildPinReplaceSystemContent(
+  actorName: string,
+  newMessage: ChatMessage,
+  replacedCount: number,
+): string {
+  const base = `${actorName} đã ghim ${pinObjectPhrase(newMessage)}`;
+  if (replacedCount <= 0) return base;
+  return `${base} và bỏ ghim ${replacedCount} tin đã ghim trước đó`;
 }
 
 export function buildReorderSystemContent(actorName: string): string {
@@ -133,6 +148,28 @@ export function sendPinSystemMessage(
   const message = findMessage(queryClient, conversationId, messageId);
   if (!message) return;
   const content = buildPinSystemContent(action, getActorName(), message);
+  void sendSystemMessage(conversationId, content);
+}
+
+/**
+ * Fire-and-forget combined SYS message for an over-limit replace: pin the new
+ * message and drop `replacedCount` old ones in a single notice. No-op if the
+ * new message isn't cached.
+ */
+export function sendPinReplaceSystemMessage(
+  queryClient: QueryClient,
+  conversationId: string,
+  newMessageId: string,
+  replacedCount: number,
+): void {
+  if (!conversationId || !newMessageId) return;
+  const message = findMessage(queryClient, conversationId, newMessageId);
+  if (!message) return;
+  const content = buildPinReplaceSystemContent(
+    getActorName(),
+    message,
+    replacedCount,
+  );
   void sendSystemMessage(conversationId, content);
 }
 

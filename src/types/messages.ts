@@ -152,11 +152,38 @@ export interface ChatMessageAttachment {
   size: number;
 }
 
-// Chat Message Reaction from API
+// Chat Message Reaction — shape PHẲNG dùng nội bộ (UI + cache + optimistic).
+// Mỗi phần tử là một cặp (emoji, người thả). Backend trả về dạng MAP
+// (`ReactionsMap`) → được `normalizeReactions` bung thành mảng này khi nhận.
 export interface ChatMessageReaction {
   emoji: string;
   userId: string;
   userName: string;
+}
+
+// Một người đã thả cảm xúc, theo shape backend gửi trong `ReactionsMap.users`.
+export interface ReactionUserDto {
+  id: string; // userId
+  name: string; // tên hiển thị
+  at: string; // ISO datetime thời điểm thả
+}
+
+// Reactions theo shape BACKEND: map keyed theo emoji →
+//   { "❤️": { count, users: [{ id, name, at }] }, "👍": {...} }
+// Đây là dạng trong response `GET messages` và (có thể) payload realtime.
+// Client chuẩn hoá về `ChatMessageReaction[]` ngay tại boundary (xem
+// `lib/reactions-normalize.ts`).
+export type ReactionsMap = Record<
+  string,
+  { count: number; users: ReactionUserDto[] }
+>;
+
+// Bộ emoji cảm xúc do server cấu hình (GET /api/reactions/emoji-config).
+// Tách theo loại hội thoại: DM và nhóm dùng bộ emoji khác nhau. Client KHÔNG
+// hardcode danh sách icon nữa mà lấy từ đây.
+export interface ReactionEmojiConfig {
+  dm: string[];
+  group: string[];
 }
 
 // Parent Message Preview for Reply Feature (LEGACY - Thread system)
@@ -178,6 +205,25 @@ export interface QuotedMessageDto {
   attachments?: AttachmentDto[]; // 🆕 v1.2.0 - Attachment preview in quote
 }
 
+// Recall info for "Thu hồi tin nhắn" feature (from API)
+export interface RecallInfo {
+  isRecalled: boolean; // Tin đã bị thu hồi hay chưa — cờ duy nhất quyết định hiển thị trạng thái thu hồi
+  recalledAt: string | null; // ISO datetime thời điểm thu hồi
+  recalledBy: string | null; // userId người thu hồi
+  canRecall: boolean; // Người dùng hiện tại có quyền thu hồi tin này không
+  recallExpiresAt: string | null; // ISO datetime hết hạn quyền thu hồi
+  canViewOriginal: boolean; // Người dùng hiện tại có được xem nội dung gốc không
+}
+
+// Xác nhận tin nhắn (multi-user acknowledgment) — mỗi phần tử là 1 người đã xác
+// nhận, lấy trực tiếp từ field `confirmations` của message trong
+// GET /api/conversations/{id}/messages.
+export interface MessageConfirmation {
+  userId: string; // id người đã xác nhận
+  fullName: string | null; // tên hiển thị
+  confirmedAt: string; // ISO datetime thời điểm xác nhận
+}
+
 // Chat Message from API (matches API contract from Swagger)
 export interface ChatMessage {
   id: string;
@@ -196,6 +242,8 @@ export interface ChatMessage {
   sentAt: string; // ISO datetime
   editedAt: string | null;
   linkedTaskId: string | null;
+  // Đã chuẩn hoá về mảng phẳng khi nhận (backend gửi `ReactionsMap`). Xem
+  // `normalizeReactions`. UI/cache/optimistic chỉ làm việc với mảng này.
   reactions: ChatMessageReaction[];
   attachments: AttachmentDto[]; // Updated to use AttachmentDto from Swagger
   replyCount: number;
@@ -204,6 +252,8 @@ export interface ChatMessage {
   isPinned: boolean;
   threadPreview: unknown | null;
   mentions: MentionDto[]; // Array of mention metadata (updated from string[])
+  recallInfo?: RecallInfo | null; // 🆕 Thông tin thu hồi tin nhắn (from API)
+  confirmations?: MessageConfirmation[]; // 🆕 Danh sách người đã xác nhận tin nhắn (from API)
 
   // Client-side fields for send status tracking (optional)
   sendStatus?: "sending" | "retrying" | "failed" | "sent";
@@ -212,6 +262,31 @@ export interface ChatMessage {
 
   // Client-side: used by PIN_NOTIFICATION messages to identify the pinned message
   pinTargetMessageId?: string;
+}
+
+// Response for GET /api/admin/messages/{id}/recalled-original
+// Nội dung gốc của tin đã thu hồi (cho người có canViewOriginal). Trả về text gốc,
+// số lượng đính kèm và CHI TIẾT đính kèm (`attachments`) để xem lại ảnh/file đã xóa.
+// API vẫn KHÔNG trả về mentions/quotedMessage.
+export interface RecalledOriginalMessageDto {
+  messageId: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  recalledOriginalContent: string | null; // Nội dung text gốc để hiển thị
+  sentAt: string; // ISO datetime
+  recalledAt: string; // ISO datetime
+  recalledBy: string; // userId người thu hồi
+  recalledByName: string;
+  attachmentCount: number; // Số đính kèm gốc (kiểm chứng với attachments.length)
+  attachments: AttachmentDto[]; // Chi tiết đính kèm gốc để xem lại (ảnh/file)
+  viewerRole: string; // Vai trò người xem (vd: "SystemAdmin")
+}
+
+// Tùy chọn khi mở preview ảnh/file từ bubble. Dùng để chặn tải về với đính kèm
+// của tin đã thu hồi (xem lại được nhưng KHÔNG cho download dù canDownload = true).
+export interface PreviewOpenOptions {
+  disableDownload?: boolean;
 }
 
 // API Response for GET messages

@@ -76,6 +76,18 @@ interface FeatureFlags {
   enableSignalR: boolean;
   enableDebugLogs: boolean;
   enableReactQueryDevTools: boolean;
+  /** Hiển thị avatar thành viên trong nhóm (mặc định false) */
+  showMemberAvatar: boolean;
+  /**
+   * Bật tính năng "Xác nhận tin nhắn" (multi-user ack): nút hover + pill.
+   * Mặc định BẬT; đặt VITE_ENABLE_MESSAGE_CONFIRM=false để ẩn (vd brand Alliance).
+   */
+  enableMessageConfirm: boolean;
+  /**
+   * Bật tính năng "Thả cảm xúc tin nhắn" (reaction): nút thả ở góc bubble + thanh chip.
+   * Mặc định TẮT (opt-in); đặt VITE_ENABLE_MESSAGE_REACTION=true để hiển thị.
+   */
+  enableMessageReaction: boolean;
 }
 
 const DEV_FEATURE_FLAGS: FeatureFlags = {
@@ -83,6 +95,13 @@ const DEV_FEATURE_FLAGS: FeatureFlags = {
   enableDebugLogs: import.meta.env.VITE_DEV_ENABLE_DEBUG_LOGS === "true",
   enableReactQueryDevTools:
     import.meta.env.VITE_DEV_ENABLE_REACT_QUERY_DEVTOOLS === "true",
+  showMemberAvatar: import.meta.env.VITE_SHOW_MEMBER_AVATAR === "true",
+  // Mặc định bật, chỉ tắt khi khai báo tường minh =false.
+  enableMessageConfirm:
+    import.meta.env.VITE_ENABLE_MESSAGE_CONFIRM !== "false",
+  // Mặc định tắt (opt-in), chỉ bật khi khai báo tường minh =true.
+  enableMessageReaction:
+    import.meta.env.VITE_ENABLE_MESSAGE_REACTION === "true",
 };
 
 const PROD_FEATURE_FLAGS: FeatureFlags = {
@@ -90,6 +109,13 @@ const PROD_FEATURE_FLAGS: FeatureFlags = {
   enableDebugLogs: import.meta.env.VITE_PROD_ENABLE_DEBUG_LOGS === "false",
   enableReactQueryDevTools:
     import.meta.env.VITE_PROD_ENABLE_REACT_QUERY_DEVTOOLS === "false",
+  showMemberAvatar: import.meta.env.VITE_SHOW_MEMBER_AVATAR === "true",
+  // Mặc định bật, chỉ tắt khi khai báo tường minh =false.
+  enableMessageConfirm:
+    import.meta.env.VITE_ENABLE_MESSAGE_CONFIRM !== "false",
+  // Mặc định tắt (opt-in), chỉ bật khi khai báo tường minh =true.
+  enableMessageReaction:
+    import.meta.env.VITE_ENABLE_MESSAGE_REACTION === "true",
 };
 
 export const FEATURE_FLAGS: FeatureFlags = isProduction

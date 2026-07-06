@@ -2,6 +2,7 @@
 // Handles API calls for chat messages
 
 import { apiClient } from "./client";
+import { normalizeMessageReactions } from "@/lib/reactions-normalize";
 import type {
   GetMessagesResponse,
   SendChatMessageRequest,
@@ -9,7 +10,17 @@ import type {
   LinkTaskToMessageRequest,
   LinkTaskToMessageResponse,
   ThreadDto,
+  RecalledOriginalMessageDto,
+  ReactionEmojiConfig,
 } from "@/types/messages";
+
+// Backend trả reactions dạng map keyed theo emoji → chuẩn hoá về mảng phẳng
+// (shape nội bộ) cho từng message ngay tại API boundary, để cache luôn giữ mảng.
+function normalizeMessagesResponse(
+  res: GetMessagesResponse,
+): GetMessagesResponse {
+  return { ...res, items: res.items.map(normalizeMessageReactions) };
+}
 
 interface GetMessagesParams {
   conversationId: string;
@@ -36,7 +47,7 @@ export const getMessages = async ({
     `/api/conversations/${conversationId}/messages`,
     { params },
   );
-  return response.data;
+  return normalizeMessagesResponse(response.data);
 };
 
 /**
@@ -59,7 +70,7 @@ export const sendMessage = async (
     data,
     options,
   );
-  return response.data;
+  return normalizeMessageReactions(response.data);
 };
 
 /**
@@ -109,7 +120,7 @@ export const editMessage = async (
     `/api/messages/${messageId}`,
     { content },
   );
-  return response.data;
+  return normalizeMessageReactions(response.data);
 };
 
 /**
@@ -124,6 +135,86 @@ export const linkTaskToMessage = async (
   const response = await apiClient.patch<LinkTaskToMessageResponse>(
     `/api/messages/${messageId}/link-task`,
     payload,
+  );
+  return response.data;
+};
+
+/**
+ * POST /api/messages/{id}/recall
+ * Thu hồi một tin nhắn (recall). Quyền thu hồi do server quyết định
+ * (recallInfo.canRecall trên từng message).
+ */
+export const recallMessage = async (messageId: string): Promise<void> => {
+  await apiClient.post(`/api/messages/${messageId}/recall`);
+};
+
+/**
+ * POST /api/messages/{messageId}/confirm
+ * Xác nhận đã đọc một tin nhắn (multi-user acknowledgment). Thêm user hiện tại
+ * vào danh sách `confirmations` của message.
+ */
+export const confirmMessage = async (messageId: string): Promise<void> => {
+  await apiClient.post(`/api/messages/${messageId}/confirm`);
+};
+
+/**
+ * DELETE /api/messages/{messageId}/confirm
+ * Bỏ xác nhận một tin nhắn. Gỡ user hiện tại khỏi danh sách `confirmations`.
+ */
+export const unconfirmMessage = async (messageId: string): Promise<void> => {
+  await apiClient.delete(`/api/messages/${messageId}/confirm`);
+};
+
+/**
+ * POST /api/messages/{messageId}/reactions
+ * Thả một cảm xúc (reaction) lên tin nhắn. Body: { emoji }.
+ */
+export const addReaction = async (
+  messageId: string,
+  emoji: string,
+): Promise<void> => {
+  await apiClient.post(`/api/messages/${messageId}/reactions`, { emoji });
+};
+
+/**
+ * DELETE /api/messages/{messageId}/reactions/{emoji}
+ * Gỡ cảm xúc của user hiện tại khỏi tin nhắn. `emoji` phải được URL-encode
+ * (vd 👍 → %F0%9F%91%8D) vì nằm trên path.
+ */
+export const removeReaction = async (
+  messageId: string,
+  emoji: string,
+): Promise<void> => {
+  await apiClient.delete(
+    `/api/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
+  );
+};
+
+/**
+ * GET /api/reactions/emoji-config
+ * Lấy bộ emoji cảm xúc do server cấu hình, tách theo loại hội thoại (dm/group).
+ * Client dùng danh sách này để render picker thay vì hardcode icon.
+ */
+export const getReactionEmojiConfig =
+  async (): Promise<ReactionEmojiConfig> => {
+    const response = await apiClient.get<ReactionEmojiConfig>(
+      `/api/reactions/emoji-config`,
+    );
+    return response.data;
+  };
+
+/**
+ * GET /api/admin/messages/{id}/recalled-original
+ * Lấy nội dung gốc của một tin nhắn đã thu hồi (cho người có quyền xem gốc —
+ * recallInfo.canViewOriginal === true). Trả về DTO gồm `recalledOriginalContent`
+ * (text gốc) + metadata + `attachments` (chi tiết đính kèm gốc để xem lại ảnh/file);
+ * KHÔNG kèm mentions/quote.
+ */
+export const getRecalledOriginalMessage = async (
+  messageId: string,
+): Promise<RecalledOriginalMessageDto> => {
+  const response = await apiClient.get<RecalledOriginalMessageDto>(
+    `/api/admin/messages/${messageId}/recalled-original`,
   );
   return response.data;
 };
@@ -155,7 +246,7 @@ export const getMessagesAround = async (params: {
     },
   );
 
-  return response.data;
+  return normalizeMessagesResponse(response.data);
 };
 
 /**
@@ -185,7 +276,7 @@ export const getMessagesAfter = async (params: {
     },
   );
 
-  return response.data;
+  return normalizeMessagesResponse(response.data);
 };
 
 /**
@@ -224,5 +315,10 @@ export const getMessageThread = async (params: {
     { params: queryParams },
   );
 
-  return response.data;
+  const data = response.data;
+  return {
+    ...data,
+    parentMessage: normalizeMessageReactions(data.parentMessage),
+    replies: data.replies ? data.replies.map(normalizeMessageReactions) : data.replies,
+  };
 };

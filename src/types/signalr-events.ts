@@ -1,4 +1,8 @@
-import type { ChatMessage } from "@/types/messages";
+import type {
+  ChatMessage,
+  MessageConfirmation,
+  ReactionsMap,
+} from "@/types/messages";
 
 export type SignalRConnectionState =
   | "Disconnected"
@@ -142,7 +146,8 @@ export interface TaskUpdatePayload {
     | "checklist_item_added"
     | "reassigned"
     | "deleted";
-  task: {
+  // Can be null/undefined for some events (e.g. "deleted") or partial payloads.
+  task?: {
     id: string;
     title: string;
     statusCode: string;
@@ -153,7 +158,7 @@ export interface TaskUpdatePayload {
     completionPercentage: number;
     dueDate?: string;
     messageId?: string; // Linked message ID, if any
-  };
+  } | null;
   timestamp: string;
   changedByUserId: string;
   metadata?: {
@@ -190,19 +195,29 @@ export interface UserPresenceChangedEvent {
   timestamp: string;
 }
 
-// Reaction Events
+// Reaction Events (realtime): người khác thả/gỡ một cảm xúc trên tin nhắn.
+// Payload chính là DELTA một cặp (userId, emoji) → cache updater `setMessageReaction`
+// add/remove đúng một cặp (`fullName` ↔ ChatMessageReaction.userName).
+// `reactions` (tuỳ chọn) là SNAPSHOT nguyên map cảm xúc của tin sau thay đổi;
+// nếu backend đính kèm thì client ghi đè toàn bộ list thay vì áp delta.
 export interface ReactionAddedEvent {
   messageId: string;
+  conversationId: string;
   userId: string;
-  reactionType: string;
+  fullName: string | null;
+  emoji: string;
   timestamp: string;
+  reactions?: ReactionsMap;
 }
 
 export interface ReactionRemovedEvent {
   messageId: string;
+  conversationId: string;
   userId: string;
-  reactionType: string;
+  fullName: string | null;
+  emoji: string;
   timestamp: string;
+  reactions?: ReactionsMap;
 }
 
 // Threading Events
@@ -232,6 +247,63 @@ export interface MessageUnpinnedEvent {
   timestamp: string;
 }
 
+// Recall Events
+export interface MessageRecalledEvent {
+  conversationId: string;
+  messageId: string;
+  originalSenderId: string;
+  recalledBy: string;
+  recalledAt: string;
+  actorRole: string | null;
+  reason: string | null;
+  recalledContentText: string | null;
+  // Cờ báo tin bị thu hồi có đính kèm (ảnh/file) → cần load lại danh sách
+  // attachments của hội thoại để gỡ file đã thu hồi khỏi ConversationDetailsPanel.
+  needReloadFile?: boolean;
+  // Thông tin thu hồi gửi kèm realtime. `canViewOriginal` quyết định user hiện
+  // tại có nút "Xem tin nhắn gốc" hay không (server tính riêng cho từng người).
+  recallInfo?: {
+    isRecalled: boolean;
+    recalledAt: string | null;
+    recalledBy: string | null;
+    canRecall: boolean;
+    recallExpiresAt: string | null;
+    canViewOriginal: boolean;
+  } | null;
+}
+
+// Quyền thu hồi của một tin nhắn thay đổi (realtime): server tính lại recallInfo
+// (vd hết hạn cửa sổ thu hồi → canRecall=false, hoặc thay đổi canViewOriginal)
+// và đẩy nguyên trạng thái mới cho từng user. Khác MessageRecalled ở chỗ tin có
+// thể CHƯA bị thu hồi — chỉ cập nhật khả năng/quyền.
+export interface MessageRecallCapabilityChangedEvent {
+  conversationId: string;
+  messageId: string;
+  recallInfo: {
+    isRecalled: boolean;
+    recalledAt: string | null;
+    recalledBy: string | null;
+    canRecall: boolean;
+    recallExpiresAt: string | null;
+    canViewOriginal: boolean;
+  };
+}
+
+// Xác nhận tin nhắn (realtime): người khác xác nhận/bỏ xác nhận một tin. Cả hai
+// event mang NGUYÊN danh sách `confirmations` mới nhất của tin (không phải delta)
+// → cache updater ghi đè toàn bộ list để pill + số lượng khớp server ngay.
+export interface MessageConfirmedEvent {
+  messageId: string;
+  conversationId: string;
+  confirmations: MessageConfirmation[];
+}
+
+export interface MessageUnconfirmedEvent {
+  messageId: string;
+  conversationId: string;
+  confirmations: MessageConfirmation[];
+}
+
 export interface PinnedMessagesReorderedEvent {
   conversationId: string;
   reorderedBy: string;
@@ -258,7 +330,20 @@ export interface MentionReadEvent {
   readAt: string;
 }
 
+export interface MentionUnreadEvent {
+  mentionId: string;
+  messageId: string;
+  userId: string;
+  unreadAt: string;
+}
+
 export interface MentionsBulkReadEvent {
+  conversationId?: string;
+  markedCount: number;
+  markedAt: string;
+}
+
+export interface MentionsBulkUnreadEvent {
   conversationId?: string;
   markedCount: number;
   markedAt: string;

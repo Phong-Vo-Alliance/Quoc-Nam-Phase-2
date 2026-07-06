@@ -23,6 +23,69 @@ export interface ClassifiedError {
 }
 
 /**
+ * Extract a human-readable message returned by the API, if any.
+ * Supports common shapes: { message }, { error }, { detail }, { title },
+ * ASP.NET PascalCase { Message }, or a raw string body.
+ */
+function getServerErrorMessage(error: {
+  response?: { data?: unknown };
+}): string | undefined {
+  const data = error?.response?.data;
+  if (!data) return undefined;
+
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    const candidate = record.message;
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Extract the API error message, including responses whose body is a Blob.
+ *
+ * Endpoints that use `responseType: "blob"` (file download/stream/preview)
+ * deliver their JSON error body as a Blob, so `error.response.data.message`
+ * is undefined. This reads the blob, parses the JSON, and returns its message
+ * (e.g. { "message": "...", "reason": "FileFromRecalledMessage" }).
+ *
+ * @returns the API message if present, otherwise undefined
+ */
+export async function getApiErrorMessage(
+  error: unknown,
+): Promise<string | undefined> {
+  if (!axios.isAxiosError(error)) return undefined;
+
+  const data = error.response?.data;
+
+  if (typeof Blob !== "undefined" && data instanceof Blob) {
+    try {
+      const text = (await data.text()).trim();
+      if (!text) return undefined;
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        return getServerErrorMessage({ response: { data: parsed } });
+      } catch {
+        // Not JSON — fall back to the raw text body if it is short enough
+        return text.length <= 500 ? text : undefined;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  return getServerErrorMessage({ response: { data } });
+}
+
+/**
  * Classify axios error or general error
  * @param error - Error object from API call
  * @returns Classified error with user-friendly message
@@ -94,6 +157,9 @@ export function classifyError(error: unknown): ClassifiedError {
 
     // HTTP status errors
     const status = error.response.status;
+    // Prefer the message returned by the API when present, falling back to a
+    // friendly Vietnamese default per status code.
+    const serverMessage = getServerErrorMessage(error);
 
     if (status === 401) {
       return {
@@ -107,7 +173,7 @@ export function classifyError(error: unknown): ClassifiedError {
     if (status === 403) {
       return {
         type: "BAD_REQUEST",
-        message: "Bạn không có quyền thực hiện thao tác này.",
+        message: serverMessage ?? "Bạn không có quyền thực hiện thao tác này.",
         isRetryable: false,
         statusCode: status,
       };
@@ -116,27 +182,17 @@ export function classifyError(error: unknown): ClassifiedError {
     if (status === 404) {
       return {
         type: "BAD_REQUEST",
-        message: "Cuộc trò chuyện không tồn tại hoặc đã bị xóa.",
+        message:
+          serverMessage ?? "Cuộc trò chuyện không tồn tại hoặc đã bị xóa.",
         isRetryable: false,
         statusCode: status,
       };
     }
 
     if (status === 400) {
-      const serverMessage = error.response.data?.message;
-
-      if (serverMessage) {
-        return {
-          type: "BAD_REQUEST",
-          message: serverMessage,
-          isRetryable: false,
-          statusCode: status,
-        };
-      }
-
       return {
         type: "BAD_REQUEST",
-        message: "Đã xảy ra lỗi. Vui lòng thử lại",
+        message: serverMessage ?? "Đã xảy ra lỗi. Vui lòng thử lại",
         isRetryable: false,
         statusCode: status,
       };
@@ -145,7 +201,8 @@ export function classifyError(error: unknown): ClassifiedError {
     if (status === 413) {
       return {
         type: "FILE_TOO_LARGE",
-        message: "File quá lớn. Vui lòng chọn file nhỏ hơn 20MB.",
+        message:
+          serverMessage ?? "File quá lớn. Vui lòng chọn file nhỏ hơn 20MB.",
         isRetryable: false,
         statusCode: status,
       };
@@ -154,7 +211,7 @@ export function classifyError(error: unknown): ClassifiedError {
     if (status === 415) {
       return {
         type: "UNSUPPORTED_FILE_TYPE",
-        message: "Định dạng file không được hỗ trợ",
+        message: serverMessage ?? "Định dạng file không được hỗ trợ",
         isRetryable: false,
         statusCode: status,
       };
@@ -163,7 +220,7 @@ export function classifyError(error: unknown): ClassifiedError {
     if (status >= 500) {
       return {
         type: "SERVER_ERROR",
-        message: "Lỗi máy chủ. Vui lòng thử lại sau.",
+        message: serverMessage ?? "Lỗi máy chủ. Vui lòng thử lại sau.",
         isRetryable: true,
         statusCode: status,
       };

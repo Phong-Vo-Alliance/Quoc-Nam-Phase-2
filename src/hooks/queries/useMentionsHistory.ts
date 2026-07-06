@@ -30,7 +30,7 @@ export function useMentionsHistory({
       lastPage.pageNumber < lastPage.totalPages
         ? lastPage.pageNumber + 1
         : undefined,
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000,
     enabled,
   });
 }

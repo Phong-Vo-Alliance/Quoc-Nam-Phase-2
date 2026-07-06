@@ -22,6 +22,7 @@ import {
   type RotateAction,
 } from "@/api/files.api";
 import { fileApiClient } from "@/api/fileClient";
+import { getApiErrorMessage } from "@/utils/errorHandling";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -43,6 +44,11 @@ interface ImagePreviewModalProps {
   images?: ImageItem[];
   /** Initial index in images array */
   initialIndex?: number;
+  /**
+   * Chặn tải về dù API trả canDownload = true (vd: xem lại ảnh của tin đã thu
+   * hồi — cho phép xem nhưng không cho download).
+   */
+  disableDownload?: boolean;
 }
 
 /**
@@ -84,6 +90,7 @@ export default function ImagePreviewModal({
   fileName,
   images,
   initialIndex = 0,
+  disableDownload = false,
 }: ImagePreviewModalProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -387,16 +394,21 @@ export default function ImagePreviewModal({
     } catch (error: any) {
       console.error("Lỗi khi tải file:", error);
 
-      // Error handling with specific messages
-      const errorMessage = error?.response?.status;
-      if (errorMessage === 404) {
-        toast.error("File không tồn tại");
-      } else if (errorMessage === 403) {
-        toast.error("Không có quyền tải file này");
-      } else if (errorMessage === 401) {
-        toast.error("Chưa đăng nhập");
+      const apiMessage = await getApiErrorMessage(error);
+      if (apiMessage) {
+        toast.error(apiMessage);
       } else {
-        toast.error("Không thể tải ảnh");
+        // Error handling with specific messages
+        const status = error?.response?.status;
+        if (status === 404) {
+          toast.error("File không tồn tại");
+        } else if (status === 403) {
+          toast.error("Không có quyền tải file này");
+        } else if (status === 401) {
+          toast.error("Chưa đăng nhập");
+        } else {
+          toast.error("Không thể tải ảnh");
+        }
       }
     } finally {
       setIsDownloading(false);
@@ -729,8 +741,8 @@ export default function ImagePreviewModal({
               </div>
             )}
 
-            {/* Download Button - Conditional */}
-            {canDownload && (
+            {/* Download Button - Conditional (ẩn hẳn khi bị chặn tải về) */}
+            {canDownload && !disableDownload && (
               <button
                 onClick={handleDownload}
                 disabled={isDownloading || isLoading}

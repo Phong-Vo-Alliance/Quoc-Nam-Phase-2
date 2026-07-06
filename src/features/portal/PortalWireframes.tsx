@@ -88,8 +88,8 @@ const EMPTY_TASKS: Task[] = [];
 export default function PortalWireframes({
   portalMode = "desktop",
 }: PortalWireframesProps) {
-  // 🆕 NEW: Tab title management with unread DM count
-  useTabTitle({ baseTitle: "Quoc Nam Portal" });
+  // 🆕 NEW: Tab title management with unread DM count (baseTitle theo brand config)
+  useTabTitle();
 
   // ---------- auth & navigation ----------
   const navigate = useNavigate();
@@ -1425,6 +1425,7 @@ export default function PortalWireframes({
           showPinnedToast={showPinnedToast}
           currentUserName={currentUser}
           currentUserDepartment={currentUserDepartment}
+          currentUserAvatarUrl={authUser?.avatarUrl}
           onOpenWorkTypeManager={() => setShowWorkTypeManager(true)}
         />
       )}

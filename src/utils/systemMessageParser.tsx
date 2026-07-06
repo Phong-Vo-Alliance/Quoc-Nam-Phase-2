@@ -62,6 +62,10 @@
  *
  * 22. "[user] đã chỉnh sửa danh sách ghim"
  *    → Pin-actor: user (→ "Bạn" for the actor)
+ *
+ * 23. "[user] đã ghim [tin nhắn preview | một hình ảnh/video/tệp | nhiều tệp đính
+ *      kèm] và bỏ ghim [N] tin đã ghim trước đó" (over-limit replace)
+ *    → Pin-actor: user (→ "Bạn"), Content-name: pinned object
  */
 
 import React from "react";
@@ -99,6 +103,40 @@ export function parseSystemMessageContent(
   if (!content) return [];
 
   const parts: SystemMessagePart[] = [];
+
+  // Pattern 23: combined over-limit replace —
+  // "[actor] đã ghim {object} và bỏ ghim [N] tin đã ghim trước đó".
+  // Checked before Pattern 20/21 so the trailing "và bỏ ghim …" isn't swallowed
+  // into the pinned-content preview.
+  const pinReplaceTextMatch = content.match(
+    /^(.+?)\s+đã ghim\s+tin nhắn\s+([\s\S]+?)\s+và bỏ ghim\s+(\d+)\s+tin đã ghim trước đó$/,
+  );
+  if (pinReplaceTextMatch) {
+    const [, actor, preview, count] = pinReplaceTextMatch;
+    parts.push({ type: "pin-actor", content: actor.trim() });
+    parts.push({ type: "text", content: " đã ghim tin nhắn " });
+    parts.push({ type: "content-name", content: preview.trim() });
+    parts.push({
+      type: "text",
+      content: ` và bỏ ghim ${count} tin đã ghim trước đó`,
+    });
+    return parts;
+  }
+
+  const pinReplaceAttachmentMatch = content.match(
+    /^(.+?)\s+đã ghim\s+(một hình ảnh|một video|một tệp|nhiều tệp đính kèm)\s+và bỏ ghim\s+(\d+)\s+tin đã ghim trước đó$/,
+  );
+  if (pinReplaceAttachmentMatch) {
+    const [, actor, noun, count] = pinReplaceAttachmentMatch;
+    parts.push({ type: "pin-actor", content: actor.trim() });
+    parts.push({ type: "text", content: " đã ghim " });
+    parts.push({ type: "content-name", content: noun });
+    parts.push({
+      type: "text",
+      content: ` và bỏ ghim ${count} tin đã ghim trước đó`,
+    });
+    return parts;
+  }
 
   // Pattern 20: "[actor] đã ghim/đã bỏ ghim tin nhắn [preview]"
   // Checked first so the distinct "ghim" verbs win before generic patterns.

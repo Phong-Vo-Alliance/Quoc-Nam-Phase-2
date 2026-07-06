@@ -19,8 +19,19 @@ import { TaskBanner } from "@/features/portal/components/chat/TaskBanner";
 import {
   PinBar,
   PinLimitReplaceDialog,
+  UnpinConfirmDialog,
+  useUnpinConfirm,
   usePinReplaceGuard,
 } from "@/features/portal/components/chat/PinBar";
+import {
+  useRecallMessage,
+  useConfirmMessage,
+  useUnconfirmMessage,
+  useAddReaction,
+  useRemoveReaction,
+} from "@/hooks/mutations";
+import { useRecallConfirm } from "@/features/portal/components/chat/useRecallConfirm";
+import { RecallConfirmDialog } from "@/features/portal/components/chat/RecallConfirmDialog";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
 
 // Extracted hooks
@@ -127,6 +138,26 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     lastMessageId,
   } = useChatMessages({ conversationId });
 
+  // ── Unread threads (for the header dropdown) ──
+
+  const unreadThreads = React.useMemo(
+    () =>
+      messages
+        .filter((m) => (m.unreadReplyCount ?? 0) > 0)
+        .map((m) => ({
+          rootMessageId: m.id,
+          linkedTaskId: m.linkedTaskId ?? null,
+          senderName: m.senderName,
+          content: m.content ?? null,
+          unreadReplyCount: m.unreadReplyCount,
+          sentAt: m.sentAt,
+        }))
+        .sort(
+          (a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(),
+        ),
+    [messages],
+  );
+
   // ── Jump to Message ──
   const {
     hasUnloadedNewerMessages,
@@ -206,20 +237,73 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     inputRef,
   });
 
+  // ── Banner expansion (mutually exclusive) ──
+  // Only one of TaskBanner / PinBar can be expanded at a time; opening one
+  // collapses the other.
+  const [expandedBanner, setExpandedBanner] = React.useState<
+    "task" | "pin" | null
+  >(null);
+
   // ── Pin / Unpin ──
   // Guards pinning against the per-conversation limit: when full, surfaces a
   // replace dialog that drops the oldest pin instead of pinning directly.
   const pinGuard = usePinReplaceGuard(conversationId);
 
+  // Unpinning (from the hover action) goes through a confirm dialog first;
+  // pinning is unchanged.
+  const unpinConfirm = useUnpinConfirm(pinGuard.unpin);
+
   const handleTogglePin = useCallback(
     (messageId: string, isPinned: boolean) => {
       if (isPinned) {
-        pinGuard.unpin(messageId);
+        unpinConfirm.requestUnpin(messageId);
       } else {
         pinGuard.requestPin(messageId);
       }
     },
-    [pinGuard],
+    [pinGuard, unpinConfirm],
+  );
+
+  // Thu hồi tin nhắn — quyền do server quyết định (recallInfo.canRecall).
+  // Bấm nút thu hồi sẽ mở dialog xác nhận; thu hồi không thể hoàn tác.
+  const recallMutation = useRecallMessage({ conversationId });
+  const recallConfirm = useRecallConfirm(
+    useCallback(
+      (messageId: string) => recallMutation.mutate({ messageId }),
+      [recallMutation],
+    ),
+  );
+
+  // "Xác nhận tin nhắn" (multi-user acknowledgment) — POST/DELETE confirm.
+  // Cache tự cập nhật `confirmations` nên button/pill đổi trạng thái ngay.
+  const confirmMessageMutation = useConfirmMessage({ conversationId });
+  const unconfirmMessageMutation = useUnconfirmMessage({ conversationId });
+  const handleConfirmMessage = useCallback(
+    (messageId: string) => confirmMessageMutation.mutate({ messageId }),
+    [confirmMessageMutation],
+  );
+  const handleUnconfirmMessage = useCallback(
+    (messageId: string) => unconfirmMessageMutation.mutate({ messageId }),
+    [unconfirmMessageMutation],
+  );
+  // Id tin đang gọi API xác nhận (để nút CheckCircle2 hiện loading).
+  const confirmingMessageActionId = confirmMessageMutation.isPending
+    ? (confirmMessageMutation.variables?.messageId ?? null)
+    : null;
+
+  // "Thả cảm xúc tin nhắn" — POST/DELETE reaction. Cache tự cập nhật
+  // `reactions` nên chip đổi trạng thái ngay.
+  const addReactionMutation = useAddReaction({ conversationId });
+  const removeReactionMutation = useRemoveReaction({ conversationId });
+  const handleAddReaction = useCallback(
+    (messageId: string, emoji: string) =>
+      addReactionMutation.mutate({ messageId, emoji }),
+    [addReactionMutation],
+  );
+  const handleRemoveReaction = useCallback(
+    (messageId: string, emoji: string) =>
+      removeReactionMutation.mutate({ messageId, emoji }),
+    [removeReactionMutation],
   );
 
   // Resolve the task linked to a root message from the message cache.
@@ -237,23 +321,41 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     [queryClient, conversationId],
   );
 
-  // Jump to a pinned message. A pin with parentMessageId is a thread reply
-  // (Nhật ký công việc), so scroll to its root message in chat first, then open
-  // the thread scrolled to the reply — same flow as FileManagerPhase1A.handleOpenSource.
-  const handlePinJump = useCallback(
-    (messageId: string, parentMessageId?: string) => {
+  // Jump to a message from a pin or a search result. When parentMessageId is set
+  // the target is a thread reply (Nhật ký công việc), so scroll to its root
+  // message in chat first, then open the thread scrolled to the reply — same flow
+  // as FileManagerPhase1A.handleOpenSource.
+  const handleThreadAwareJump = useCallback(
+    (messageId: string, parentMessageId?: string | null) => {
       if (!parentMessageId) {
         handleSearchJumpToMessage(messageId);
         return;
       }
-      Promise.resolve(handleSearchJumpToMessage(parentMessageId)).finally(() => {
-        setTimeout(() => {
-          const taskId = findLinkedTaskId(parentMessageId);
-          if (taskId) onTaskLogClick?.(taskId, messageId);
-        }, 300);
-      });
+      Promise.resolve(handleSearchJumpToMessage(parentMessageId)).finally(
+        () => {
+          setTimeout(() => {
+            const taskId = findLinkedTaskId(parentMessageId);
+            if (taskId) onTaskLogClick?.(taskId, messageId);
+          }, 300);
+        },
+      );
     },
     [handleSearchJumpToMessage, findLinkedTaskId, onTaskLogClick],
+  );
+
+  // Jump to a thread from the header dropdown
+
+  const handleThreadJump = useCallback(
+    (rootMessageId: string, linkedTaskId: string | null) => {
+      Promise.resolve(handleSearchJumpToMessage(rootMessageId)).finally(() => {
+        if (linkedTaskId) {
+          setTimeout(() => {
+            onTaskLogClick?.(linkedTaskId);
+          }, 300);
+        }
+      });
+    },
+    [handleSearchJumpToMessage, onTaskLogClick],
   );
 
   // ── Confirmed Info ──
@@ -279,10 +381,12 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
     previewImages,
     previewInitialIndex,
     previewFileName,
+    previewDisableDownload,
     openImagePreview,
     closeImagePreview,
     filePreviewId,
     filePreviewName,
+    filePreviewDisableDownload,
     openFilePreview,
     closeFilePreview,
   } = useChatModals();
@@ -447,7 +551,9 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         onChangeConversation={
           selectedCategoryId ? handleConversationChange : undefined
         }
-        onSearchSelectMessage={handleSearchJumpToMessage}
+        onSearchSelectMessage={handleThreadAwareJump}
+        unreadThreads={unreadThreads}
+        onJumpToThread={isDirect ? undefined : handleThreadJump}
         isConversationDisabled={isConversationDisabled}
       />
 
@@ -461,36 +567,44 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                 handleConversationChange(convId);
                 onViewTaskDetail?.();
               }}
+              isExpanded={expandedBanner === "task"}
+              onExpandedChange={(next) =>
+                setExpandedBanner(next ? "task" : null)
+              }
             />
           )}
           <PinBar
             conversationId={conversationId}
-            onJumpToMessage={handlePinJump}
+            onJumpToMessage={handleThreadAwareJump}
+            isExpanded={expandedBanner === "pin"}
+            onExpandedChange={(next) => setExpandedBanner(next ? "pin" : null)}
           />
         </div>
       )}
 
-      {/* Network status banner */}
-      {(isOnline === false || wasOffline) && (
-        <div className="px-4">
-          <OfflineBanner isOnline={isOnline} wasOffline={wasOffline} />
-        </div>
-      )}
-
-      {/* Message list */}
-      <div
-        ref={messagesContainerRef}
-        className={`flex-1 p-4 space-y-0.5 min-h-0 bg-gray-50 ${
-          messages.length > 0
-            ? "overflow-y-auto scrollbar-thin"
-            : "overflow-y-hidden"
-        }`}
-        data-testid="message-list"
-      >
-        <JumpToUnreadPill
-          firstUnreadMessageId={firstUnreadMessageId}
-          containerRef={messagesContainerRef}
-        />
+      {/* Message list (with network banner overlaid at the top) */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        {/* Network status banner — pinned absolutely to the top of the message
+            area so it overlays the messages right under the pin bar without
+            changing the message list height. */}
+        {(isOnline === false || wasOffline) && (
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-4">
+            <OfflineBanner isOnline={isOnline} wasOffline={wasOffline} />
+          </div>
+        )}
+        <div
+          ref={messagesContainerRef}
+          className={`flex-1 p-4 space-y-0.5 min-h-0 bg-gray-50 ${
+            messages.length > 0
+              ? "overflow-y-auto scrollbar-thin"
+              : "overflow-y-hidden"
+          }`}
+          data-testid="message-list"
+        >
+          <JumpToUnreadPill
+            firstUnreadMessageId={firstUnreadMessageId}
+            containerRef={messagesContainerRef}
+          />
         <MessageList
           messagesByDate={messagesByDate}
           groupedMessages={groupedMessages}
@@ -512,6 +626,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           onLoadMore={handleLoadMore}
           onTogglePin={handleTogglePin}
           onToggleStar={onToggleStar}
+          onRecall={recallConfirm.requestRecall}
           onCreateTask={
             isDirect
               ? undefined
@@ -519,6 +634,11 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
                   handleCreateTask(messageId, onCreateTaskFromMessage)
           }
           onConfirmInfo={isDirect ? undefined : handleConfirmInfo}
+          onConfirmMessage={handleConfirmMessage}
+          onUnconfirmMessage={handleUnconfirmMessage}
+          onAddReaction={handleAddReaction}
+          onRemoveReaction={handleRemoveReaction}
+          confirmingMessageActionId={confirmingMessageActionId}
           onRetry={(messageId: string) => handleRetry(messageId, messages)}
           onScrollToQuoted={handleScrollToQuoted}
           onTaskLogClick={onTaskLogClick}
@@ -526,7 +646,8 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           onImageClick={openImagePreview}
         />
 
-        <div ref={bottomRef} />
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {/* Go to Bottom Button */}
@@ -572,6 +693,7 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
         fileName={previewFileName}
         images={previewImages.length > 0 ? previewImages : undefined}
         initialIndex={previewInitialIndex}
+        disableDownload={previewDisableDownload}
       />
 
       {/* Conversation Starred Messages Modal */}
@@ -602,17 +724,36 @@ export const ChatMainContainer: React.FC<ChatMainContainerProps> = ({
           fileId={filePreviewId}
           fileName={filePreviewName}
           onClose={closeFilePreview}
+          disableDownload={filePreviewDisableDownload}
         />
       )}
 
-      {/* Pin limit reached → confirm replacing the oldest pin */}
+      {/* Pin limit reached → confirm replacing the bottom pin(s) */}
       <PinLimitReplaceDialog
         open={pinGuard.dialogOpen}
         onOpenChange={pinGuard.setDialogOpen}
-        pinToReplace={pinGuard.pinToReplace}
+        pinsToReplace={pinGuard.pinsToReplace}
         pinLimit={pinGuard.pinLimit}
         onConfirm={pinGuard.confirmReplace}
         isProcessing={pinGuard.isProcessing}
+      />
+
+      {/* Confirm before unpinning from the message hover action */}
+      <UnpinConfirmDialog
+        open={unpinConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) unpinConfirm.cancel();
+        }}
+        onConfirm={unpinConfirm.confirm}
+      />
+
+      <RecallConfirmDialog
+        open={recallConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) recallConfirm.cancel();
+        }}
+        onConfirm={recallConfirm.confirm}
+        isProcessing={recallMutation.isPending}
       />
     </div>
   );

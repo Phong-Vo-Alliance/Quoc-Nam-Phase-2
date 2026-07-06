@@ -6,6 +6,9 @@ export interface SearchMessageItem {
   conversationId: string;
   conversationName: string;
   senderId: string;
+  // Set when the result is a thread reply (Nhật ký công việc). Used to jump to
+  // the root message via aroundMessageId since replies aren't in the main chat.
+  parentMessageId: string | null;
   content: string;
   sentAt: string; // ISO datetime
   editedAt: string | null;

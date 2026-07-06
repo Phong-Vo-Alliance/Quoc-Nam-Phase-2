@@ -52,6 +52,32 @@ describe("parseSystemMessageContent — pin patterns", () => {
       { type: "text", content: " đã chỉnh sửa danh sách ghim" },
     ]);
   });
+
+  it("parses a combined replace with a text pin (preview not swallowed)", () => {
+    expect(
+      parseSystemMessageContent(
+        "Lê Ngọc Minh đã ghim tin nhắn Xin chào và bỏ ghim 3 tin đã ghim trước đó",
+      ),
+    ).toEqual([
+      { type: "pin-actor", content: "Lê Ngọc Minh" },
+      { type: "text", content: " đã ghim tin nhắn " },
+      { type: "content-name", content: "Xin chào" },
+      { type: "text", content: " và bỏ ghim 3 tin đã ghim trước đó" },
+    ]);
+  });
+
+  it("parses a combined replace with an attachment pin", () => {
+    expect(
+      parseSystemMessageContent(
+        "Lê Ngọc Minh đã ghim một hình ảnh và bỏ ghim 3 tin đã ghim trước đó",
+      ),
+    ).toEqual([
+      { type: "pin-actor", content: "Lê Ngọc Minh" },
+      { type: "text", content: " đã ghim " },
+      { type: "content-name", content: "một hình ảnh" },
+      { type: "text", content: " và bỏ ghim 3 tin đã ghim trước đó" },
+    ]);
+  });
 });
 
 describe("renderSystemMessageWithHighlights — pin actor self swap", () => {

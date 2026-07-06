@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import type { SignalRConnectionState } from "@/types/signalr-events";
 import { useAuthStore } from "@/stores/authStore";
 import { useAppConfigStore } from "@/stores/appConfigStore";
+import { useConversationStore } from "@/stores/conversationStore";
+import { messageKeys } from "@/hooks/queries/keys/messageKeys";
 
 // Re-export all event types from dedicated file
 export type { SignalRConnectionState };
@@ -75,6 +77,10 @@ export const SIGNALR_EVENTS = {
   MESSAGE_EDITED: "MessageEdited",
   MESSAGE_DELETED: "MessageDeleted",
   MESSAGE_READ: "MessageRead",
+  MESSAGE_RECALLED: "MessageRecalled",
+  MESSAGE_RECALL_CAPABILITY_CHANGED: "MessageRecallCapabilityChanged",
+  MESSAGE_CONFIRMED: "MessageConfirmed",
+  MESSAGE_UNCONFIRMED: "MessageUnconfirmed",
 
   // ============= Conversation Events =============
   CONVERSATION_CREATED: "ConversationCreated",
@@ -115,7 +121,9 @@ export const SIGNALR_EVENTS = {
   // ============= Mention Events =============
   USER_MENTIONED: "UserMentioned",
   MENTION_READ: "MentionRead",
+  MENTION_UNREAD: "MentionUnread",
   MENTIONS_BULK_READ: "MentionsBulkRead",
+  MENTIONS_BULK_UNREAD: "MentionsBulkUnread",
 
   // ============= Task Events =============
   TASKS_UPDATED: "TasksUpdated",
@@ -184,6 +192,20 @@ class ChatHubConnection {
     if (this.isConnecting) {
       return;
     }
+
+    // Tear down any stale connection (Reconnecting / Disconnected / Connecting)
+    // before building a new one. Otherwise the old object keeps running its
+    // withAutomaticReconnect timer in the background → server sees duplicate
+    // connections once it reconnects.
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore — we're discarding this connection anyway
+      }
+      this.connection = null;
+    }
+
     this.isConnecting = true;
 
     try {
@@ -241,7 +263,13 @@ class ChatHubConnection {
       try {
         await this.connection.start();
       } catch (wsError) {
-        // WebSocket failed — fallback to negotiate + all transports
+        // WebSocket failed — fallback to negotiate + all transports.
+        // Stop the failed attempt first so it can't linger.
+        try {
+          await this.connection.stop();
+        } catch {
+          // Ignore — discarding this connection
+        }
         console.warn(
           "[SignalR] WebSocket-only failed, falling back to negotiate",
           wsError,
@@ -470,6 +498,17 @@ class TaskHubConnection {
       return;
     }
 
+    // Tear down any stale connection before building a new one, otherwise its
+    // background auto-reconnect timer produces a duplicate connection on the server.
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore — discarding this connection
+      }
+      this.connection = null;
+    }
+
     this.isConnecting = true;
 
     try {
@@ -544,7 +583,13 @@ class TaskHubConnection {
       try {
         await this.connection.start();
       } catch (wsError) {
-        // WebSocket failed — fallback to negotiate + all transports
+        // WebSocket failed — fallback to negotiate + all transports.
+        // Stop the failed attempt first so it can't linger.
+        try {
+          await this.connection.stop();
+        } catch {
+          // Ignore — discarding this connection
+        }
         console.warn(
           "[TaskHub] WebSocket-only failed, falling back to negotiate",
           wsError,
@@ -742,6 +787,24 @@ class IdentityHubConnection {
     });
   }
 
+  // Khi quyền của CHÍNH viewer đổi (leader ↔ staff), message DTO mang các
+  // field permission-dependent (canRecall, canDownload, canPin...) đã cũ.
+  // Refetch đoạn hội thoại đang mở để các quyền trên từng message cập nhật
+  // ngay mà không cần F5. `refetchType: "active"` → chỉ query đang mount mới
+  // gọi API (đúng 1 conversation đang view).
+  private refreshActiveConversationMessages(): void {
+    if (!this.queryClient) return;
+
+    const activeConversationId =
+      useConversationStore.getState().selectedConversation?.id;
+    if (!activeConversationId) return;
+
+    this.queryClient.invalidateQueries({
+      queryKey: messageKeys.conversation(activeConversationId),
+      refetchType: "active",
+    });
+  }
+
   async start(identityAccessToken?: string): Promise<void> {
     if (!IDENTITY_HUB_URL) {
       console.warn(
@@ -756,6 +819,17 @@ class IdentityHubConnection {
 
     if (this.isConnecting) {
       return;
+    }
+
+    // Tear down any stale connection before building a new one, otherwise its
+    // background auto-reconnect timer produces a duplicate connection on the server.
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore — discarding this connection
+      }
+      this.connection = null;
     }
 
     this.isConnecting = true;
@@ -784,6 +858,13 @@ class IdentityHubConnection {
           }) => {
             this.showLeaderStatusChangeToast(payload);
             this.refreshLeaderChangeRelatedQueries();
+
+            // Event về chính viewer → quyền của bản thân thay đổi → refetch
+            // đoạn hội thoại đang mở để message permissions cập nhật ngay.
+            const currentUserId = useAuthStore.getState().user?.id;
+            if (payload?.userId && payload.userId === currentUserId) {
+              this.refreshActiveConversationMessages();
+            }
           },
         );
 
@@ -842,7 +923,13 @@ class IdentityHubConnection {
       try {
         await this.connection.start();
       } catch (wsError) {
-        // WebSocket failed — fallback to negotiate + all transports
+        // WebSocket failed — fallback to negotiate + all transports.
+        // Stop the failed attempt first so it can't linger.
+        try {
+          await this.connection.stop();
+        } catch {
+          // Ignore — discarding this connection
+        }
         console.warn(
           "[IdentityHub] WebSocket-only failed, falling back to negotiate",
           wsError,

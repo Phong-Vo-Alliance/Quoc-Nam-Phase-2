@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import type { QuotedMessageData } from "@/stores/replyStore";
+import type { ChatMessage } from "@/types/messages";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuickMessagesStore } from "@/stores/quickMessagesStore";
 import { useFileUpload } from "@/features/chat-main/hooks/useFileUpload";
@@ -25,6 +26,15 @@ import {
   usePinMessage,
   useUnpinMessage,
 } from "@/hooks/mutations/usePinMessage";
+import {
+  useRecallMessage,
+  useConfirmMessage,
+  useUnconfirmMessage,
+  useAddReaction,
+  useRemoveReaction,
+} from "@/hooks/mutations";
+import { useRecallConfirm } from "@/features/portal/components/chat/useRecallConfirm";
+import { RecallConfirmDialog } from "@/features/portal/components/chat/RecallConfirmDialog";
 import {
   ThreadHeader,
   ThreadMessageList,
@@ -51,8 +61,12 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     Array<{ fileId: string; fileName: string }>
   >([]);
   const [previewInitialIndex, setPreviewInitialIndex] = useState(0);
+  // Chặn tải về cho đính kèm đang xem (vd: xem lại file/ảnh của tin đã thu hồi).
+  const [previewDisableDownload, setPreviewDisableDownload] = useState(false);
   const [filePreviewId, setFilePreviewId] = useState<string | null>(null);
   const [filePreviewName, setFilePreviewName] = useState<string>("");
+  const [filePreviewDisableDownload, setFilePreviewDisableDownload] =
+    useState(false);
 
   // Reply state
   const [threadReplyTarget, setThreadReplyTarget] =
@@ -220,6 +234,219 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
     [conversationId, pinMessageMutation, unpinMessageMutation, setThreadData],
   );
 
+  // ── Thu hồi tin nhắn trong thread ──
+  // Quyền do server quyết định qua cờ recallInfo.canRecall (giống tin ngoài).
+  // recallInfo của reply nằm trong threadData local (không phải conversation
+  // cache mà setMessageRecalledFlag cập nhật), nên ta flip tại chỗ ở đây sau khi
+  // mutation thành công để bubble chuyển sang trạng thái "đã thu hồi" ngay.
+  const recallMessageMutation = useRecallMessage({
+    conversationId: conversationId ?? "",
+  });
+
+  const flipRecalledLocal = useCallback(
+    (messageId: string) => {
+      const markRecalled = (msg: ChatMessage): ChatMessage =>
+        msg.recallInfo?.isRecalled
+          ? msg
+          : {
+              ...msg,
+              recallInfo: {
+                recalledBy: user?.id ?? null,
+                canViewOriginal: false,
+                ...(msg.recallInfo ?? {}),
+                isRecalled: true,
+                recalledAt: new Date().toISOString(),
+                recallExpiresAt: null,
+                canRecall: false,
+              },
+            };
+
+      setThreadData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          replies: (prev.replies ?? []).map((r) =>
+            r.id === messageId ? markRecalled(r) : r,
+          ),
+          parentMessage:
+            prev.parentMessage?.id === messageId
+              ? markRecalled(prev.parentMessage)
+              : prev.parentMessage,
+        };
+      });
+    },
+    [user?.id, setThreadData],
+  );
+
+  const recallConfirm = useRecallConfirm(
+    useCallback(
+      (messageId: string) => {
+        if (!conversationId) return;
+        recallMessageMutation.mutate(
+          { messageId },
+          { onSuccess: () => flipRecalledLocal(messageId) },
+        );
+      },
+      [conversationId, recallMessageMutation, flipRecalledLocal],
+    ),
+  );
+
+  // ── Xác nhận tin nhắn trong thread (multi-user ack) ──
+  // API xác nhận theo messageId (giống tin ngoài), nhưng danh sách confirmations
+  // của reply nằm trong threadData local — không phải conversation cache mà
+  // setMessageConfirmation (trong hook) cập nhật. Vì vậy sau khi mutation thành
+  // công ta flip tại chỗ để pill + nút CheckCircle2 đổi trạng thái ngay.
+  const confirmMessageMutation = useConfirmMessage({
+    conversationId: conversationId ?? "",
+  });
+  const unconfirmMessageMutation = useUnconfirmMessage({
+    conversationId: conversationId ?? "",
+  });
+
+  const flipConfirmLocal = useCallback(
+    (messageId: string, confirmed: boolean) => {
+      if (!user?.id) return;
+      const confirmer = {
+        userId: user.id,
+        fullName: user.fullName ?? user.identifier ?? null,
+        confirmedAt: new Date().toISOString(),
+      };
+      const applyToMessage = (msg: ChatMessage): ChatMessage => {
+        const current = msg.confirmations ?? [];
+        const already = current.some((c) => c.userId === confirmer.userId);
+        // Không đổi trạng thái → giữ nguyên object để tránh re-render thừa.
+        if (confirmed === already) return msg;
+        return {
+          ...msg,
+          confirmations: confirmed
+            ? [...current, confirmer]
+            : current.filter((c) => c.userId !== confirmer.userId),
+        };
+      };
+
+      setThreadData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          replies: (prev.replies ?? []).map((r) =>
+            r.id === messageId ? applyToMessage(r) : r,
+          ),
+          parentMessage:
+            prev.parentMessage?.id === messageId
+              ? applyToMessage(prev.parentMessage)
+              : prev.parentMessage,
+        };
+      });
+    },
+    [user?.id, user?.fullName, user?.identifier, setThreadData],
+  );
+
+  const handleConfirmMessage = useCallback(
+    (messageId: string) => {
+      if (!conversationId) return;
+      confirmMessageMutation.mutate(
+        { messageId },
+        { onSuccess: () => flipConfirmLocal(messageId, true) },
+      );
+    },
+    [conversationId, confirmMessageMutation, flipConfirmLocal],
+  );
+
+  const handleUnconfirmMessage = useCallback(
+    (messageId: string) => {
+      if (!conversationId) return;
+      unconfirmMessageMutation.mutate(
+        { messageId },
+        { onSuccess: () => flipConfirmLocal(messageId, false) },
+      );
+    },
+    [conversationId, unconfirmMessageMutation, flipConfirmLocal],
+  );
+
+  // ── Thả cảm xúc trong thread ──
+  // API theo messageId (giống tin ngoài), nhưng reactions của reply nằm trong
+  // threadData local — không phải conversation cache mà setMessageReaction (trong
+  // hook) cập nhật. Vì vậy sau khi mutation thành công ta flip tại chỗ để chip
+  // cảm xúc đổi ngay.
+  const addReactionMutation = useAddReaction({
+    conversationId: conversationId ?? "",
+  });
+  const removeReactionMutation = useRemoveReaction({
+    conversationId: conversationId ?? "",
+  });
+
+  const flipReactionLocal = useCallback(
+    (messageId: string, emoji: string, added: boolean) => {
+      if (!user?.id) return;
+      const reaction = {
+        emoji,
+        userId: user.id,
+        userName: user.fullName ?? user.identifier ?? "Bạn",
+      };
+      const applyToMessage = (msg: ChatMessage): ChatMessage => {
+        const current = Array.isArray(msg.reactions) ? msg.reactions : [];
+        const already = current.some(
+          (r) => r.userId === reaction.userId && r.emoji === reaction.emoji,
+        );
+        // Không đổi trạng thái → giữ nguyên object để tránh re-render thừa.
+        if (added === already) return msg;
+        return {
+          ...msg,
+          reactions: added
+            ? [...current, reaction]
+            : current.filter(
+                (r) =>
+                  !(r.userId === reaction.userId && r.emoji === reaction.emoji),
+              ),
+        };
+      };
+
+      setThreadData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          replies: (prev.replies ?? []).map((r) =>
+            r.id === messageId ? applyToMessage(r) : r,
+          ),
+          parentMessage:
+            prev.parentMessage?.id === messageId
+              ? applyToMessage(prev.parentMessage)
+              : prev.parentMessage,
+        };
+      });
+    },
+    [user?.id, user?.fullName, user?.identifier, setThreadData],
+  );
+
+  const handleAddReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      if (!conversationId) return;
+      addReactionMutation.mutate(
+        { messageId, emoji },
+        { onSuccess: () => flipReactionLocal(messageId, emoji, true) },
+      );
+    },
+    [conversationId, addReactionMutation, flipReactionLocal],
+  );
+
+  const handleRemoveReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      if (!conversationId) return;
+      removeReactionMutation.mutate(
+        { messageId, emoji },
+        { onSuccess: () => flipReactionLocal(messageId, emoji, false) },
+      );
+    },
+    [conversationId, removeReactionMutation, flipReactionLocal],
+  );
+
+  // Id tin đang gọi API xác nhận/bỏ xác nhận → hiển thị spinner trên đúng nút.
+  const confirmingMessageActionId = confirmMessageMutation.isPending
+    ? (confirmMessageMutation.variables?.messageId ?? null)
+    : unconfirmMessageMutation.isPending
+      ? (unconfirmMessageMutation.variables?.messageId ?? null)
+      : null;
+
   // Focus input when sheet opens and loading completes
   useEffect(() => {
     if (open && !loading) {
@@ -316,20 +543,28 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
             handleLoadMoreDownward={handleLoadMoreDownward}
             handleScrollToQuoted={handleScrollToQuoted}
             onTogglePin={handleTogglePin}
+            onRecall={recallConfirm.requestRecall}
+            onConfirmMessage={handleConfirmMessage}
+            onUnconfirmMessage={handleUnconfirmMessage}
+            onAddReaction={handleAddReaction}
+            onRemoveReaction={handleRemoveReaction}
+            confirmingMessageActionId={confirmingMessageActionId}
             onReply={(replyData) => {
               setThreadReplyTarget(replyData);
               setTimeout(() => {
                 mentionInputRef.current?.focus();
               }, 100);
             }}
-            onFilePreviewClick={(fileId, fileName) => {
+            onFilePreviewClick={(fileId, fileName, options) => {
               setFilePreviewId(fileId);
               setFilePreviewName(fileName);
+              setFilePreviewDisableDownload(!!options?.disableDownload);
             }}
-            onImageClick={(images, initialIndex) => {
+            onImageClick={(images, initialIndex, options) => {
               setPreviewImages(images);
               setPreviewInitialIndex(initialIndex);
               setPreviewFileId(images[initialIndex]?.fileId || null);
+              setPreviewDisableDownload(!!options?.disableDownload);
             }}
           />
           <div ref={bottomRef} />
@@ -375,17 +610,31 @@ export const TaskLogThreadSheet: React.FC<TaskLogThreadSheetProps> = ({
         previewFileName={previewFileName}
         previewImages={previewImages}
         previewInitialIndex={previewInitialIndex}
+        previewDisableDownload={previewDisableDownload}
         onCloseImagePreview={() => {
           setPreviewFileId(null);
           setPreviewImages([]);
           setPreviewInitialIndex(0);
+          setPreviewDisableDownload(false);
         }}
         filePreviewId={filePreviewId}
         filePreviewName={filePreviewName}
+        filePreviewDisableDownload={filePreviewDisableDownload}
         onCloseFilePreview={() => {
           setFilePreviewId(null);
           setFilePreviewName("");
+          setFilePreviewDisableDownload(false);
         }}
+      />
+
+      {/* Recall confirm dialog */}
+      <RecallConfirmDialog
+        open={recallConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) recallConfirm.cancel();
+        }}
+        onConfirm={recallConfirm.confirm}
+        isProcessing={recallMessageMutation.isPending}
       />
     </div>
   );

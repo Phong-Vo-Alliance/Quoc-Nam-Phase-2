@@ -48,12 +48,15 @@ export function useLogin(options?: UseLoginOptions) {
         const currentUser = useAuthStore.getState().user;
         if (
           currentUser &&
-          (userWithFullInfo?.fullName || userWithFullInfo?.departments?.length)
+          (userWithFullInfo?.fullName ||
+            userWithFullInfo?.avatarUrl ||
+            userWithFullInfo?.departments?.length)
         ) {
-          // Update auth store with complete user data including fullName and departments
+          // Update auth store with complete user data including fullName, avatarUrl and departments
           useAuthStore.getState().setUser({
             ...currentUser,
             fullName: userWithFullInfo?.fullName || currentUser?.fullName,
+            avatarUrl: userWithFullInfo?.avatarUrl ?? currentUser?.avatarUrl,
             departments:
               userWithFullInfo?.departments || currentUser?.departments,
           });

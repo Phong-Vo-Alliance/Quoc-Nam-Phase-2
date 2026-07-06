@@ -46,6 +46,7 @@ import type {
   DirectConversation,
 } from "@/types/conversations";
 import { sortConversationsByLatest } from "@/utils/sortConversationsByLatest";
+import { getInitials } from "@/utils/getInitials";
 import {
   saveSelectedConversation,
   getSelectedConversation,
@@ -65,9 +66,8 @@ import type { GetConversationsResponse } from "@/types/conversations";
 // Internal components
 import { DirectMessageItem } from "./components/DirectMessageItem";
 import { CategoryItem } from "./components/CategoryItem";
+import { PinLimitGuardProvider } from "./PinLimitGuardContext";
 import type { ChatTarget, ContactItem } from "./types";
-// MOCKUP: pin local state — remove with feature wire-up
-import { usePinnedSet } from "./_mockPinned";
 
 /* ===================== Props ===================== */
 export interface ConversationListSidebarProps {
@@ -182,13 +182,6 @@ const dotOnline = (on: boolean) => (
   />
 );
 
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 /* ===================== Helper: Get initial tab ===================== */
 const getInitialTab = (): "group" | "dm" | "ncc" => {
@@ -238,8 +231,6 @@ export const ConversationListSidebar: React.FC<
   const [tab, setTab] = React.useState<"group" | "dm" | "ncc">(getInitialTab());
   const [q, setQ] = React.useState("");
   const [openTools, setOpenTools] = React.useState(false);
-  // MOCKUP: subscribe to pinned set → sort pinned items to the top
-  const pinnedSet = usePinnedSet();
   const [hasAutoSelected, setHasAutoSelected] = React.useState(false);
   const [internalSelectedCategoryId, setInternalSelectedCategoryId] =
     React.useState<string | null>(null);
@@ -612,18 +603,48 @@ export const ConversationListSidebar: React.FC<
     };
   }, [vendorGroups, pinnedVendorGroups, q, selectedTagIds, groupTagIds]);
 
-  // MOCKUP: re-order to promote pinned items to the top (stable within group)
+  // Promote pinned items to the top. Pinned items keep the exact order the API
+  // returns (the server owns pin ordering — the UI never re-sorts them). Only
+  // non-pinned items are sorted client-side by latest message.
   const orderedApiCategories = React.useMemo(() => {
-    const pinned = filteredApiCategories.filter((c) => pinnedSet.has(c.id));
-    const others = filteredApiCategories.filter((c) => !pinnedSet.has(c.id));
+    const pinnedIds = new Set(
+      filteredApiCategories.filter((c) => c.isPinned).map((c) => c.id),
+    );
+    // Source pinned from the raw API list so their server order is preserved.
+    const pinned = apiCategories.filter((c) => pinnedIds.has(c.id));
+    const others = filteredApiCategories.filter((c) => !c.isPinned);
     return [...pinned, ...others];
-  }, [filteredApiCategories, pinnedSet]);
+  }, [apiCategories, filteredApiCategories]);
 
   const orderedApiDirects = React.useMemo(() => {
-    const pinned = filteredApiDirects.filter((c) => pinnedSet.has(c.id));
-    const others = filteredApiDirects.filter((c) => !pinnedSet.has(c.id));
+    const pinnedIds = new Set(
+      filteredApiDirects
+        .filter((c) => c.conversation?.isPinned)
+        .map((c) => c.id),
+    );
+    // mergedContacts mirrors the API order for items that have a conversation.
+    const pinned = mergedContacts.filter((c) => pinnedIds.has(c.id));
+    const others = filteredApiDirects.filter((c) => !c.conversation?.isPinned);
     return [...pinned, ...others];
-  }, [filteredApiDirects, pinnedSet]);
+  }, [mergedContacts, filteredApiDirects]);
+
+  // Pinned lists feed the pin-limit dialog (unfiltered by search so the count
+  // always reflects the real number of pins).
+  const pinnedCategoryList = React.useMemo(
+    () =>
+      apiCategories
+        .filter((c) => c.isPinned)
+        .map((c) => ({ id: c.id, name: c.name })),
+    [apiCategories],
+  );
+
+  const pinnedConversationList = React.useMemo(
+    () =>
+      mergedContacts
+        .filter((c) => c.hasConversation && c.conversation?.isPinned)
+        .map((c) => ({ id: c.id, name: c.name, avatarUrl: c.avatarUrl })),
+    [mergedContacts],
+  );
 
   // Handlers
   const handleGroupSelect = React.useCallback(
@@ -952,6 +973,10 @@ export const ConversationListSidebar: React.FC<
   ]);
 
   return (
+    <PinLimitGuardProvider
+      pinnedCategories={pinnedCategoryList}
+      pinnedConversations={pinnedConversationList}
+    >
     <aside
       className="rounded-2xl border border-gray-200 bg-white shadow-sm flex flex-col overflow-hidden h-full"
       data-testid="left-sidebar"
@@ -1435,7 +1460,7 @@ export const ConversationListSidebar: React.FC<
                 >
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600/10 text-brand-700 border border-brand-100">
                     <span className="text-[11px] font-semibold">
-                      {initials(g.name)}
+                      {getInitials(g.name)}
                     </span>
                   </div>
 
@@ -1574,6 +1599,7 @@ export const ConversationListSidebar: React.FC<
         <NccTagManagementModal onClose={() => setShowNccTagManagement(false)} />
       )}
     </aside>
+    </PinLimitGuardProvider>
   );
 };
 

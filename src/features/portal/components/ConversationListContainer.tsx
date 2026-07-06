@@ -13,6 +13,7 @@ import type {
   Conversation,
 } from "@/types/conversations";
 import { RefreshCw } from "lucide-react";
+import { getInitials } from "@/utils/getInitials";
 import type { ConversationInfoDto } from "@/types/categories";
 
 interface ConversationListContainerProps {
@@ -190,12 +191,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
     conversation.type === "DM" ? name.replace(/^DM:\s*/, "") : name;
 
   // Get initials for avatar
-  const initials = displayName
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = getInitials(displayName);
 
   // Format relative time
   const formatTime = (dateStr: string) => {

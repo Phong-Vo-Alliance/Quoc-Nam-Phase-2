@@ -784,7 +784,7 @@ export const TaskCard: React.FC<{
                                   : "border-[1px] border-gray-200 bg-gray-100 cursor-not-allowed opacity-70"
                                 : c.done
                                   ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 cursor-pointer checklist-btn"
-                                  : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_rgba(16,185,129,0.35)]"
+                                  : "checklist-btn border-[1px] border-emerald-300 bg-white hover:shadow-[0_0_4px_var(--brand-glow)]"
                             }
                           `}
                           disabled={

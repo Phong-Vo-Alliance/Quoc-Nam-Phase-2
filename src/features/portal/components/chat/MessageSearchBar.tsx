@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { useSearchMessages } from "@/hooks/queries/useSearchMessages";
 import { formatDateDDMMYYYY } from "@/utils/formatDateSeparator";
+import type { SearchMessageItem } from "@/types/search";
 
 // Simple debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -37,7 +38,9 @@ function formatSearchTimestamp(isoDate: string): string {
 
 interface MessageSearchBarProps {
   conversationId: string;
-  onSelectMessage: (messageId: string) => void;
+  // parentMessageId is set when the picked result is a thread reply; the caller
+  // uses it as aroundMessageId to jump to the root message.
+  onSelectMessage: (messageId: string, parentMessageId?: string | null) => void;
 }
 
 export const MessageSearchBar: React.FC<MessageSearchBarProps> = ({
@@ -94,8 +97,8 @@ export const MessageSearchBar: React.FC<MessageSearchBarProps> = ({
     }
   };
 
-  const handleSelect = (messageId: string) => {
-    onSelectMessage(messageId);
+  const handleSelect = (item: SearchMessageItem) => {
+    onSelectMessage(item.id, item.parentMessageId);
     closeSearch();
   };
 
@@ -189,7 +192,7 @@ export const MessageSearchBar: React.FC<MessageSearchBarProps> = ({
                   results.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => handleSelect(item.id)}
+                      onClick={() => handleSelect(item)}
                       className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-100
                                  transition-colors text-sm cursor-pointer"
                       type="button"

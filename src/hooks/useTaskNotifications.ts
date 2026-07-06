@@ -105,7 +105,8 @@ export function useTaskNotifications() {
         queryKey: tasksKeys.all,
       });
 
-      if (payload.changeType === "created") {
+      if (payload.changeType === "created" && payload.task) {
+        const createdTaskId = payload.task.id;
         queryClient.setQueryData<{
           pages: GetMessagesResponse[];
           pageParams: (string | undefined)[];
@@ -125,8 +126,8 @@ export function useTaskNotifications() {
                   if (item.id === payload.messageId) {
                     const _r = {
                       ...item,
-                      linkedTaskId: payload.task.id,
-                      taskId: payload.task.id,
+                      linkedTaskId: createdTaskId,
+                      taskId: createdTaskId,
                     };
                     return _r;
                   }
@@ -146,7 +147,7 @@ export function useTaskNotifications() {
       // 4. Get user name from conversation members (if available)
       const getUserName = (userId: string): string => {
         // Try to get from conversation members cache
-        if (payload.task.conversationId) {
+        if (payload.task?.conversationId) {
           const membersCache = queryClient.getQueryData<ConversationMember[]>(
             conversationKeys.members(payload.task.conversationId),
           );
@@ -170,8 +171,10 @@ export function useTaskNotifications() {
       };
 
       // 5. Show toast notifications based on change type
-      const taskTitle = payload.task.title;
-      const isAssignedToMe = payload.task.assignToUserId === currentUserId;
+      // Note: payload.task can be null/undefined (e.g. "deleted" events or
+      // partial payloads from backend) even though the type says otherwise.
+      const taskTitle = payload.task?.title ?? "công việc";
+      const isAssignedToMe = payload.task?.assignToUserId === currentUserId;
       const isMyAction = payload.changedByUserId === currentUserId;
 
       switch (payload.changeType) {
@@ -186,7 +189,7 @@ export function useTaskNotifications() {
         }
 
         case "status_changed": {
-          const newStatus = payload.task.statusCode;
+          const newStatus = payload.task?.statusCode ?? "";
           const newStatusLabel =
             payload.metadata?.statusName ||
             STATUS_LABELS_VI[newStatus?.toLowerCase()] ||
@@ -202,7 +205,7 @@ export function useTaskNotifications() {
         }
 
         case "checklist_item_checked": {
-          const completionPercentage = payload.task.completionPercentage;
+          const completionPercentage = payload.task?.completionPercentage ?? 0;
           toast.info(
             `Công việc "${taskTitle}" đang hoàn thành: ${completionPercentage}%`,
           );
@@ -217,7 +220,7 @@ export function useTaskNotifications() {
         }
 
         case "reassigned": {
-          const assigneeName = getUserName(payload.task.assignToUserId);
+          const assigneeName = getUserName(payload.task?.assignToUserId ?? "");
           if (isAssignedToMe) {
             toast.info(`Công việc "${taskTitle}" đã được giao lại cho bạn`);
           } else {

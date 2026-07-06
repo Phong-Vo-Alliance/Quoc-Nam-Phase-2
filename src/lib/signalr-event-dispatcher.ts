@@ -9,22 +9,36 @@ import * as categoryCache from "@/lib/cache-updaters/category-cache";
 import * as directCache from "@/lib/cache-updaters/direct-cache";
 import * as conversationCache from "@/lib/cache-updaters/conversation-cache";
 import * as notificationService from "@/lib/notification-service";
+import {
+  normalizeMessageReactions,
+  normalizeReactions,
+} from "@/lib/reactions-normalize";
 import { mentionKeys } from "@/hooks/queries/keys/mentionKeys";
 import { pinnedStarredKeys } from "@/hooks/queries/keys/pinnedStarredKeys";
-import type {
-  MentionDto,
-  PagedResult,
-  UnreadMentionCountResponse,
-} from "@/types/mentions";
+import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
+import type { UnreadMentionCountResponse } from "@/types/mentions";
+import type { InformationConfirmedPagedResponse } from "@/types/information_confirmed";
 import type {
   MentionReadEvent,
+  MentionUnreadEvent,
   MentionsBulkReadEvent,
+  MentionsBulkUnreadEvent,
+  MessageConfirmedEvent,
   MessagePinnedEvent,
+  MessageRecallCapabilityChangedEvent,
+  MessageRecalledEvent,
+  MessageUnconfirmedEvent,
   MessageUnpinnedEvent,
   PinnedMessagesReorderedEvent,
+  ReactionAddedEvent,
+  ReactionRemovedEvent,
   UserMentionedEvent,
 } from "@/types/signalr-events";
 import type { ChatMessage, ChatMessageContentType } from "@/types/messages";
+import type {
+  GetPinnedMessagesResponse,
+  StarredMessageDto,
+} from "@/types/pinned_and_starred";
 
 const CONTENT_TYPE_MAP: Record<number, ChatMessageContentType> = {
   1: "TXT",
@@ -90,10 +104,12 @@ export function registerAllEventHandlers(
         raw && "message" in raw && raw.message ? raw.message : raw;
       if (!unwrapped?.id) return;
 
-      const message: ChatMessage = {
+      // Chuẩn hoá reactions (backend gửi map keyed emoji) → mảng phẳng để cache
+      // luôn giữ mảng; delta reaction sau đó áp chồng đúng cách.
+      const message: ChatMessage = normalizeMessageReactions({
         ...unwrapped,
         contentType: normalizeContentType(unwrapped.contentType),
-      };
+      });
 
       messageCache.handleMessageSent(messageCacheCtx, message);
       categoryCache.handleMessageSent(categoryCacheCtx, message);
@@ -118,6 +134,208 @@ export function registerAllEventHandlers(
       categoryCache.handleMessageRead(categoryCacheCtx, unwrapped);
       directCache.handleMessageRead(directCacheCtx, unwrapped);
     },
+  );
+
+  // Thu hồi tin nhắn (realtime): đồng bộ cache để bubble chuyển trạng thái "đã
+  // thu hồi" ngay. Payload kèm `recallInfo.canViewOriginal` (server tính riêng
+  // cho từng user) → quyết định có nút "Xem tin nhắn gốc"/thời gian thu hồi hay
+  // không. Thiếu cờ → giữ giá trị API đã set cho user này (mặc định false).
+  // Guard `!isRecalled` trong cache updater chống xử lý lặp khi server echo lại
+  // chính lần thu hồi của user (đã set bởi useRecallMessage.onSuccess).
+  const cleanupMessageRecalled = chatHub.onWithCleanup<MessageRecalledEvent>(
+    SIGNALR_EVENTS.MESSAGE_RECALLED,
+    (event) => {
+      if (!event?.conversationId || !event?.messageId) return;
+      messageCache.setMessageRecalledFlag(
+        queryClient,
+        event.conversationId,
+        event.messageId,
+        event.recalledAt,
+        event.recalledBy,
+        event.recalledContentText,
+        event.recallInfo?.canViewOriginal,
+      );
+
+      // Đồng bộ preview ở sidebar: nếu tin bị thu hồi đang là lastMessage của
+      // loại việc / chat cá nhân thì đổi sang placeholder ngay (không phải chờ
+      // F5). Hai hàm tự no-op khi tin thu hồi không phải lastMessage.
+      categoryCache.handleMessageRecalled(categoryCacheCtx, {
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        recalledContentText: event.recalledContentText,
+      });
+      directCache.handleMessageRecalled(directCacheCtx, {
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        recalledContentText: event.recalledContentText,
+      });
+
+      // Tin thu hồi có đính kèm → file đã bị gỡ, load lại danh sách
+      // attachments để ConversationDetailsPanel không còn hiển thị ảnh/file đó.
+      // Chỉ refetch khi user đang mở đúng hội thoại (query mới active ở đó).
+      if (
+        event.needReloadFile &&
+        event.conversationId === getActiveConversationId()
+      ) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation-attachments", event.conversationId],
+        });
+      }
+
+      // Tin bị thu hồi đang nằm trong danh sách "Tin Đánh Dấu (Tất cả)"
+      // (PinnedMessagesPanel) đang mở → refetch để cập nhật/loại bỏ nó.
+      // refetchType:"active" chỉ gọi lại API khi panel đang mount (query active);
+      // check messageId tránh refetch thừa khi tin thu hồi không được đánh dấu.
+      const starredCaches = queryClient.getQueriesData<StarredMessageDto[]>({
+        queryKey: pinnedStarredKeys.starred,
+      });
+      const affectsStarred = starredCaches.some(
+        ([, data]) =>
+          Array.isArray(data) &&
+          data.some((s) => s.messageId === event.messageId),
+      );
+      if (affectsStarred) {
+        queryClient.invalidateQueries({
+          queryKey: pinnedStarredKeys.starred,
+          refetchType: "active",
+        });
+      }
+
+      // Tin bị thu hồi đang được GHIM (PinBar / PinnedMessagesPanel) → load lại
+      // danh sách ghim của hội thoại để bản ghim đổi sang trạng thái "đã thu hồi"
+      // (hoặc bị server gỡ khỏi danh sách). Chỉ refetch khi tin thu hồi thực sự
+      // nằm trong danh sách ghim đang cache → tránh gọi API thừa.
+      const pinnedCache = queryClient.getQueryData<GetPinnedMessagesResponse>(
+        pinnedStarredKeys.pinnedByConversation(event.conversationId),
+      );
+      const affectsPinned = pinnedCache?.items?.some(
+        (p) => p.messageId === event.messageId,
+      );
+      if (affectsPinned) {
+        queryClient.invalidateQueries({
+          queryKey: pinnedStarredKeys.pinnedByConversation(
+            event.conversationId,
+          ),
+          refetchType: "active",
+        });
+      }
+
+      // Tin bị thu hồi có bản ghi "thông tin đã xác nhận" (information-confirmed)
+      // gắn theo messageId → bản ghi đó cần được server tính lại, load lại danh
+      // sách xác nhận để badge trên bubble + các panel confirmed-info khớp ngay
+      // (không phải chờ F5). Chỉ refetch khi messageId thực sự nằm trong một list
+      // đang cache → tránh gọi API/api/information-confirmed thừa.
+      const confirmedCaches =
+        queryClient.getQueriesData<InformationConfirmedPagedResponse>({
+          queryKey: informationConfirmedKeys.all,
+        });
+      const affectsConfirmed = confirmedCaches.some(
+        ([, data]) =>
+          Array.isArray(data?.data) &&
+          data.data.some((info) => info.messageId === event.messageId),
+      );
+      if (affectsConfirmed) {
+        queryClient.invalidateQueries({
+          queryKey: informationConfirmedKeys.all,
+          refetchType: "active",
+        });
+      }
+    },
+  );
+
+  // Quyền thu hồi của tin nhắn thay đổi (realtime): server tính lại recallInfo
+  // cho user hiện tại (vd hết hạn cửa sổ thu hồi → canRecall=false) và đẩy
+  // nguyên trạng thái mới. Chỉ cập nhật recallInfo trong cache để bubble đổi
+  // nút "Thu hồi"/"Xem tin nhắn gốc" ngay; không đụng tới preview sidebar.
+  const cleanupMessageRecallCapabilityChanged =
+    chatHub.onWithCleanup<MessageRecallCapabilityChangedEvent>(
+      SIGNALR_EVENTS.MESSAGE_RECALL_CAPABILITY_CHANGED,
+      (event) => {
+        if (!event?.conversationId || !event?.messageId || !event?.recallInfo)
+          return;
+        messageCache.updateMessageRecallInfo(
+          queryClient,
+          event.conversationId,
+          event.messageId,
+          event.recallInfo,
+        );
+      },
+    );
+
+  // Xác nhận tin nhắn (realtime): người khác xác nhận/bỏ xác nhận. Cả hai event
+  // mang nguyên danh sách `confirmations` mới nhất → ghi đè toàn bộ list trong
+  // cache để pill + số lượng khớp server ngay. Không cần skip-self: event của
+  // chính user chỉ ghi đè lại đúng list (và sửa `confirmedAt` client tự đoán
+  // trong onSuccess về giá trị chuẩn của server). Cache updater tự no-op khi
+  // list không đổi / hội thoại chưa cache / tin chưa load.
+  const handleConfirmationsEvent = (
+    event: MessageConfirmedEvent | MessageUnconfirmedEvent,
+  ) => {
+    if (!event?.conversationId || !event?.messageId || !event?.confirmations)
+      return;
+    messageCache.setMessageConfirmations(
+      queryClient,
+      event.conversationId,
+      event.messageId,
+      event.confirmations,
+    );
+  };
+
+  const cleanupMessageConfirmed = chatHub.onWithCleanup<MessageConfirmedEvent>(
+    SIGNALR_EVENTS.MESSAGE_CONFIRMED,
+    handleConfirmationsEvent,
+  );
+
+  const cleanupMessageUnconfirmed =
+    chatHub.onWithCleanup<MessageUnconfirmedEvent>(
+      SIGNALR_EVENTS.MESSAGE_UNCONFIRMED,
+      handleConfirmationsEvent,
+    );
+
+  // Thả cảm xúc (realtime): người khác thả/gỡ một cảm xúc trên tin.
+  // Ưu tiên SNAPSHOT: nếu payload kèm nguyên `reactions` (map keyed emoji) thì
+  // bung mảng và ghi đè toàn bộ list — luôn khớp server, không lệ thuộc thứ tự
+  // event. Ngược lại xử lý DELTA một cặp (userId, emoji) → add/remove đúng một
+  // cặp. Không skip-self: echo về chính user chỉ ghi lại đúng trạng thái đã có
+  // (updater no-op khi không đổi / hội thoại chưa cache / tin chưa load).
+  const handleReactionEvent = (
+    event: ReactionAddedEvent | ReactionRemovedEvent,
+    added: boolean,
+  ) => {
+    if (!event?.conversationId || !event?.messageId) return;
+
+    if (event.reactions && typeof event.reactions === "object") {
+      messageCache.setMessageReactions(
+        queryClient,
+        event.conversationId,
+        event.messageId,
+        normalizeReactions(event.reactions),
+      );
+      return;
+    }
+
+    if (!event.userId || !event.emoji) return;
+    messageCache.setMessageReaction(
+      queryClient,
+      event.conversationId,
+      event.messageId,
+      {
+        emoji: event.emoji,
+        userId: event.userId,
+        userName: event.fullName ?? "Người dùng",
+      },
+      added,
+    );
+  };
+
+  const cleanupReactionAdded = chatHub.onWithCleanup<ReactionAddedEvent>(
+    SIGNALR_EVENTS.REACTION_ADDED,
+    (event) => handleReactionEvent(event, true),
+  );
+
+  const cleanupReactionRemoved = chatHub.onWithCleanup<ReactionRemovedEvent>(
+    SIGNALR_EVENTS.REACTION_REMOVED,
+    (event) => handleReactionEvent(event, false),
   );
 
   const cleanupConversationCreated = chatHub.onWithCleanup(
@@ -217,11 +435,6 @@ export function registerAllEventHandlers(
   );
 
   // ───────── Mentions ─────────
-  type MentionInfinitePages = {
-    pages: PagedResult<MentionDto>[];
-    pageParams: unknown[];
-  };
-
   const bumpUnreadCount = (delta: number) => {
     queryClient.setQueryData<UnreadMentionCountResponse>(
       mentionKeys.unreadCount(),
@@ -230,62 +443,6 @@ export function registerAllEventHandlers(
           ? { ...prev, count: Math.max(0, prev.count + delta) }
           : prev,
     );
-  };
-
-  // Apply a "mark read" optimistic update to every history cache. For the
-  // `isRead: false` (Unread) tab we drop the item; for `all` and `read` tabs
-  // we keep it but flip its isRead flag so it doesn't visually disappear.
-  const markMentionReadInCaches = (mentionId: string) => {
-    const entries = queryClient.getQueriesData<MentionInfinitePages>({
-      queryKey: mentionKeys.historyAll(),
-    });
-    for (const [key, data] of entries) {
-      if (!data || !("pages" in data)) continue;
-      const filters = key[2] as
-        | { isRead?: boolean; conversationId?: string }
-        | undefined;
-
-      if (filters?.isRead === false) {
-        let removed = 0;
-        const pages = data.pages.map((page) => {
-          const items = page.items.filter((m) => {
-            if (m.id === mentionId) {
-              removed += 1;
-              return false;
-            }
-            return true;
-          });
-          return items.length === page.items.length
-            ? page
-            : { ...page, items };
-        });
-        if (removed === 0) continue;
-        queryClient.setQueryData(key, {
-          ...data,
-          pages: pages.map((p) => ({
-            ...p,
-            totalCount: Math.max(0, p.totalCount - removed),
-          })),
-        });
-      } else {
-        let changed = false;
-        const pages = data.pages.map((page) => {
-          let pageChanged = false;
-          const items = page.items.map((m) => {
-            if (m.id === mentionId && !m.isRead) {
-              pageChanged = true;
-              return { ...m, isRead: true };
-            }
-            return m;
-          });
-          if (!pageChanged) return page;
-          changed = true;
-          return { ...page, items };
-        });
-        if (!changed) continue;
-        queryClient.setQueryData(key, { ...data, pages });
-      }
-    }
   };
 
   const cleanupUserMentioned = chatHub.onWithCleanup<UserMentionedEvent>(
@@ -306,10 +463,26 @@ export function registerAllEventHandlers(
     SIGNALR_EVENTS.MENTION_READ,
     (event) => {
       if (!event?.mentionId) return;
-      // Multi-device sync: another session marked it read.
-      markMentionReadInCaches(event.mentionId);
-      bumpUnreadCount(-1);
-      // Trust server count
+      // Multi-device sync: another session marked it read. Don't patch the
+      // caches by hand — just refetch the list and trust the server count.
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.historyAll(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.unreadCount(),
+      });
+    },
+  );
+
+  const cleanupMentionUnread = chatHub.onWithCleanup<MentionUnreadEvent>(
+    SIGNALR_EVENTS.MENTION_UNREAD,
+    (event) => {
+      if (!event?.mentionId) return;
+      // A mention was marked unread (another session / server). Don't patch the
+      // caches by hand — just refetch the list and trust the server count.
+      queryClient.invalidateQueries({
+        queryKey: mentionKeys.historyAll(),
+      });
       queryClient.invalidateQueries({
         queryKey: mentionKeys.unreadCount(),
       });
@@ -323,6 +496,16 @@ export function registerAllEventHandlers(
       queryClient.invalidateQueries({ queryKey: mentionKeys.root });
     },
   );
+
+  const cleanupMentionsBulkUnread =
+    chatHub.onWithCleanup<MentionsBulkUnreadEvent>(
+      SIGNALR_EVENTS.MENTIONS_BULK_UNREAD,
+      () => {
+        // Bulk unread can affect arbitrary items — refetch everything so the
+        // currently selected filter (all / unread / read) reloads in place.
+        queryClient.invalidateQueries({ queryKey: mentionKeys.root });
+      },
+    );
 
   // ───────── Pinned messages ─────────
   // When another member pins/unpins/reorders we refetch the pinned list and,
@@ -383,6 +566,12 @@ export function registerAllEventHandlers(
   return [
     cleanupMessageSent,
     cleanupMessageRead,
+    cleanupMessageRecalled,
+    cleanupMessageRecallCapabilityChanged,
+    cleanupMessageConfirmed,
+    cleanupMessageUnconfirmed,
+    cleanupReactionAdded,
+    cleanupReactionRemoved,
     cleanupConversationCreated,
     cleanupConversationUpdated,
     cleanupMemberAdded,
@@ -395,7 +584,9 @@ export function registerAllEventHandlers(
     cleanupConversationDeleted,
     cleanupUserMentioned,
     cleanupMentionRead,
+    cleanupMentionUnread,
     cleanupMentionsBulkRead,
+    cleanupMentionsBulkUnread,
     cleanupMessagePinned,
     cleanupMessageUnpinned,
     cleanupPinnedMessagesReordered,

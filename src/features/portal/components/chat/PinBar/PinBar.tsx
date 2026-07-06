@@ -2,22 +2,30 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { PinBarCollapsed } from "./PinBarCollapsed";
 import { PinBarExpanded } from "./PinBarExpanded";
 import { usePinBar } from "./usePinBar";
+import { useUnpinConfirm } from "./useUnpinConfirm";
+import { UnpinConfirmDialog } from "./UnpinConfirmDialog";
 
 interface PinBarProps {
   conversationId: string | undefined;
   onJumpToMessage: (messageId: string, parentMessageId?: string) => void;
+  /** Controlled expanded state. When provided, internal state is ignored. */
+  isExpanded?: boolean;
+  /** Notifies the parent when the expanded state changes (controlled mode). */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 export const PinBar: React.FC<PinBarProps> = ({
   conversationId,
   onJumpToMessage,
+  isExpanded: isExpandedProp,
+  onExpandedChange,
 }) => {
   const {
     visible,
     pins,
-    isExpanded,
-    toggleExpanded,
-    collapse,
+    isExpanded: internalExpanded,
+    toggleExpanded: internalToggle,
+    collapse: internalCollapse,
     unpin,
     moveToTop,
     moveToBottom,
@@ -25,6 +33,20 @@ export const PinBar: React.FC<PinBarProps> = ({
     totalCount,
     pinLimit,
   } = usePinBar(conversationId);
+
+  // Controlled when the parent owns the expanded state (mutual exclusion with TaskBanner).
+  const isControlled = isExpandedProp !== undefined;
+  const isExpanded = isControlled ? isExpandedProp : internalExpanded;
+  const toggleExpanded = useCallback(() => {
+    if (isControlled) onExpandedChange?.(!isExpanded);
+    else internalToggle();
+  }, [isControlled, isExpanded, onExpandedChange, internalToggle]);
+  const collapse = useCallback(() => {
+    if (isControlled) onExpandedChange?.(false);
+    else internalCollapse();
+  }, [isControlled, onExpandedChange, internalCollapse]);
+
+  const unpinConfirm = useUnpinConfirm(unpin);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -71,12 +93,20 @@ export const PinBar: React.FC<PinBarProps> = ({
             pins={pins}
             pinLimit={pinLimit}
             onJumpToMessage={handleJumpToMessage}
-            onUnpin={unpin}
+            onUnpin={unpinConfirm.requestUnpin}
             onMoveToTop={moveToTop}
             onMoveToBottom={moveToBottom}
           />
         </div>
       )}
+
+      <UnpinConfirmDialog
+        open={unpinConfirm.open}
+        onOpenChange={(o) => {
+          if (!o) unpinConfirm.cancel();
+        }}
+        onConfirm={unpinConfirm.confirm}
+      />
     </div>
   );
 };

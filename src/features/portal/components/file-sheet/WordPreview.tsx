@@ -10,6 +10,7 @@
 import { useWordPreview } from "@/hooks/queries/useWordPreview";
 import { AlertCircle } from "lucide-react";
 import { downloadFile } from "@/api/files.api";
+import { getApiErrorMessage } from "@/utils/errorHandling";
 import { toast } from "sonner";
 import { SecureWatermarkContainer } from "./Watermark";
 import PreviewHeader from "./PreviewHeader";
@@ -24,6 +25,9 @@ export interface WordPreviewProps {
 
   /** Callback when close button clicked */
   onClose: () => void;
+
+  /** Chặn tải về dù API trả canDownload = true (vd: file của tin đã thu hồi). */
+  disableDownload?: boolean;
 }
 
 /**
@@ -45,6 +49,7 @@ export default function WordPreview({
   fileId,
   fileName,
   onClose,
+  disableDownload = false,
 }: WordPreviewProps) {
   const { data, isLoading, isError, error, refetch } = useWordPreview(fileId);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -62,11 +67,16 @@ export default function WordPreview({
       URL.revokeObjectURL(url);
       toast.success("Tải file thành công");
     } catch (error: any) {
-      const status = error?.response?.status;
-      if (status === 404) toast.error("File không tồn tại");
-      else if (status === 403) toast.error("Không có quyền tải file này");
-      else if (status === 401) toast.error("Chưa đăng nhập");
-      else toast.error("Không thể tải file");
+      const apiMessage = await getApiErrorMessage(error);
+      if (apiMessage) {
+        toast.error(apiMessage);
+      } else {
+        const status = error?.response?.status;
+        if (status === 404) toast.error("File không tồn tại");
+        else if (status === 403) toast.error("Không có quyền tải file này");
+        else if (status === 401) toast.error("Chưa đăng nhập");
+        else toast.error("Không thể tải file");
+      }
     } finally {
       setIsDownloading(false);
     }
@@ -98,7 +108,7 @@ export default function WordPreview({
       <PreviewHeader
         fileName={fileName}
         onClose={onClose}
-        canDownload={data?.canDownload}
+        canDownload={!disableDownload && data?.canDownload}
         onDownload={handleDownload}
         isDownloading={isDownloading}
       />

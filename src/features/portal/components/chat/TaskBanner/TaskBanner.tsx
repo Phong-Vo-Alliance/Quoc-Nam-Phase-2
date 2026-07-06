@@ -6,14 +6,33 @@ import { useTaskBanner } from "./useTaskBanner";
 interface TaskBannerProps {
   categoryId: string | undefined;
   onViewWorkType?: (conversationId: string) => void;
+  /** Controlled expanded state. When provided, internal state is ignored. */
+  isExpanded?: boolean;
+  /** Notifies the parent when the user toggles the banner (controlled mode). */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 export const TaskBanner: React.FC<TaskBannerProps> = ({
   categoryId,
   onViewWorkType,
+  isExpanded: isExpandedProp,
+  onExpandedChange,
 }) => {
-  const { visible, totalCount, breakdown, isExpanded, toggleExpanded } =
-    useTaskBanner(categoryId);
+  const {
+    visible,
+    totalCount,
+    breakdown,
+    isExpanded: internalExpanded,
+    toggleExpanded: internalToggle,
+  } = useTaskBanner(categoryId);
+
+  // Controlled when the parent owns the expanded state (mutual exclusion with PinBar).
+  const isControlled = isExpandedProp !== undefined;
+  const isExpanded = isControlled ? isExpandedProp : internalExpanded;
+  const toggleExpanded = useCallback(() => {
+    if (isControlled) onExpandedChange?.(!isExpanded);
+    else internalToggle();
+  }, [isControlled, isExpanded, onExpandedChange, internalToggle]);
 
   const handleViewWorkType = useCallback(
     (conversationId: string) => {

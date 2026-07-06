@@ -38,4 +38,22 @@ export const categoriesApi = {
     );
     return data;
   },
+
+  /**
+   * Pin a category for the authenticated user
+   * @param categoryId - The category UUID
+   * @throws {AxiosError} On API error (404 if category not found, 401, etc.)
+   */
+  pinCategory: async (categoryId: string): Promise<void> => {
+    await apiClient.post(`/api/categories/${categoryId}/pin`);
+  },
+
+  /**
+   * Unpin a category for the authenticated user
+   * @param categoryId - The category UUID
+   * @throws {AxiosError} On API error (404 if category not found, 401, etc.)
+   */
+  unpinCategory: async (categoryId: string): Promise<void> => {
+    await apiClient.delete(`/api/categories/${categoryId}/pin`);
+  },
 };

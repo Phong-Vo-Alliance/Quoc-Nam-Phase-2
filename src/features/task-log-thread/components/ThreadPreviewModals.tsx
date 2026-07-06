@@ -7,9 +7,11 @@ interface ThreadPreviewModalsProps {
   previewFileName: string;
   previewImages: Array<{ fileId: string; fileName: string }>;
   previewInitialIndex: number;
+  previewDisableDownload?: boolean;
   onCloseImagePreview: () => void;
   filePreviewId: string | null;
   filePreviewName: string;
+  filePreviewDisableDownload?: boolean;
   onCloseFilePreview: () => void;
 }
 
@@ -18,9 +20,11 @@ export const ThreadPreviewModals: React.FC<ThreadPreviewModalsProps> = ({
   previewFileName,
   previewImages,
   previewInitialIndex,
+  previewDisableDownload = false,
   onCloseImagePreview,
   filePreviewId,
   filePreviewName,
+  filePreviewDisableDownload = false,
   onCloseFilePreview,
 }) => {
   return (
@@ -37,6 +41,7 @@ export const ThreadPreviewModals: React.FC<ThreadPreviewModalsProps> = ({
         fileName={previewFileName}
         images={previewImages.length > 0 ? previewImages : undefined}
         initialIndex={previewInitialIndex}
+        disableDownload={previewDisableDownload}
       />
 
       {/* File Preview Modal */}
@@ -46,6 +51,7 @@ export const ThreadPreviewModals: React.FC<ThreadPreviewModalsProps> = ({
           fileId={filePreviewId}
           fileName={filePreviewName}
           onClose={onCloseFilePreview}
+          disableDownload={filePreviewDisableDownload}
         />
       )}
     </>

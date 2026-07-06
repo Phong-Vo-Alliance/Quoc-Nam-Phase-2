@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { MentionDropdown } from "./MentionDropdown";
 import { ShortcutDropdown } from "./ShortcutDropdown";
+import { EmojiPicker } from "./EmojiPicker";
 import { useMentionMembers } from "@/hooks/queries/useMentionMembers";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuickMessageReplacement } from "@/hooks/useQuickMessageReplacement";
@@ -76,6 +77,8 @@ export interface MentionInputProps {
    * Use this to pass a filtered/custom member list (e.g. vendor-only members).
    */
   members?: ConversationMember[];
+  /** Show the inline emoji picker at the end of the input (brand-gated). */
+  enableEmoji?: boolean;
 }
 
 /**
@@ -119,6 +122,7 @@ export const MentionInputInline = forwardRef<
       className,
       canSendWithoutText = false,
       members: membersProp,
+      enableEmoji = false,
     },
     forwardedRef,
   ) => {
@@ -165,6 +169,9 @@ export const MentionInputInline = forwardRef<
     const isComposingRef = useRef(false);
     const lastKnownTextRef = useRef<string>("");
     const mentionsRef = useRef<MentionData[]>([]); // Ref to avoid stale closure
+    // Last caret range inside the editor, captured on blur so the emoji picker
+    // (which steals focus when opened) can insert at the caret, not at the end.
+    const savedRangeRef = useRef<Range | null>(null);
 
     const updateFixedPosition = useCallback(
       (coords: { top: number; left: number }) => {
@@ -351,6 +358,51 @@ export const MentionInputInline = forwardRef<
         .replace(ZERO_WIDTH_RE, "")
         .normalize("NFC");
     }, []);
+
+    // Save the current caret range when it lives inside the editor. Used by the
+    // emoji picker: opening the popover blurs the editor, so we restore this
+    // range to insert the emoji where the user left the cursor.
+    const saveSelection = useCallback(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || !editorRef.current) return;
+      const range = selection.getRangeAt(0);
+      if (editorRef.current.contains(range.commonAncestorContainer)) {
+        savedRangeRef.current = range.cloneRange();
+      }
+    }, []);
+
+    // Insert an emoji at the saved caret (or at the end if none). Operates on the
+    // DOM range directly without focusing the editor, so the picker popover stays
+    // open for picking several emojis in a row.
+    const insertEmoji = useCallback(
+      (emoji: string) => {
+        const editor = editorRef.current;
+        if (!editor) return;
+
+        let range: Range;
+        const saved = savedRangeRef.current;
+        if (saved && editor.contains(saved.commonAncestorContainer)) {
+          range = saved;
+        } else {
+          range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false); // end of content
+        }
+
+        range.deleteContents();
+        const node = document.createTextNode(emoji);
+        range.insertNode(node);
+
+        // Move caret after the inserted emoji and remember it for the next pick.
+        range.setStartAfter(node);
+        range.setEndAfter(node);
+        range.collapse(true);
+        savedRangeRef.current = range.cloneRange();
+
+        onChange(getTextContent());
+      },
+      [getTextContent, onChange],
+    );
 
     // Get cursor position in text (accounting for <br> as newlines, normalized to \n)
     const getCursorPosition = useCallback(() => {
@@ -1529,6 +1581,7 @@ export const MentionInputInline = forwardRef<
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
+          onBlur={enableEmoji ? saveSelection : undefined}
           onCompositionStart={() => (isComposingRef.current = true)}
           onCompositionEnd={() => {
             isComposingRef.current = false;
@@ -1537,6 +1590,7 @@ export const MentionInputInline = forwardRef<
           className={cn(
             "w-full min-h-[44px] max-h-[200px] overflow-y-auto overflow-x-hidden",
             "px-4 py-2.5 rounded-lg",
+            enableEmoji && "pr-11", // room for the inline emoji button
             "bg-white border border-gray-200",
             "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent",
             "text-sm text-gray-900",
@@ -1548,6 +1602,13 @@ export const MentionInputInline = forwardRef<
           data-testid="mention-input"
           suppressContentEditableWarning
         />
+
+        {/* Inline emoji picker — anchored to the end of the input (Alliance only) */}
+        {enableEmoji && (
+          <div className="absolute bottom-1.5 right-2">
+            <EmojiPicker onSelect={insertEmoji} disabled={disabled} />
+          </div>
+        )}
       </div>
     );
   },

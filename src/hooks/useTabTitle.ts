@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useDirectMessages } from "./queries/useDirectMessages";
 import { useCategories } from "./queries/useCategories";
+import { BRAND } from "@/config/brand.config";
+import { setFaviconBadge } from "@/lib/favicon-badge";
 
 interface UseTabTitleOptions {
   baseTitle?: string;
@@ -23,7 +25,7 @@ interface UseTabTitleOptions {
  * ```
  */
 export function useTabTitle(options: UseTabTitleOptions = {}) {
-  const { baseTitle = "Quoc Nam Portal", enabled = true } = options;
+  const { baseTitle = BRAND.portalTitle, enabled = true } = options;
 
   // Get all DM conversations from cache
   const { data: directConversations } = useDirectMessages();
@@ -49,17 +51,23 @@ export function useTabTitle(options: UseTabTitleOptions = {}) {
 
     const totalUnread = dmUnread + groupUnread;
 
-    // Update document title
+    // Update document title + favicon badge (chấm đỏ)
+    // Favicon badge tạm chỉ bật cho alliance
+    const faviconBadgeEnabled = BRAND.id === "alliance";
+
     if (totalUnread > 0) {
       const displayCount = totalUnread > 99 ? "99+" : totalUnread.toString();
       document.title = `(${displayCount}) ${baseTitle}`;
+      if (faviconBadgeEnabled) setFaviconBadge(true);
     } else {
       document.title = baseTitle;
+      if (faviconBadgeEnabled) setFaviconBadge(false);
     }
 
-    // Cleanup: restore base title on unmount
+    // Cleanup: restore base title + favicon on unmount
     return () => {
       document.title = baseTitle;
+      if (faviconBadgeEnabled) setFaviconBadge(false);
     };
   }, [directConversations, categories, baseTitle, enabled]);
 

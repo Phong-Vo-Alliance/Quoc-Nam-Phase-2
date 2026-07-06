@@ -111,6 +111,8 @@ export interface AuthMeResponse {
   id: string;
   identifier?: string;
   email?: string;
+  fullName?: string;
+  avatarUrl?: string | null;
   roles?: string[];
   departments?: UserDepartmentDto[];
 }
@@ -138,6 +140,13 @@ export interface AppUploadLimitsConfig {
 
 export interface AppChatConfig {
   maxPinnedMessages?: number;
+  maxPinnedCategories?: number;
+  maxPinnedDmConversations?: number;
+  /**
+   * Cho phép tải file/ảnh/video của tin nhắn đã bị thu hồi khi xem lại bản gốc.
+   * API quyết định; mặc định coi như false khi cờ chưa load.
+   */
+  canDownloadRecalledFile?: boolean;
 }
 
 export interface AppConfigResponse {

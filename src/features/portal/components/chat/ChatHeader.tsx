@@ -23,8 +23,14 @@ import {
 } from "@/components/ui/popover";
 import { LinearTabs } from "../LinearTabs";
 import { MessageSearchBar } from "./MessageSearchBar"; // 🆕 NEW: Message search
+import {
+  ThreadUnreadButton,
+  type UnreadThreadSummary,
+} from "./ThreadUnreadButton"; // 🆕 NEW: Unread threads dropdown
 import { useConversationMembers } from "@/hooks/queries/useConversationMembers"; // 🆕 NEW: Self-fetch members
 import { useAuthStore } from "@/stores/authStore"; // 🆕 NEW: Get current user ID for DM filtering
+import { FEATURE_FLAGS } from "@/config/env.config"; // 🆕 NEW: VITE_SHOW_MEMBER_AVATAR gating
+import { BRAND } from "@/config/brand.config"; // 🆕 NEW: VITE_BRAND gating (alliance-only features)
 import type { ConversationInfoDto } from "@/types/categories";
 
 interface ChatHeaderProps {
@@ -52,7 +58,14 @@ interface ChatHeaderProps {
   onChangeConversation?: (conversationId: string) => void;
 
   // 🆕 NEW: Message search
-  onSearchSelectMessage?: (messageId: string) => void;
+  onSearchSelectMessage?: (
+    messageId: string,
+    parentMessageId?: string | null,
+  ) => void;
+
+  // 🆕 NEW: Unread threads (group-only) — list of root messages with unread replies
+  unreadThreads?: UnreadThreadSummary[];
+  onJumpToThread?: (rootMessageId: string, linkedTaskId: string | null) => void;
 
   /** When true, show disabled badge instead of status */
   isConversationDisabled?: boolean;
@@ -99,6 +112,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   // 🆕 NEW: Message search
   onSearchSelectMessage,
 
+  // 🆕 NEW: Unread threads
+  unreadThreads,
+  onJumpToThread,
+
   isConversationDisabled = false,
 }) => {
   // 🆕 Get current user info for DM member filtering
@@ -132,6 +149,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       ? prevMemberCountRef.current
       : members.length;
 
+  // 🆕 NEW: Avatar người đối thoại cho chat cá nhân (DM) — chỉ khi bật config
+  // VITE_SHOW_MEMBER_AVATAR và member kia thực sự có avatarUrl. Nếu không có
+  // avatar thì giữ nguyên Avatar chữ cái viết tắt như hiện tại.
+  const dmMemberAvatarUrl = React.useMemo(() => {
+    if (!FEATURE_FLAGS.showMemberAvatar || !isDirect) return null;
+    const otherMember = members.find((m) => m.userId !== currentUser?.id);
+    return otherMember?.userInfo?.avatarUrl ?? null;
+  }, [isDirect, members, currentUser?.id]);
+
   // Display name for both title and avatar
   // API returns correct name directly, just use category override if needed
   const headerDisplayName = React.useMemo(() => {
@@ -153,6 +179,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         {conversationCategory === undefined ? (
           // 🐛 FIX (ui-improvements-20260205): Loading skeleton for avatar
           <div className="h-10 w-10 rounded-full bg-gray-200 animate-pulse shrink-0" />
+        ) : dmMemberAvatarUrl ? (
+          // 🆕 DM avatar ảnh (VITE_SHOW_MEMBER_AVATAR) — kích thước khớp Avatar chữ
+          <div className="h-7 w-7 overflow-hidden rounded-full shadow-sm shrink-0">
+            <img
+              src={dmMemberAvatarUrl}
+              alt={headerDisplayName}
+              className="h-full w-full object-cover"
+            />
+          </div>
         ) : (
           <Avatar
             name={headerDisplayName}
@@ -249,6 +284,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <MessageSearchBar
             conversationId={conversationId}
             onSelectMessage={onSearchSelectMessage}
+          />
+        )}
+
+        {/* Unread threads dropdown (group-only, Alliance brand only) */}
+        {BRAND.id === "alliance" && !isDirect && onJumpToThread && (
+          <ThreadUnreadButton
+            unreadThreads={unreadThreads ?? []}
+            onJumpToThread={onJumpToThread}
           />
         )}
 

@@ -58,6 +58,7 @@ export interface CategoryItemProps {
   category: {
     id: string;
     name: string;
+    isPinned?: boolean;
     departmentLeaders?: CategoryDepartmentLeaderDto[];
     conversations: Array<{
       conversationId: string;

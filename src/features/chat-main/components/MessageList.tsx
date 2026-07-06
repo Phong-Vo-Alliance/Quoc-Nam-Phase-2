@@ -4,6 +4,7 @@ import MessageDateSeparator from "@/components/chat/MessageDateSeparator";
 import UnreadSeparator from "@/components/chat/UnreadSeparator";
 import { MessageBubbleSimple } from "@/features/portal/components/chat/MessageBubbleSimple";
 import { SystemMessageBubble } from "@/features/portal/components/chat/SystemMessageBubble";
+import { useReactionEmojis } from "@/hooks/queries/useReactionEmojiConfig";
 import type { GroupedMessage } from "@/utils/messageGrouping";
 
 interface DateGroup {
@@ -33,8 +34,14 @@ interface MessageListProps {
   onLoadMore: () => void;
   onTogglePin?: (messageId: string, isPinned: boolean) => void;
   onToggleStar?: (messageId: string, isStarred: boolean) => void;
+  onRecall?: (messageId: string) => void;
   onCreateTask?: (messageId: string) => void;
   onConfirmInfo?: (messageId: string) => void;
+  onConfirmMessage?: (messageId: string) => void;
+  onUnconfirmMessage?: (messageId: string) => void;
+  onAddReaction?: (messageId: string, emoji: string) => void;
+  onRemoveReaction?: (messageId: string, emoji: string) => void;
+  confirmingMessageActionId?: string | null; // id tin đang gọi API xác nhận
   onRetry: (messageId: string) => void;
   onScrollToQuoted: (quotedMessageId: string) => void;
   onTaskLogClick?: (taskId: string) => void;
@@ -63,8 +70,14 @@ export const MessageList: React.FC<MessageListProps> = ({
   onLoadMore,
   onTogglePin,
   onToggleStar,
+  onRecall,
   onCreateTask,
   onConfirmInfo,
+  onConfirmMessage,
+  onUnconfirmMessage,
+  onAddReaction,
+  onRemoveReaction,
+  confirmingMessageActionId,
   onRetry,
   onScrollToQuoted,
   onTaskLogClick,
@@ -72,6 +85,10 @@ export const MessageList: React.FC<MessageListProps> = ({
   onImageClick,
 }) => {
   const isDirect = conversationType === "DM";
+  // Bộ emoji cho picker theo loại hội thoại (dm/group), lấy từ API config —
+  // gọi 1 lần ở đây rồi truyền xuống từng bubble (react-query cache dùng chung).
+  const { emojis: reactionEmojis, canReact } =
+    useReactionEmojis(conversationType);
 
   return (
     <>
@@ -134,8 +151,18 @@ export const MessageList: React.FC<MessageListProps> = ({
                     onImageClick={onImageClick}
                     onTogglePin={onTogglePin}
                     onToggleStar={onToggleStar}
+                    onRecall={onRecall}
                     onCreateTask={isDirect ? undefined : onCreateTask}
                     onConfirmInfo={isDirect ? undefined : onConfirmInfo}
+                    onConfirmMessage={onConfirmMessage}
+                    onUnconfirmMessage={onUnconfirmMessage}
+                    onAddReaction={onAddReaction}
+                    onRemoveReaction={onRemoveReaction}
+                    reactionEmojis={reactionEmojis}
+                    canReact={canReact}
+                    isConfirmingMessage={
+                      confirmingMessageActionId === message.id
+                    }
                     hasConfirmedInfo={confirmedMessageMap.has(message.id)}
                     confirmedByName={confirmedMessageMap.get(message.id)?.name}
                     confirmedByUserId={

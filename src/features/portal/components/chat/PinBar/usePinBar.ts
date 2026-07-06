@@ -139,11 +139,14 @@ export function usePinBar(conversationId: string | undefined): UsePinBarReturn {
   const pinLimit =
     data?.maxPinnedMessages ?? configPinLimit ?? DEFAULT_PIN_LIMIT;
 
+  // Render every pin the API returns — never truncate to pinLimit.
+  // pinLimit only gates *new* pins; the server may legitimately return more
+  // than the current limit (e.g. limit was lowered after pins were created).
   const pins = useMemo(() => {
     const items = data?.items;
     if (!conversationId || !Array.isArray(items)) return [];
-    return items.map(mapPinnedDtoToView).slice(0, pinLimit);
-  }, [conversationId, data, pinLimit]);
+    return items.map(mapPinnedDtoToView);
+  }, [conversationId, data]);
 
   const toggleExpanded = useCallback(() => {
     setIsExpanded((prev) => !prev);

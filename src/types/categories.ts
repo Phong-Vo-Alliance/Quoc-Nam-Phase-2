@@ -28,6 +28,12 @@ export interface CategoryDto {
   updatedAt: string | null;
   /** Department IDs associated with this category */
   departmentIds?: string[];
+  /** Whether this category is pinned by the current user (read model — populated by API) */
+  isPinned?: boolean;
+  /** When the category was pinned (ISO 8601), null if not pinned */
+  pinnedAt?: string | null;
+  /** Sort order among pinned categories (ascending; 0 = first) */
+  pinOrder?: number;
   /** Users who are leaders of this category's departments (source of truth for per-chat leader check) */
   departmentLeaders?: CategoryDepartmentLeaderDto[];
   /** Departments associated with this category (each flagged whether current user is leader) */
@@ -72,6 +78,8 @@ export interface LastMessageDto {
   senderName: string;
   /** Message content/text */
   content: string;
+  /** Message content type (TXT, IMG, FILE, VID, SYS, TASK) */
+  contentType?: string;
   /** Message sent timestamp (ISO 8601) */
   sentAt: string;
   /** Optional: Message attachments (images, files) */

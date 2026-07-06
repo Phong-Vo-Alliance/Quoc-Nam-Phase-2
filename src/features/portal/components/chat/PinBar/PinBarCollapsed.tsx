@@ -37,13 +37,20 @@ function getPreviewText(pin: PinnedGroupMessage): string {
 }
 
 /**
- * Preview shown after the sender name:
+ * Preview shown after the sender name. Rendered as direct flex siblings (not a
+ * nested inline-flex) so the parent's ellipsis truncates the filename instead of
+ * collapsing the whole icon+name into "…" when the message has no text.
  * - has text          → text only (no icon)
- * - file, no text     → file name + small lucide icon (mirrors the expanded row)
+ * - file, no text     → small lucide icon (shrink-0) + truncating file name
  */
 function renderPreview(pin: PinnedGroupMessage): React.ReactNode {
   const text = pin.content?.trim();
-  if (pin.iconKind === "text" || text) return text || "Tin nhắn";
+  if (pin.iconKind === "text" || text)
+    return (
+      <span className="text-gray-700 truncate min-w-0">
+        {text || "Tin nhắn"}
+      </span>
+    );
 
   const Icon =
     pin.iconKind === "image"
@@ -54,10 +61,12 @@ function renderPreview(pin: PinnedGroupMessage): React.ReactNode {
           ? Files
           : FileText;
   return (
-    <span className="inline-flex items-center gap-1 align-middle">
+    <>
       <Icon className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-      <span className="truncate">{attachmentLabel(pin)}</span>
-    </span>
+      <span className="text-gray-700 truncate min-w-0">
+        {attachmentLabel(pin)}
+      </span>
+    </>
   );
 }
 
@@ -88,17 +97,15 @@ export const PinBarCollapsed: React.FC<PinBarCollapsedProps> = ({
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <Pin className="h-4 w-4 text-brand-600 shrink-0 -rotate-45" />
 
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
-          <span
-            className="text-sm text-gray-700 truncate"
-            data-testid="pin-bar-latest-preview"
-            title={`${latestPin.senderName}: ${previewText}`}
-          >
-            <span className="font-medium text-gray-800">
-              {latestPin.senderName}:
-            </span>{" "}
-            {renderPreview(latestPin)}
+        <div
+          className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden text-sm"
+          data-testid="pin-bar-latest-preview"
+          title={`${latestPin.senderName}: ${previewText}`}
+        >
+          <span className="font-medium text-gray-800 shrink-0 truncate max-w-[50%]">
+            {latestPin.senderName}:
           </span>
+          {renderPreview(latestPin)}
         </div>
       </div>
 

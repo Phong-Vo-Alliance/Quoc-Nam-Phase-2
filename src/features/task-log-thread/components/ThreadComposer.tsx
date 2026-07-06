@@ -13,6 +13,7 @@ import type { QuotedMessageData } from "@/stores/replyStore";
 import { MentionInputInline } from "@/features/portal/components/chat/MentionInputInline";
 import type { MentionInputHandle } from "@/features/portal/components/chat/MentionInputInline";
 import { FILE_ALLOWED_EXTENSIONS } from "@/config/env.config";
+import { BRAND } from "@/config/brand.config";
 import FilePreview from "@/components/FilePreview";
 import QuotedMessagePreview from "@/features/portal/components/chat/QuotedMessagePreview";
 
@@ -203,6 +204,7 @@ export const ThreadComposer: React.FC<ThreadComposerProps> = ({
             className="flex-1"
             placeholder="Nhập nội dung để trao đổi về công việc này"
             canSendWithoutText={selectedFiles.length > 0}
+            enableEmoji={BRAND.id === "alliance"}
             data-testid="task-log-input"
           />
 

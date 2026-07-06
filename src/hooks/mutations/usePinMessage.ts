@@ -1,6 +1,8 @@
 // usePinMessage hook - Pin/Unpin message mutations
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { getPinErrorMessage } from "./pinErrorMessage";
 import {
   pinMessage,
   reorderPinnedMessages,
@@ -42,10 +44,15 @@ export function usePinMessage({
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ messageId }: { messageId: string }) => pinMessage(messageId),
+    mutationFn: ({ messageId }: { messageId: string; silent?: boolean }) =>
+      pinMessage(messageId),
 
-    onSuccess: (_data, { messageId }) => {
-      sendPinSystemMessage(queryClient, conversationId, messageId, "pin");
+    onSuccess: (_data, { messageId, silent }) => {
+      // `silent` skips the per-action SYS message — used by the over-limit
+      // replace flow, which sends one combined notice instead.
+      if (!silent) {
+        sendPinSystemMessage(queryClient, conversationId, messageId, "pin");
+      }
 
       // Invalidate pinned messages cache
       queryClient.invalidateQueries({
@@ -56,10 +63,16 @@ export function usePinMessage({
       // border/icon immediately. Refetching the list would lose this flag.
       setMessagePinnedFlag(queryClient, conversationId, messageId, true);
 
+      if (!silent) toast.success("Đã ghim tin nhắn");
+
       onSuccess?.();
     },
-    
-    onError: (error) => {
+
+    onError: (error, { silent }) => {
+      // The over-limit replace flow shows its own combined toast on failure.
+      if (!silent) {
+        toast.error(getPinErrorMessage(error, "Không thể ghim tin nhắn"));
+      }
       onError?.(error as Error);
     },
   });
@@ -90,12 +103,16 @@ export function useUnpinMessage({
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ messageId }: { messageId: string }) =>
+    mutationFn: ({ messageId }: { messageId: string; silent?: boolean }) =>
       unpinMessage(messageId),
 
-    onSuccess: (_data, { messageId }) => {
-      // Resolve content from cache before invalidation clears it.
-      sendPinSystemMessage(queryClient, conversationId, messageId, "unpin");
+    onSuccess: (_data, { messageId, silent }) => {
+      // `silent` skips the per-action SYS message — used by the over-limit
+      // replace flow, which sends one combined notice instead.
+      if (!silent) {
+        // Resolve content from cache before invalidation clears it.
+        sendPinSystemMessage(queryClient, conversationId, messageId, "unpin");
+      }
 
       // Invalidate pinned messages cache
       queryClient.invalidateQueries({
@@ -106,10 +123,16 @@ export function useUnpinMessage({
       // border/icon immediately. Refetching the list could revive a stale flag.
       setMessagePinnedFlag(queryClient, conversationId, messageId, false);
 
+      if (!silent) toast.success("Đã bỏ ghim tin nhắn");
+
       onSuccess?.();
     },
 
-    onError: (error) => {
+    onError: (error, { silent }) => {
+      // The over-limit replace flow shows its own combined toast on failure.
+      if (!silent) {
+        toast.error(getPinErrorMessage(error, "Không thể bỏ ghim tin nhắn"));
+      }
       onError?.(error as Error);
     },
   });

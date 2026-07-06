@@ -10,6 +10,7 @@ export interface MinimalMember {
   name: string;
   role?: "Leader" | "Member";
   departments?: string[]; // Danh sách phòng ban
+  avatarUrl?: string | null; // Avatar người dùng (chỉ dùng khi bật config hiển thị)
 }
 
 /**
@@ -30,6 +31,7 @@ export function transformMemberToMinimal(
       "Unknown User",
     role: isLeader ? "Leader" : "Member",
     departments: member.departments?.map((dept) => dept.name),
+    avatarUrl: member.userInfo?.avatarUrl ?? null,
   };
 }
 

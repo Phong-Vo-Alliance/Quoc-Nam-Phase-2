@@ -5,6 +5,7 @@ import type {
   LastMessage,
 } from "@/types/conversations";
 import type { ChatMessage } from "@/types/messages";
+import { RECALLED_MESSAGE_TEXT } from "@/constants/messages";
 
 export interface DirectCacheContext {
   queryClient: QueryClient;
@@ -72,6 +73,59 @@ export function handleMessageSent(
       });
 
       return { ...oldData, items: updatedItems };
+    },
+  );
+}
+
+/**
+ * Đồng bộ preview ở sidebar (chat cá nhân) khi một tin nhắn bị thu hồi (realtime).
+ *
+ * CHỈ cập nhật khi tin bị thu hồi đúng là `lastMessage` đang hiển thị của DM (so
+ * khớp `messageId` với `lastMessage.id`). Thu hồi tin cũ hơn → no-op.
+ *
+ * Giữ nguyên `sentAt` để thứ tự sort sidebar không đổi; chỉ thay nội dung preview
+ * sang placeholder và gỡ attachments.
+ */
+export function handleMessageRecalled(
+  ctx: DirectCacheContext,
+  data: {
+    conversationId: string;
+    messageId: string;
+    recalledContentText?: string | null;
+  },
+): void {
+  const { queryClient } = ctx;
+
+  if (!data?.conversationId || !data?.messageId) return;
+
+  queryClient.setQueryData<GetConversationsResponse>(
+    conversationKeys.directs(),
+    (oldData) => {
+      if (!oldData) return oldData;
+
+      let changed = false;
+
+      const items = oldData.items.map((dm) => {
+        if (
+          dm.id !== data.conversationId ||
+          dm.lastMessage?.id !== data.messageId
+        ) {
+          return dm;
+        }
+
+        changed = true;
+        return {
+          ...dm,
+          lastMessage: {
+            ...dm.lastMessage,
+            content: data.recalledContentText ?? RECALLED_MESSAGE_TEXT,
+            contentType: "TXT" as const,
+            attachments: [],
+          },
+        };
+      });
+
+      return changed ? { ...oldData, items } : oldData;
     },
   );
 }

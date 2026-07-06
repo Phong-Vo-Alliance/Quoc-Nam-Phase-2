@@ -19,6 +19,7 @@ import { sendMessage } from "@/api/messages.api";
 import type { SendChatMessageRequest } from "@/types/messages";
 import { toast } from "sonner";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import { getInitials } from "@/utils/getInitials";
 
 interface AddMemberDialogProps {
   open: boolean;
@@ -382,9 +383,10 @@ export const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
                       className="h-10 w-10 rounded-full bg-brand-100 flex items-center justify-center"
                     >
                       <span className="text-sm font-medium text-brand-600">
-                        {member.userFullName?.[0] ||
-                          member.userEmail?.[0] ||
-                          "?"}
+                        {getInitials(member.userFullName || member.userEmail || "", {
+                          type: "DM",
+                          fallback: "?",
+                        })}
                       </span>
                     </div>
                   </div>

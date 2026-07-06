@@ -1,9 +1,14 @@
 import React from "react";
 import { Loader2, AlertCircle } from "lucide-react";
-import type { ChatMessage, ThreadDto } from "@/types/messages";
+import type {
+  ChatMessage,
+  ThreadDto,
+  PreviewOpenOptions,
+} from "@/types/messages";
 import type { QuotedMessageData } from "@/stores/replyStore";
 import { MessageBubbleSimple } from "@/features/portal/components/chat/MessageBubbleSimple";
 import { SystemMessageBubble } from "@/features/portal/components/chat/SystemMessageBubble";
+import { useReactionEmojis } from "@/hooks/queries/useReactionEmojiConfig";
 import MessageDateSeparator from "@/components/chat/MessageDateSeparator";
 import UnreadSeparator from "@/components/chat/UnreadSeparator";
 import { formatTime } from "../utils";
@@ -38,11 +43,22 @@ interface ThreadMessageListProps {
   handleLoadMoreDownward: () => void;
   handleScrollToQuoted: (quotedMessageId: string) => void;
   onTogglePin?: (messageId: string, isPinned: boolean) => void;
+  onRecall?: (messageId: string) => void;
+  onConfirmMessage?: (messageId: string) => void;
+  onUnconfirmMessage?: (messageId: string) => void;
+  onAddReaction?: (messageId: string, emoji: string) => void;
+  onRemoveReaction?: (messageId: string, emoji: string) => void;
+  confirmingMessageActionId?: string | null; // id tin đang gọi API xác nhận
   onReply: (replyData: QuotedMessageData) => void;
-  onFilePreviewClick: (fileId: string, fileName: string) => void;
+  onFilePreviewClick: (
+    fileId: string,
+    fileName: string,
+    options?: PreviewOpenOptions,
+  ) => void;
   onImageClick: (
     images: Array<{ fileId: string; fileName: string }>,
     initialIndex: number,
+    options?: PreviewOpenOptions,
   ) => void;
 }
 
@@ -63,10 +79,20 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   handleLoadMoreDownward,
   handleScrollToQuoted,
   onTogglePin,
+  onRecall,
+  onConfirmMessage,
+  onUnconfirmMessage,
+  onAddReaction,
+  onRemoveReaction,
+  confirmingMessageActionId,
   onReply,
   onFilePreviewClick,
   onImageClick,
 }) => {
+  // Thread (task-log) chỉ tồn tại trong hội thoại NHÓM (DM đã tắt tạo task/thread)
+  // → picker dùng bộ emoji "group" lấy từ API config, không dựa fallback cứng.
+  const { emojis: reactionEmojis, canReact } = useReactionEmojis("GRP");
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -178,7 +204,15 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
                   onImageClick={onImageClick}
                   onScrollToQuoted={handleScrollToQuoted}
                   onTogglePin={onTogglePin}
+                  onRecall={onRecall}
+                  onConfirmMessage={onConfirmMessage}
+                  onUnconfirmMessage={onUnconfirmMessage}
+                  onAddReaction={onAddReaction}
+                  onRemoveReaction={onRemoveReaction}
+                  isConfirmingMessage={confirmingMessageActionId === msg.id}
                   onReply={onReply}
+                  reactionEmojis={reactionEmojis}
+                  canReact={canReact}
                 />
                 {/* Gap-fill trigger */}
                 {hasGapBelow && gapAfterCursor === msg.id && (

@@ -67,7 +67,12 @@ function truncateFilename(filename: string, maxLength: number = 20): string {
 export function formatMessagePreview(
   message: LastMessageDto & { attachments?: any[] },
 ): string {
-  const { senderName, content, attachments } = message;
+  const { senderName, content, contentType, attachments } = message;
+
+  // Case 0: System message (SYS) - show only the content, no sender name
+  if (contentType === "SYS") {
+    return content?.trim() ?? "";
+  }
 
   // Case 1: Has attachments (check first before text)
   if (attachments && attachments.length > 0) {

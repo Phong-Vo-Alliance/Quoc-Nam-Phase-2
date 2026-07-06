@@ -19,11 +19,11 @@
 
 a {
   font-weight: 500;
-  color: #38ae3c;
+  color: var(--brand-link, #38ae3c);
   text-decoration: inherit;
 }
 a:hover {
-  color: #2f9132;
+  color: var(--brand-link-hover, #2f9132);
 }
 
 body {

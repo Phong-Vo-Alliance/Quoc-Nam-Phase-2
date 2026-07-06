@@ -3,6 +3,10 @@
 
 import type { AttachmentDto } from "./messages";
 
+export interface MentionDepartmentDto {
+  name: string;
+}
+
 export interface MentionParentMessageDto {
   messageId: string;
   senderId: string;
@@ -45,6 +49,11 @@ export interface MentionDto {
   mentionedAt: string;
   isRead: boolean;
   readAt: string | null;
+
+  // Departments — added by BE 2026-06-10. Các phòng ban liên quan đến mention
+  // (vd @all gửi tới nhiều phòng ban). Render bên dưới content, ngăn cách bằng •.
+  departments?: MentionDepartmentDto[];
+
   message: MentionMessagePreviewDto | null;
 }
 
