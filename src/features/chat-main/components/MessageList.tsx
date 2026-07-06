@@ -87,7 +87,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   const isDirect = conversationType === "DM";
   // Bộ emoji cho picker theo loại hội thoại (dm/group), lấy từ API config —
   // gọi 1 lần ở đây rồi truyền xuống từng bubble (react-query cache dùng chung).
-  const reactionEmojis = useReactionEmojis(conversationType);
+  const { emojis: reactionEmojis, canReact } =
+    useReactionEmojis(conversationType);
 
   return (
     <>
@@ -158,6 +159,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     onAddReaction={onAddReaction}
                     onRemoveReaction={onRemoveReaction}
                     reactionEmojis={reactionEmojis}
+                    canReact={canReact}
                     isConfirmingMessage={
                       confirmingMessageActionId === message.id
                     }

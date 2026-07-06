@@ -28,17 +28,35 @@ export function useReactionEmojiConfig(enabled = true) {
 }
 
 /**
- * Trả về danh sách emoji đã chọn sẵn theo loại hội thoại. Khi config chưa tải
- * xong (hoặc lỗi) thì dùng bộ mặc định để picker không rỗng. Kết quả được
- * memo hoá để không tạo mảng mới mỗi lần render (tránh re-render con thừa).
+ * Trả về bộ emoji + cờ `canReact` theo loại hội thoại (dm/group).
+ *
+ * - `emojis`: danh sách hiển thị trong picker. Khi config chưa tải xong (hoặc
+ *   lỗi) thì dùng bộ mặc định để picker không rỗng.
+ * - `canReact`: có cho phép thả cảm xúc ở loại hội thoại này không. Khi config
+ *   ĐÃ tải xong nhưng server KHÔNG cấu hình emoji nào cho loại đó (ví dụ dm rỗng)
+ *   thì ẩn hẳn tính năng react cho loại đó. Trong lúc đang tải / lỗi vẫn giữ
+ *   nguyên hành vi cũ (không chớp tắt feature).
+ *
+ * Kết quả được memo hoá để không tạo object mới mỗi lần render.
  */
-export function useReactionEmojis(conversationType?: "GRP" | "DM"): string[] {
-  const { data } = useReactionEmojiConfig();
+export function useReactionEmojis(conversationType?: "GRP" | "DM"): {
+  emojis: string[];
+  canReact: boolean;
+} {
+  const { data, isSuccess } = useReactionEmojiConfig();
   const isDm = conversationType === "DM";
 
   return useMemo(() => {
     const fromApi = isDm ? data?.dm : data?.group;
-    if (fromApi && fromApi.length > 0) return fromApi;
-    return isDm ? DEFAULT_REACTION_EMOJIS.dm : DEFAULT_REACTION_EMOJIS.group;
-  }, [data, isDm]);
+    const hasConfig = !!fromApi && fromApi.length > 0;
+    const emojis = hasConfig
+      ? fromApi
+      : isDm
+        ? DEFAULT_REACTION_EMOJIS.dm
+        : DEFAULT_REACTION_EMOJIS.group;
+    // Đã tải xong config nhưng loại này rỗng ⇒ server tắt react cho loại đó.
+    const resolvedEmpty = isSuccess && !hasConfig;
+    const canReact = FEATURE_FLAGS.enableMessageReaction && !resolvedEmpty;
+    return { emojis, canReact };
+  }, [data, isDm, isSuccess]);
 }

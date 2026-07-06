@@ -150,6 +150,7 @@ export interface MessageBubbleSimpleProps {
   onAddReaction?: (messageId: string, emoji: string) => void; // NEW: Thả cảm xúc — POST ở parent
   onRemoveReaction?: (messageId: string, emoji: string) => void; // NEW: Gỡ cảm xúc — DELETE ở parent
   reactionEmojis?: string[]; // NEW: Bộ emoji cho picker (theo dm/group) — lấy từ API config
+  canReact?: boolean; // NEW: Server có cấu hình emoji cho loại hội thoại này không. false ⇒ ẩn hẳn react (ví dụ dm không có config react)
   isConfirmingMessage?: boolean; // NEW: Đang gọi API xác nhận tin nhắn này (loading nút CheckCircle2)
   hasConfirmedInfo?: boolean; // NEW: Check if message already has confirmed info
   confirmedByName?: string; // NEW: Name of user who confirmed (for display)
@@ -183,6 +184,7 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   onAddReaction,
   onRemoveReaction,
   reactionEmojis,
+  canReact = true,
   isConfirmingMessage = false,
   hasConfirmedInfo = false,
   confirmedByName,
@@ -211,9 +213,12 @@ export const MessageBubbleSimple: React.FC<MessageBubbleSimpleProps> = ({
   // Cờ bật/tắt toàn bộ tính năng "Xác nhận tin nhắn" theo brand (env). Mặc định
   // bật; khi VITE_ENABLE_MESSAGE_CONFIRM=false thì cả nút hover lẫn pill đều ẩn.
   const isMessageConfirmEnabled = FEATURE_FLAGS.enableMessageConfirm;
-  // Cờ bật/tắt "Thả cảm xúc tin nhắn" theo env (mặc định tắt, opt-in). Khi tắt
-  // thì cả nút thả ở góc bubble lẫn thanh chip cảm xúc đều ẩn.
-  const isMessageReactionEnabled = FEATURE_FLAGS.enableMessageReaction;
+  // Cờ bật/tắt "Thả cảm xúc tin nhắn" theo env (mặc định tắt, opt-in) VÀ theo
+  // config emoji của server cho loại hội thoại này (canReact). Khi env tắt HOẶC
+  // server không cấu hình emoji nào cho loại đó (ví dụ dm rỗng) thì cả nút thả ở
+  // góc bubble lẫn thanh chip cảm xúc đều ẩn.
+  const isMessageReactionEnabled =
+    FEATURE_FLAGS.enableMessageReaction && canReact;
   // Per-category leader check for this conversation (Admin bypass inside hook).
   // Falls back to the currently-selected conversation from the store since the
   // bubble component doesn't receive conversationId as a prop.

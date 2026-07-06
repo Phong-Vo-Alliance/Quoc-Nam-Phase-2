@@ -91,7 +91,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
 }) => {
   // Thread (task-log) chỉ tồn tại trong hội thoại NHÓM (DM đã tắt tạo task/thread)
   // → picker dùng bộ emoji "group" lấy từ API config, không dựa fallback cứng.
-  const reactionEmojis = useReactionEmojis("GRP");
+  const { emojis: reactionEmojis, canReact } = useReactionEmojis("GRP");
 
   if (loading) {
     return (
@@ -212,6 +212,7 @@ export const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
                   isConfirmingMessage={confirmingMessageActionId === msg.id}
                   onReply={onReply}
                   reactionEmojis={reactionEmojis}
+                  canReact={canReact}
                 />
                 {/* Gap-fill trigger */}
                 {hasGapBelow && gapAfterCursor === msg.id && (

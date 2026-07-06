@@ -15,7 +15,9 @@ import {
 } from "@/lib/reactions-normalize";
 import { mentionKeys } from "@/hooks/queries/keys/mentionKeys";
 import { pinnedStarredKeys } from "@/hooks/queries/keys/pinnedStarredKeys";
+import { informationConfirmedKeys } from "@/hooks/queries/keys/informationConfirmedKeys";
 import type { UnreadMentionCountResponse } from "@/types/mentions";
+import type { InformationConfirmedPagedResponse } from "@/types/information_confirmed";
 import type {
   MentionReadEvent,
   MentionUnreadEvent,
@@ -33,7 +35,10 @@ import type {
   UserMentionedEvent,
 } from "@/types/signalr-events";
 import type { ChatMessage, ChatMessageContentType } from "@/types/messages";
-import type { StarredMessageDto } from "@/types/pinned_and_starred";
+import type {
+  GetPinnedMessagesResponse,
+  StarredMessageDto,
+} from "@/types/pinned_and_starred";
 
 const CONTENT_TYPE_MAP: Record<number, ChatMessageContentType> = {
   1: "TXT",
@@ -192,6 +197,46 @@ export function registerAllEventHandlers(
       if (affectsStarred) {
         queryClient.invalidateQueries({
           queryKey: pinnedStarredKeys.starred,
+          refetchType: "active",
+        });
+      }
+
+      // Tin bị thu hồi đang được GHIM (PinBar / PinnedMessagesPanel) → load lại
+      // danh sách ghim của hội thoại để bản ghim đổi sang trạng thái "đã thu hồi"
+      // (hoặc bị server gỡ khỏi danh sách). Chỉ refetch khi tin thu hồi thực sự
+      // nằm trong danh sách ghim đang cache → tránh gọi API thừa.
+      const pinnedCache = queryClient.getQueryData<GetPinnedMessagesResponse>(
+        pinnedStarredKeys.pinnedByConversation(event.conversationId),
+      );
+      const affectsPinned = pinnedCache?.items?.some(
+        (p) => p.messageId === event.messageId,
+      );
+      if (affectsPinned) {
+        queryClient.invalidateQueries({
+          queryKey: pinnedStarredKeys.pinnedByConversation(
+            event.conversationId,
+          ),
+          refetchType: "active",
+        });
+      }
+
+      // Tin bị thu hồi có bản ghi "thông tin đã xác nhận" (information-confirmed)
+      // gắn theo messageId → bản ghi đó cần được server tính lại, load lại danh
+      // sách xác nhận để badge trên bubble + các panel confirmed-info khớp ngay
+      // (không phải chờ F5). Chỉ refetch khi messageId thực sự nằm trong một list
+      // đang cache → tránh gọi API/api/information-confirmed thừa.
+      const confirmedCaches =
+        queryClient.getQueriesData<InformationConfirmedPagedResponse>({
+          queryKey: informationConfirmedKeys.all,
+        });
+      const affectsConfirmed = confirmedCaches.some(
+        ([, data]) =>
+          Array.isArray(data?.data) &&
+          data.data.some((info) => info.messageId === event.messageId),
+      );
+      if (affectsConfirmed) {
+        queryClient.invalidateQueries({
+          queryKey: informationConfirmedKeys.all,
           refetchType: "active",
         });
       }
